@@ -40,3 +40,8 @@ installer is unsigned and the release notes explain the warning to users.
 ## Not set up yet
 
 Auto-update inside the app, a portable build, macOS/Linux installers, and publishing to winget/Chocolatey.
+
+## Releasing without a local tag push
+
+Actions tab → **release** → **Run workflow** (branch `main`). It releases the version in `package.json`,
+creates the `vX.Y.Z` tag itself, and publishes the installer.
