@@ -29,7 +29,13 @@ export async function loadDetails(mdPath: string, defaults: AppDefaults = defaul
     throw e;
   }
   try {
-    return { details: sanitizeBookDetails(JSON.parse(text), seedFor(mdPath)), exists: true, damaged: false };
+    const parsed = JSON.parse(text);
+    const details = sanitizeBookDetails(parsed, seedFor(mdPath));
+    // Tidy up files written by older versions (renamed or dropped keys, missing new ones) the first time they are read.
+    if (JSON.stringify(parsed) !== JSON.stringify(details)) {
+      await writeFileAtomic(file, JSON.stringify(details, null, 2) + '\n').catch(() => undefined);
+    }
+    return { details, exists: true, damaged: false };
   } catch {
     return { details: fresh(mdPath, defaults), exists: true, damaged: true };
   }

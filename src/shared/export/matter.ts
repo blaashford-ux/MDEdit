@@ -45,7 +45,7 @@ export function buildFrontMatter(d: BookDetails): MatterPage[] {
   if (c.fictionDisclaimer && c.fictionText.trim()) cr.push({ t: 'para', text: c.fictionText.trim() });
   if (c.reproductionText.trim()) cr.push({ t: 'para', text: c.reproductionText.trim() });
   if (c.matureNotice && c.matureText.trim()) cr.push({ t: 'para', text: c.matureText.trim(), bold: true });
-  if (c.aiDisclosure && c.aiText.trim()) cr.push({ t: 'para', text: c.aiText.trim() });
+  if (c.contentWarning && c.contentWarningText.trim()) cr.push({ t: 'para', text: c.contentWarningText.trim() });
   if (c.publisher.trim()) cr.push({ t: 'line', text: `Published by ${c.publisher.trim()}` });
   if (c.isbn.trim()) cr.push({ t: 'line', text: `ISBN: ${c.isbn.trim()}` });
   for (const l of c.extraLines) if (l.trim()) cr.push({ t: 'line', text: l.trim() });

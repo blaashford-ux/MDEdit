@@ -38,9 +38,8 @@ export interface CopyrightDetails {
   reproductionText: string;
   matureNotice: boolean;
   matureText: string;
-  /** The Content Warning notice (stored under its original key so saved books keep working). */
-  aiDisclosure: boolean;
-  aiText: string;
+  contentWarning: boolean;
+  contentWarningText: string;
   /** Extra free-text lines, shown after the notices and before the edition line. */
   extraLines: string[];
 }
@@ -150,8 +149,8 @@ export function defaultBookDetails(seed: { title?: string; author?: string; year
       reproductionText: REPRODUCTION_TEXT,
       matureNotice: false,
       matureText: MATURE_TEXT,
-      aiDisclosure: false,
-      aiText: CONTENT_WARNING_TEXT,
+      contentWarning: false,
+      contentWarningText: CONTENT_WARNING_TEXT,
       extraLines: []
     },
     dedication: { enabled: false, text: '' },
@@ -220,8 +219,11 @@ export function sanitizeBookDetails(raw: unknown, seed: { title?: string; author
       reproductionText: str(c.reproductionText, d.copyright.reproductionText),
       matureNotice: bool(c.matureNotice, d.copyright.matureNotice),
       matureText: str(c.matureText, d.copyright.matureText),
-      aiDisclosure: bool(c.aiDisclosure, d.copyright.aiDisclosure),
-      aiText: ((t) => (t.trim() === LEGACY_AI_TEXT ? CONTENT_WARNING_TEXT : t))(str(c.aiText, d.copyright.aiText)),
+      // books saved before the rename used aiDisclosure / aiText
+      contentWarning: bool(c.contentWarning ?? c.aiDisclosure, d.copyright.contentWarning),
+      contentWarningText: ((t) => (t.trim() === LEGACY_AI_TEXT ? CONTENT_WARNING_TEXT : t))(
+        str(c.contentWarningText ?? c.aiText, d.copyright.contentWarningText)
+      ),
       extraLines: Array.isArray(c.extraLines)
         ? c.extraLines.filter((x): x is string => typeof x === 'string').slice(0, 20).map((x) => str(x, '', 1000))
         : []

@@ -54,8 +54,8 @@ export function TitleCopyrightForm(props: BookFormProps) {
                 <TextArea label="Reproduction-rights paragraph" rows={3} value={c.reproductionText} onChange={(v) => setCopyright({ reproductionText: v })} hint="Leave blank to omit." />
                 <Toggle label="Mature-content notice (18+)" checked={c.matureNotice} onChange={(v) => setCopyright({ matureNotice: v })} />
                 {c.matureNotice && <TextArea label="Wording" rows={2} value={c.matureText} onChange={(v) => setCopyright({ matureText: v })} />}
-                <Toggle label="Content Warning" checked={c.aiDisclosure} onChange={(v) => setCopyright({ aiDisclosure: v })} />
-                {c.aiDisclosure && <TextArea label="Wording" rows={2} value={c.aiText} onChange={(v) => setCopyright({ aiText: v })} />}
+                <Toggle label="Content Warning" checked={c.contentWarning} onChange={(v) => setCopyright({ contentWarning: v })} />
+                {c.contentWarning && <TextArea label="Wording" rows={2} value={c.contentWarningText} onChange={(v) => setCopyright({ contentWarningText: v })} />}
                 <h5>Extra lines</h5>
                 <ListEditor
                   items={c.extraLines}

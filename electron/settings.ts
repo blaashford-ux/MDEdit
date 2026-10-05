@@ -82,7 +82,10 @@ export class SettingsStore {
 
   async load(): Promise<void> {
     try {
-      this.data = sanitizeSettings(JSON.parse(await fs.readFile(this.file, 'utf8')));
+      const raw = JSON.parse(await fs.readFile(this.file, 'utf8'));
+      this.data = sanitizeSettings(raw);
+      // tidy old key names / dropped keys in the saved defaults the first time they are read
+      if (raw && typeof raw === 'object' && raw.appDefaults && JSON.stringify(raw.appDefaults) !== JSON.stringify(this.data.appDefaults)) this.schedule();
     } catch {
       this.data = {};
     }

@@ -103,3 +103,16 @@ describe('appDefaults in settings', () => {
     expect(sanitizeSettings({ appDefaults: { chapterLevel: -4 } }).appDefaults!.chapterLevel).toBe(1);
   });
 });
+
+describe('old key names in saved defaults', () => {
+  it('are renamed on disk after the first load', async () => {
+    const { writeFile: wf } = await import('node:fs/promises');
+    await wf(file, JSON.stringify({ appDefaults: { chapterLevel: 2, book: { copyright: { aiDisclosure: true, aiText: 'Peril.' } } } }));
+    const s = new SettingsStore(file);
+    await s.load();
+    await s.flush();
+    const onDisk = JSON.parse(await readFile(file, 'utf8'));
+    expect(onDisk.appDefaults.book.copyright).toMatchObject({ contentWarning: true, contentWarningText: 'Peril.' });
+    expect(JSON.stringify(onDisk)).not.toMatch(/aiDisclosure|aiText/);
+  });
+});

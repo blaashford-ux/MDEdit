@@ -84,12 +84,21 @@ describe('font settings', () => {
 describe('content warning', () => {
   it('defaults to “Add Content Warnings here”, off', () => {
     const d = defaultBookDetails({ title: 'x', author: 'y' });
-    expect(d.copyright.aiText).toBe('Add Content Warnings here');
-    expect(d.copyright.aiDisclosure).toBe(false);
+    expect(d.copyright.contentWarningText).toBe('Add Content Warnings here');
+    expect(d.copyright.contentWarning).toBe(false);
   });
   it('a saved book still holding the old AI wording is moved to the new default; edited wording is kept', () => {
     const old = 'This book was created using a Human-in-the-Loop Generative AI system.';
-    expect(sanitizeBookDetails({ copyright: { aiDisclosure: true, aiText: old } }).copyright).toMatchObject({ aiDisclosure: true, aiText: 'Add Content Warnings here' });
-    expect(sanitizeBookDetails({ copyright: { aiText: 'Contains violence.' } }).copyright.aiText).toBe('Contains violence.');
+    expect(sanitizeBookDetails({ copyright: { contentWarning: true, contentWarningText: old } }).copyright).toMatchObject({ contentWarning: true, contentWarningText: 'Add Content Warnings here' });
+    expect(sanitizeBookDetails({ copyright: { contentWarningText: 'Contains violence.' } }).copyright.contentWarningText).toBe('Contains violence.');
+  });
+  it('reads books saved under the old key names (aiDisclosure / aiText) and never writes them back', () => {
+    const d = sanitizeBookDetails({ copyright: { aiDisclosure: true, aiText: 'Edited wording' } });
+    expect(d.copyright).toMatchObject({ contentWarning: true, contentWarningText: 'Edited wording' });
+    expect(JSON.stringify(d)).not.toMatch(/aiDisclosure|aiText/);
+  });
+  it('new keys win over old ones', () => {
+    const d = sanitizeBookDetails({ copyright: { contentWarning: false, aiDisclosure: true, contentWarningText: 'New', aiText: 'Old' } });
+    expect(d.copyright).toMatchObject({ contentWarning: false, contentWarningText: 'New' });
   });
 });

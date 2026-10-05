@@ -121,3 +121,30 @@ describe('new books start from the Settings template', () => {
     expect(l.details.author).toBe('Old Author');
   });
 });
+
+describe('old export files are tidied on first read', () => {
+  it('renames the content-warning keys and drops unknown ones, keeping the author’s wording', async () => {
+    const old = defaultBookDetails({ title: 'Mine', author: 'Me' }) as unknown as Record<string, any>;
+    old.copyright = { ...old.copyright, aiDisclosure: true, aiText: 'Contains peril.', extra: 'junk' };
+    delete old.copyright.contentWarning;
+    delete old.copyright.contentWarningText;
+    await writeFile(sidecar(), JSON.stringify(old));
+    const l = await loadDetails(md);
+    expect(l.details.copyright).toMatchObject({ contentWarning: true, contentWarningText: 'Contains peril.' });
+    const onDisk = JSON.parse(await readFile(sidecar(), 'utf8'));
+    expect(onDisk.copyright).toMatchObject({ contentWarning: true, contentWarningText: 'Contains peril.' });
+    expect(JSON.stringify(onDisk)).not.toMatch(/aiDisclosure|aiText|junk/);
+    expect(onDisk.title).toBe('Mine');
+  });
+
+  it('a file that is already clean is not rewritten', async () => {
+    await saveDetails(md, defaultBookDetails({ title: 'Clean', author: 'Me' }));
+    const before = await readFile(sidecar(), 'utf8');
+    const { statSync } = await import('node:fs');
+    const m1 = statSync(sidecar()).mtimeMs;
+    await new Promise((r) => setTimeout(r, 30));
+    await loadDetails(md);
+    expect(statSync(sidecar()).mtimeMs).toBe(m1);
+    expect(await readFile(sidecar(), 'utf8')).toBe(before);
+  });
+});

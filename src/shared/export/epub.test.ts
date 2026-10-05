@@ -40,7 +40,7 @@ const details = (edit: (d: BookDetails) => void = () => undefined): BookDetails 
   const d = defaultBookDetails({ title: 'The Lost King', author: 'A. Writer', year: 2031 });
   d.subtitle = 'A Tale of Two & More';
   d.copyright.matureNotice = true;
-  d.copyright.aiDisclosure = true;
+  d.copyright.contentWarning = true;
   d.copyright.publisher = 'Acme Press';
   d.copyright.isbn = '978-1-23456-789-7';
   d.dedication = { enabled: true, text: 'For everyone.' };
