@@ -127,7 +127,7 @@ export class FakeApi implements MdeditApi {
     this.progressByProject.set(p, next);
     return { progress: next, total };
   };
-  getProjectsConfig = async (): Promise<ProjectsConfig> => ({ ...this.projectsSettings, root: '/root', rootExists: true });
+  getProjectsConfig = async (): Promise<ProjectsConfig> => ({ ...this.projectsSettings, root: '/root', defaultRoot: '/home/MDEdit', rootExists: true });
   setProjectsConfig = async (patch: Partial<ProjectsSettings>) => {
     this.projectsSettings = { ...this.projectsSettings, ...patch };
     return this.getProjectsConfig();

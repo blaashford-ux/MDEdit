@@ -328,6 +328,8 @@ export function sanitizeProjectsSettings(raw: unknown): ProjectsSettings {
 export interface ProjectsConfig extends ProjectsSettings {
   /** The Root Folder in use (the saved one, or the default). */
   root: string;
+  /** `<home>\MDEdit`: what "Use the default" means. */
+  defaultRoot: string;
   rootExists: boolean;
 }
 

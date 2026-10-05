@@ -211,7 +211,7 @@ function registerIpc(): void {
   });
 
   // --- projects ---
-  const config = async (): Promise<ProjectsConfig> => ({ ...settings.projects(), root: projectsRoot(), rootExists: await dirExists(projectsRoot()) });
+  const config = async (): Promise<ProjectsConfig> => ({ ...settings.projects(), root: projectsRoot(), defaultRoot: defaultRootFolder(app.getPath('home')), rootExists: await dirExists(projectsRoot()) });
   ipcMain.handle('projects:config', config);
   ipcMain.handle('projects:setConfig', async (_e, patch: Record<string, unknown>) => {
     const next = sanitizeProjectsSettings({ ...settings.projects(), ...(patch && typeof patch === 'object' ? patch : {}) });
