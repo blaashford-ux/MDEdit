@@ -73,13 +73,24 @@ async function renderHtml(
   win.webContents.setFrameRate(60);
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'mdedit-print-'));
   let poll: NodeJS.Timeout | undefined;
-  const abort = () => win.destroy();
+  // Destroying a window leaves its pending executeJavaScript/printToPDF promises unresolved, so
+  // every await below is raced against this one, which rejects on cancel.
+  let abort = () => undefined as void;
+  const cancelled = new Promise<never>((_, reject) => {
+    abort = () => {
+      if (!win.isDestroyed()) win.destroy();
+      reject(new Error('cancelled'));
+    };
+  });
+  cancelled.catch(() => undefined); // never an unhandled rejection
+  const guard = <T,>(p: Promise<T>): Promise<T> => Promise.race([p, cancelled]);
+  if (signal?.aborted) abort();
   signal?.addEventListener('abort', abort);
   try {
     const file = path.join(dir, 'book.html');
     await fs.writeFile(file, html);
-    await win.loadFile(file);
-    await win.webContents.executeJavaScript('document.fonts.ready.then(() => true)');
+    await guard(win.loadFile(file));
+    await guard(win.webContents.executeJavaScript('document.fonts.ready.then(() => true)'));
 
     poll = setInterval(() => {
       if (win.isDestroyed()) return;
@@ -88,12 +99,14 @@ async function renderHtml(
         .then((n: number) => onProgress({ stage: 'laying-out', page: n, pass }))
         .catch(() => undefined);
     }, 400);
-    const pages: number = await win.webContents.executeJavaScript(
-      `window.PagedPolyfill.preview().then(() => window.__mdeditPostLayout(${JSON.stringify(post.firstBodyId)}, ${JSON.stringify(post.config)}))`
+    const pages: number = await guard(
+      win.webContents.executeJavaScript(
+        `window.PagedPolyfill.preview().then(() => window.__mdeditPostLayout(${JSON.stringify(post.firstBodyId)}, ${JSON.stringify(post.config)}))`
+      )
     );
     clearInterval(poll);
     onProgress({ stage: 'printing', pass });
-    const pdf = await win.webContents.printToPDF({ preferCSSPageSize: true, printBackground: false, margins: { marginType: 'none' } });
+    const pdf = await guard(win.webContents.printToPDF({ preferCSSPageSize: true, printBackground: false, margins: { marginType: 'none' } }));
     return { pdf, pages };
   } finally {
     if (poll) clearInterval(poll);

@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { MdeditApi, MenuAction } from '../src/shared/api';
+import type { ExportProgress, MdeditApi, MenuAction } from '../src/shared/api';
 
 const api: MdeditApi = {
   pickFolder: () => ipcRenderer.invoke('dialog:pickFolder'),
@@ -18,6 +18,16 @@ const api: MdeditApi = {
   setMarked: (file, marked) => ipcRenderer.invoke('export:setMarked', file, marked),
   relinkSidecar: (sidecar, md) => ipcRenderer.invoke('export:relink', sidecar, md),
   pickCoverImage: () => ipcRenderer.invoke('export:pickCover'),
+  planExport: (file, unsaved) => ipcRenderer.invoke('export:plan', file, unsaved),
+  runExport: (file) => ipcRenderer.invoke('export:run', file),
+  cancelExport: () => ipcRenderer.send('export:cancel'),
+  onExportProgress: (cb) => {
+    const handler = (_e: unknown, p: ExportProgress) => cb(p);
+    ipcRenderer.on('export:progress', handler);
+    return () => ipcRenderer.removeListener('export:progress', handler);
+  },
+  revealOutput: (p) => ipcRenderer.send('export:reveal', p),
+  openOutput: (p) => ipcRenderer.invoke('export:open', p),
   getPrefs: () => ipcRenderer.invoke('prefs:get'),
   setPrefs: (patch) => ipcRenderer.send('prefs:set', patch),
   getSession: (folder) => ipcRenderer.invoke('session:get', folder),

@@ -33,6 +33,8 @@ export function installMenu(theme: ThemeHooks): void {
         { label: 'Change Folder…\tCtrl+O', click: send('change-folder') },
         { label: 'Refresh\tF5', click: send('refresh') },
         { type: 'separator' },
+        { label: 'Export…\tCtrl+E', click: send('export') },
+        { type: 'separator' },
         { label: 'Save\tCtrl+S', click: send('save') },
         { label: 'Close Tab\tCtrl+W', click: send('close-tab') },
         { type: 'separator' },

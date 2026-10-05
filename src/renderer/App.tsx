@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { MenuAction } from '../shared/api';
 import { basename, dirname, validateName } from '../shared/paths';
-import { collectOrphans, findNode } from '../shared/tree';
+import { collectFiles, collectOrphans, findNode } from '../shared/tree';
 import { countWords } from '../shared/words';
 import { BookDetailsDialog } from './BookDetailsDialog';
 import { ContextMenu, type MenuItem } from './ContextMenu';
 import { Editor } from './Editor';
+import { ExportDialog } from './ExportDialog';
 import { PromptDialog, type PromptSpec } from './PromptDialog';
 import { RelinkDialog } from './RelinkDialog';
 import { SourceEditor } from './SourceEditor';
@@ -28,6 +29,8 @@ export function App() {
   const [prompt, setPrompt] = useState<PromptSpec | null>(null);
   const [bookFile, setBookFile] = useState<string | null>(null);
   const [relink, setRelink] = useState<string | null>(null);
+  const [exportFile, setExportFile] = useState<string | null>(null);
+  const [detailsVersion, setDetailsVersion] = useState(0);
   const [ignoredOrphans, setIgnoredOrphans] = useState<Set<string>>(new Set());
   const filterRef = useRef<HTMLInputElement>(null);
 
@@ -51,6 +54,7 @@ export function App() {
       ? dir.children.filter((c) => c.kind === 'file' && c.marked === undefined && !c.exportBlocked).map((c) => ({ name: c.name, path: c.path }))
       : [];
   }, [relink, s.root]);
+  const markedFiles = useMemo(() => (s.root ? collectFiles(s.root, (f) => f.marked === true).map((f) => f.path) : []), [s.root]);
   const dirtyFiles = useMemo(() => new Set(s.tabs.filter((t) => t.draft !== null).map((t) => t.file)), [s.tabs]);
 
   // ---- lifecycle -------------------------------------------------------------------------
@@ -204,6 +208,7 @@ export function App() {
         ? [{ label: 'Can’t mark: another file with this name owns the export settings', disabled: true, onClick: () => undefined }]
         : row.marked
           ? [
+              { label: 'Export…', onClick: () => setExportFile(row.path) },
               { label: 'Book Details…', onClick: () => setBookFile(row.path) },
               { label: 'Unmark for Export', onClick: () => void ws.setMarked(row.path, false) }
             ]
@@ -245,6 +250,11 @@ export function App() {
     'next-chapter': () => void ws.gotoChapter(1),
     'prev-chapter': () => void ws.gotoChapter(-1),
     'toggle-mode': () => activeTab && ws.setMode(activeTab.id, activeTab.mode === 'visual' ? 'source' : 'visual'),
+    export: () => {
+      const target = activeTab && markedFiles.includes(activeTab.file) ? activeTab.file : markedFiles[0];
+      if (target) setExportFile(target);
+      else ws.setError('Mark a file for export first: right-click it in the tree and choose “Mark for Export”.');
+    },
     'focus-filter': () => filterRef.current?.focus()
   };
   const act = useRef(actions);
@@ -263,6 +273,7 @@ export function App() {
       else if (mod && k === 'n') name = 'new-file';
       else if (mod && k === 'w') name = 'close-tab';
       else if (mod && k === 'p') name = 'focus-filter';
+      else if (mod && !e.shiftKey && k === 'e') name = 'export';
       else if (mod && e.shiftKey && k === 'm') name = 'toggle-mode';
       else if (e.ctrlKey && e.key === 'Tab') name = e.shiftKey ? 'prev-tab' : 'next-tab';
       else if (e.ctrlKey && e.key === 'PageDown') name = 'next-chapter';
@@ -312,6 +323,9 @@ export function App() {
             title="Rescan the folder for new, renamed and deleted files (F5)"
           >
             {toolbarBusy ? 'Refreshing…' : '↻ Refresh'}
+          </button>
+          <button onClick={() => actions.export()} disabled={!s.root} title="Export marked books for KDP (Ctrl+E)">
+            ⬇ Export…
           </button>
           <button onClick={() => promptNewFile(dirFor(null))} disabled={!s.root} title="New file (Ctrl+N)" aria-label="New file">
             ＋ File
@@ -497,7 +511,30 @@ export function App() {
       {relink && (
         <RelinkDialog sidecar={relink} candidates={relinkCandidates} onLink={(md) => ws.relinkSidecar(relink, md)} onClose={() => setRelink(null)} />
       )}
-      {bookFile && <BookDetailsDialog file={bookFile} onClose={() => setBookFile(null)} onSaved={() => void ws.refresh()} />}
+      {exportFile && (
+        <ExportDialog
+          files={markedFiles}
+          initialFile={exportFile}
+          dirtyFiles={dirtyFiles}
+          saveFile={async (f) => {
+            const t = ws.tabForFile(f);
+            return t ? ws.save(t.id) : true;
+          }}
+          onEditDetails={(f) => setBookFile(f)}
+          detailsVersion={detailsVersion}
+          onClose={() => setExportFile(null)}
+        />
+      )}
+      {bookFile && (
+        <BookDetailsDialog
+          file={bookFile}
+          onClose={() => setBookFile(null)}
+          onSaved={() => {
+            setDetailsVersion((v) => v + 1);
+            void ws.refresh();
+          }}
+        />
+      )}
     </div>
   );
 }

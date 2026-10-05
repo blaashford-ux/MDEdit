@@ -97,6 +97,12 @@ export class FakeApi implements MdeditApi {
     this.books.set(md, defaultBookDetails({ title: 'relinked', author: 'x' }));
   };
   pickCoverImage = async () => this.coverPick;
+  planExport = async (file: string, _d?: BookDetails) => ({ dir: file, outputs: [] });
+  runExport = async () => ({ ok: true, errors: [], warnings: [], outputs: [] });
+  cancelExport = () => undefined;
+  onExportProgress = () => () => undefined;
+  revealOutput = () => undefined;
+  openOutput = async () => '';
 
   pickFolder = async () => this.pickResult;
   getLastFolder = async () => this.lastFolder;

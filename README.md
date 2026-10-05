@@ -28,6 +28,7 @@ npm run dist      # Windows installer (run on Windows / CI)
 - [x] Empty folders are shown; New Folder (toolbar, right-click, Ctrl+Shift+N)
 - [x] New file, rename, delete (Recycle Bin), show in Explorer; new/move/delete chapter from the sidebar
 - [x] Autosaved drafts: unsaved edits survive a crash and are offered back on next start
+- [x] **Export for KDP** (milestone 6.5): mark a file for export, fill in Book Details (title page, copyright page, dedication, epigraph, back matter), then Export to **EPUB**, **print-interior PDF** and **DOCX** from one dialog
 - [ ] Packaging: app icon, single-instance, open-with, code signing
 
 ## Shortcuts
@@ -42,3 +43,28 @@ npm run dist      # Windows installer (run on Windows / CI)
 | Ctrl+P | Filter files |
 | F5 | Refresh |
 | F2 / Del / Alt+Up / Alt+Down | Rename / delete / move chapter (in the tree) |
+
+## Export for KDP
+
+1. Right-click a `.md` file → **Mark for Export**. It gets a 📕 badge and a `<name>.export.json` beside it (title page, copyright page,
+   back matter and your last export choices). Your manuscript is never modified.
+2. **Book Details…** (opens automatically when you mark a file): title, subtitle, author; copyright page (year, edition, publisher, ISBN, fiction
+   disclaimer, 18+ notice, AI disclosure, extra lines — shown in a live preview in the skill's fixed order); dedication; epigraph; back matter
+   (Continue the Story, Also by, About the Author, a custom page). Only links you type are ever added.
+3. **Export…** (toolbar, File menu, Ctrl+E) → confirm the title/subtitle/author read-back → pick outputs and their variables → Export.
+
+| Output | How it is built |
+|---|---|
+| EPUB 3 | Direct XHTML + NCX + OPF following the format-for-kdp structure; passes epubcheck 5.3 with no errors or warnings |
+| Print PDF | Paged.js in an offscreen Chromium window, bundled EB Garamond (embedded), exact KDP trim size, mirrored margins with KDP's page-count gutter table (two-pass), chapters on recto pages, outer-edge page numbers counted from chapter 1, dot-leader contents |
+| DOCX | `docx` library; non-breaking-space blank paragraphs (importers strip empty ones), two sections, explicit centring, static linked contents (no page numbers) |
+
+Trim sizes offered: 5 × 8 up to 8.5 × 11 in (nothing below 5 × 8). Not included: the paperback **cover** PDF, ISBN barcodes, live KDP upload testing.
+
+### Tests
+
+`npm test` runs everything. Some suites use external tools and skip themselves if they are missing:
+
+- PDF integration (real Electron + Paged.js): needs `xvfb-run` and the Electron binary (`node node_modules/electron/install.js`).
+- epubcheck: needs Java and `pip install epubcheck`.
+- DOCX → LibreOffice round trip: needs `libreoffice-writer` (a bare `soffice` install can't open documents).

@@ -2,7 +2,10 @@ import { app, BrowserWindow, dialog, ipcMain, nativeTheme, screen, shell } from 
 import path from 'node:path';
 import type { DraftRecord, Prefs, Session, ThemeSource } from '../src/shared/api';
 import { DraftStore } from './drafts';
-import { readWithStamp, statStamp, writeFileAtomic } from './files';
+import { readWithStamp, statStamp, writeBytesAtomic, writeFileAtomic } from './files';
+import { sanitizeBookDetails } from '../src/shared/export/model';
+import { buildPrintPdf } from './export/pdf';
+import { planExport, runExport, type ExportDeps } from './export/run';
 import { loadDetails, renameSidecar, saveDetails, setMarked, existingSidecar } from './export/sidecar';
 import { createFile, createFolder, renameNode } from './fsops';
 import { sidecarPathFor } from '../src/shared/export/sidecar';
@@ -106,6 +109,48 @@ function registerIpc(): void {
     }
     await fsp.rename(from, target);
   });
+  // --- export ---
+  const resources = () => ({
+    fontsDir: path.join(app.getAppPath(), 'assets', 'fonts'),
+    pagedJsPath: path.join(app.getAppPath(), 'assets', 'vendor', 'paged.polyfill.js')
+  });
+  const exportDeps = (): ExportDeps => ({
+    readText: (p) => fsp.readFile(p, 'utf8'),
+    readBytes: async (p, max) => {
+      const st = await fsp.stat(p);
+      if (st.size > max) throw new Error('file too large');
+      return new Uint8Array(await fsp.readFile(p));
+    },
+    writeBytes: writeBytesAtomic,
+    mkdirp: (d) => fsp.mkdir(d, { recursive: true }).then(() => undefined),
+    exists: (p) => fsp.lstat(p).then(() => true, () => false),
+    loadDetails: async (p) => (await loadDetails(p)).details,
+    buildPdf: (book, say, signal) => buildPrintPdf(book, resources(), (p) => say(p.stage === 'laying-out' ? `Laying out pages… ${p.page ?? ''}` : p.stage === 'printing' ? 'Writing the PDF…' : 'Preparing fonts and layout…'), signal)
+  });
+  let exportAbort: AbortController | null = null;
+  const exportedFiles = new Set<string>(); // only files produced by an export may be revealed/opened
+  ipcMain.handle('export:plan', (_e, p: string, unsaved?: unknown) =>
+    planExport(mdPath(p), exportDeps(), unsaved ? sanitizeBookDetails(unsaved) : undefined)
+  );
+  ipcMain.handle('export:run', async (e, p: string) => {
+    const file = mdPath(p);
+    if (exportAbort) return { ok: false, errors: ['Another export is already running.'], warnings: [], outputs: [] };
+    exportAbort = new AbortController();
+    try {
+      const result = await runExport(file, exportDeps(), (prog) => e.sender.send('export:progress', prog), exportAbort.signal);
+      result.outputs.forEach((o) => exportedFiles.add(path.resolve(o.path)));
+      return result;
+    } catch (err) {
+      return { ok: false, errors: [err instanceof Error ? err.message : String(err)], warnings: [], outputs: [] };
+    } finally {
+      exportAbort = null;
+    }
+  });
+  ipcMain.on('export:cancel', () => exportAbort?.abort());
+  ipcMain.on('export:reveal', (_e, p: string) => {
+    if (exportedFiles.has(path.resolve(p))) shell.showItemInFolder(path.resolve(p));
+  });
+  ipcMain.handle('export:open', (_e, p: string) => (exportedFiles.has(path.resolve(p)) ? shell.openPath(path.resolve(p)) : Promise.resolve('Not an exported file')));
   ipcMain.handle('export:pickCover', async (e) => {
     const win = winOf(e);
     const opts = { properties: ['openFile' as const], filters: [{ name: 'Images', extensions: ['jpg', 'jpeg', 'png'] }] };

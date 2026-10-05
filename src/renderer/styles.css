@@ -153,3 +153,32 @@ button:disabled { opacity: 0.5; cursor: default; }
 .modal-actions .danger { background: #cf222e; color: #fff; border-color: #cf222e; }
 .modal-actions .muted { margin-right: auto; align-self: center; }
 .confirm-row { display: flex; gap: 8px; justify-content: flex-end; width: 100%; }
+
+.row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; align-items: start; }
+.inline { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 4px 0; }
+.grow { flex: 1; min-width: 0; padding: 6px 8px; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 4px; }
+.output-block { border: 1px solid var(--border); border-radius: 6px; padding: 4px 12px; margin: 8px 0; }
+.output-panel { padding: 0 0 8px 26px; }
+.readback { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 4px 14px 10px; }
+.readback dl { display: grid; grid-template-columns: 90px 1fr; gap: 4px 12px; margin: 8px 0; }
+.readback dt { color: var(--muted); }
+.readback dd { margin: 0; font-weight: 600; word-break: break-word; }
+.readback-actions { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+.chapter-list { max-height: 180px; overflow: auto; border: 1px solid var(--border); border-radius: 4px; padding: 4px 10px; margin-top: 6px; }
+.chapter-list .toggle { margin: 3px 0; }
+.path { font-size: 12px; word-break: break-all; }
+code.path { background: var(--hover); padding: 1px 5px; border-radius: 3px; }
+.plan { margin: 6px 0; padding-left: 18px; }
+.warn-text { color: var(--dirty); }
+.progress-list, .results, .notes { list-style: none; padding: 0; margin: 8px 0; }
+.progress-list li { padding: 3px 0; color: var(--muted); }
+.progress-list li.now { color: var(--fg); font-weight: 600; }
+.progress-list li.now::before { content: '⏳ '; }
+.progress-list li.done::before { content: '✓ '; color: #1a7f37; }
+.results li { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.notes { list-style: disc; padding-left: 20px; font-size: 13px; }
+
+/* checkboxes must not pick up the full-width text-input styling */
+.modal input[type='checkbox'], .toggle input[type='checkbox'] { display: inline-block; width: auto; flex: none; margin: 3px 0 0; padding: 0; }
+.field select { text-overflow: ellipsis; }
+.toggle input[type='checkbox'] { margin-right: 4px; }

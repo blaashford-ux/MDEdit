@@ -1,6 +1,6 @@
 # Milestone 6.5 — Export to KDP (EPUB + print PDF)
 
-Status: **plan agreed (answers in section 9); ready to start 6.5a.** Nothing is built yet.
+Status: **implemented (6.5a–f).** The notes at the end list where the build differs from this plan.
 
 Basis: the `format-for-kdp` skill. Its output rules (block paragraphs, Garamond 11pt, copyright-page order,
 static TOC, recto chapter starts, mirrored margins with a page-count-driven gutter, EPUB3 structure) carry
@@ -133,3 +133,19 @@ Defaults I'm assuming unless you say otherwise (each is a one-line change):
 - Hyphenation **off**, orphans/widows control on, in the print PDF.
 - Output folder defaults to an `Exports` folder beside the manuscript, created on first export.
 - Cover image is optional and embedded in the EPUB only; the paperback **cover PDF** is out of scope here.
+
+## 10. As built — differences from the plan
+
+- **Main process is bundled with esbuild** (not `tsc`) so ESM-only dependencies (unified/remark) work; `assets/vendor/paged.polyfill.js`
+  is copied from `node_modules` at build time and no runtime `node_modules` is shipped (asar ≈ 9 MB).
+- **Offscreen window for the PDF layout.** A merely hidden window gets no animation frames and Paged.js waits on them (22 s for 25 pages);
+  offscreen rendering lays out a 330-page book in ~16 s.
+- **Page numbers and contents numbers are written after layout** by a small script (body pages counted from the first chapter, blank versos
+  included), not by CSS counters: Chromium scoped `counter-reset: page` to a single page, and this Paged.js has no `leader()`. Dot leaders are a flex
+  row. Running heads are set the same way so chapter openers can go without.
+- **Export uses the saved manuscript and the saved Book Details** (the dialog saves its settings first). Unsaved edits prompt Save and export /
+  Export saved version / Cancel.
+- **Title, subtitle and author must be re-confirmed (read-back checkbox) for every export**, per the skill's "confirm before use" rule.
+- Chapter headings in the print PDF are sunk 1.25 in from the top and have no drop cap (the drop cap is EPUB-only, as in the skill).
+- A bad cover image or an unsafe link is a **warning**, never a failure; one failing output doesn't stop the others.
+- Not done: a re-link flow exists for orphaned `*.export.json`, but there is no UI to create a *second* book from one file.

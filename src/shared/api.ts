@@ -34,11 +34,44 @@ export type MenuAction =
   | 'save'
   | 'new-file'
   | 'new-folder'
+  | 'export'
   | 'close-tab'
   | 'next-tab'
   | 'prev-tab'
   | 'next-chapter'
   | 'prev-chapter';
+
+export type ExportKind = 'epub' | 'pdf' | 'docx';
+
+export interface ExportProgress {
+  /** Which output this is about, or 'prepare' for the shared first step. */
+  kind: ExportKind | 'prepare';
+  message: string;
+}
+
+export interface ExportOutput {
+  kind: ExportKind;
+  path: string;
+  bytes: number;
+  /** Print PDF only. */
+  pages?: number;
+  gutter?: number;
+  warnings: string[];
+}
+
+export interface ExportResult {
+  ok: boolean;
+  /** Problems that stopped (part of) the export. */
+  errors: string[];
+  warnings: string[];
+  outputs: ExportOutput[];
+}
+
+/** What an export would write, and where, before running it. */
+export interface ExportPlan {
+  dir: string;
+  outputs: { kind: ExportKind; path: string; exists: boolean }[];
+}
 
 export type UnsavedChoice = 'save' | 'discard' | 'cancel';
 export type ThemeSource = 'system' | 'light' | 'dark';
@@ -97,6 +130,16 @@ export interface MdeditApi {
   relinkSidecar(sidecar: string, markdownFile: string): Promise<void>;
   /** Native image picker for the EPUB cover. */
   pickCoverImage(): Promise<string | null>;
+
+  /** Where an export would write. Pass the dialog's current (unsaved) details to preview them. */
+  planExport(file: string, details?: BookDetails): Promise<ExportPlan>;
+  /** Builds the enabled outputs from the book's saved details and the manuscript as saved on disk. */
+  runExport(file: string): Promise<ExportResult>;
+  cancelExport(): void;
+  onExportProgress(cb: (p: ExportProgress) => void): () => void;
+  /** Show / open a file the last export produced. */
+  revealOutput(path: string): void;
+  openOutput(path: string): Promise<string>;
 
   getPrefs(): Promise<Prefs>;
   setPrefs(patch: Partial<Prefs>): void;

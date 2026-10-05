@@ -33,3 +33,15 @@ export async function writeFileAtomic(target: string, content: string): Promise<
   if (!stamp) throw new Error(`File disappeared after writing: ${target}`);
   return stamp;
 }
+
+/** Like writeFileAtomic, for binary output (EPUB, PDF, DOCX). */
+export async function writeBytesAtomic(target: string, bytes: Uint8Array): Promise<void> {
+  const tmp = `${target}.mdedit-${process.pid}.tmp`;
+  try {
+    await fs.writeFile(tmp, bytes);
+    await fs.rename(tmp, target);
+  } catch (e) {
+    await fs.rm(tmp, { force: true });
+    throw e;
+  }
+}
