@@ -45,3 +45,9 @@ Auto-update inside the app, a portable build, macOS/Linux installers, and publis
 
 Actions tab → **release** → **Run workflow** (branch `main`). It releases the version in `package.json`,
 creates the `vX.Y.Z` tag itself, and publishes the installer.
+
+## Re-cutting a release
+
+If a release went out from the wrong commit (say a last-minute fix landed after it), run the **release** workflow
+from the Actions tab with **recut** ticked. It deletes the existing release and its tag, then builds and publishes
+the version in `package.json` again from the commit you ran it on. Downloads of the old release disappear.

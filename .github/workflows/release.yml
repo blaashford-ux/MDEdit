@@ -9,6 +9,11 @@ on:
   # Manual run (Actions tab -> release -> Run workflow): releases the package.json version from the chosen
   # branch and creates the vX.Y.Z tag itself.
   workflow_dispatch:
+    inputs:
+      recut:
+        description: 'Delete the existing release and tag for this version first, then publish it again from this commit'
+        type: boolean
+        default: false
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
@@ -98,7 +103,12 @@ jobs:
           SHA: ${{ github.sha }}
           REPO: ${{ github.repository }}
           PRERELEASE: ${{ needs.verify.outputs.prerelease }}
+          RECUT: ${{ github.event.inputs.recut }}
         run: |
+          if [ "$RECUT" = "true" ] && gh release view "$TAG" --repo "$REPO" > /dev/null 2>&1; then
+            echo "Re-cutting $TAG: deleting the existing release and tag."
+            gh release delete "$TAG" --repo "$REPO" --yes --cleanup-tag
+          fi
           flags=()
           if [ "$PRERELEASE" = "true" ]; then flags+=(--prerelease); fi
           if gh release view "$TAG" --repo "$REPO" > /dev/null 2>&1; then
