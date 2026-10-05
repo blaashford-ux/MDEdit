@@ -13,4 +13,5 @@ npm run dist      # Windows installer (run on Windows / CI)
 ## Status
 - [x] Scaffold (Electron, Vite, React, TypeScript, Vitest, CI Windows build)
 - [x] Chapter engine (`src/shared/chapters.ts`): lossless split/join by H1
-- [ ] File tree, WYSIWYG editor, save prompts, file watcher, remember last folder
+- [x] Folder picker, recursive file tree, chapters listed under each file (read-only preview)
+- [ ] WYSIWYG editor, save prompts, file watcher, remember last folder

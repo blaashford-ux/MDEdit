@@ -1,0 +1,18 @@
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; }
+body { font: 14px system-ui, 'Segoe UI', sans-serif; color: #1f2328; }
+.app { display: flex; height: 100%; }
+.sidebar { width: 300px; min-width: 200px; border-right: 1px solid #d0d7de; overflow: auto; background: #f6f8fa; }
+.toolbar { padding: 8px; border-bottom: 1px solid #d0d7de; }
+.root-name { padding: 6px 8px; font-weight: 600; }
+.tree, .tree ul { list-style: none; margin: 0; padding: 0; }
+.row { display: block; width: 100%; text-align: left; border: 0; background: none; padding: 3px 8px; font: inherit; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row:hover { background: #eaeef2; }
+.row.active { background: #ddf4ff; }
+.caret { display: inline-block; width: 1em; }
+.chapter { color: #0550ae; }
+.muted { color: #656d76; }
+.pad { padding: 8px; }
+.content { flex: 1; padding: 16px 24px; overflow: auto; }
+.preview { white-space: pre-wrap; font: 13px Consolas, monospace; }
+.error { background: #ffebe9; border: 1px solid #ff818266; padding: 8px; margin-bottom: 12px; }

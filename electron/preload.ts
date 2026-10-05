@@ -1,2 +1,10 @@
-// Typed bridge between renderer and main process; filled in with the file APIs in milestone 3.
-export {};
+import { contextBridge, ipcRenderer } from 'electron';
+import type { MdeditApi } from '../src/shared/api';
+
+const api: MdeditApi = {
+  pickFolder: () => ipcRenderer.invoke('dialog:pickFolder'),
+  scanFolder: (root) => ipcRenderer.invoke('fs:scanFolder', root),
+  readFile: (p) => ipcRenderer.invoke('fs:readFile', p)
+};
+
+contextBridge.exposeInMainWorld('mdedit', api);
