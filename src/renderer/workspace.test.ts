@@ -940,3 +940,90 @@ describe('undo / redo of structural actions', () => {
     expect(state().notice).toBe('Nothing to redo.');
   });
 });
+
+describe('projects in the workspace', () => {
+  const PROJ = ROOT; // the fake folder is the project
+
+  it('a folder with a project marker opens as a project and remembers it', async () => {
+    api.addProject(PROJ, { name: 'The Lost King' });
+    await ws.openPath(PROJ);
+    expect(state().project?.meta.name).toBe('The Lost King');
+    expect(api.lastProject).toBe(PROJ);
+    expect(state().progress?.total).toBeGreaterThan(0);
+  });
+
+  it('an ordinary folder is not a project', async () => {
+    await ws.openPath(ROOT);
+    expect(state().project).toBeNull();
+    expect(api.lastProject).toBeNull();
+  });
+
+  it('the project’s chapter level overrides the app’s, and falls back when it has none', async () => {
+    api.add('lv.md', '# Book\n\n## One\na\n\n## Two\nb\n');
+    api.appDefaults = { ...api.appDefaults, chapterLevel: 1 };
+    await ws.init();
+    api.addProject(PROJ, { overrides: { chapterLevel: 2, book: null } });
+    await ws.openPath(PROJ);
+    await ws.openChapter(`${ROOT}/lv.md`, 0);
+    expect(state().chapterLevel).toBe(2);
+    expect(state().docs.get(`${ROOT}/lv.md`)!.chapters.map((c) => c.title)).toEqual(['', 'One', 'Two']);
+    api.projectMetas.clear();
+    await ws.openPath(ROOT);
+    expect(state().chapterLevel).toBe(1);
+  });
+
+  it('changing the app level does not change a project that has its own', async () => {
+    api.addProject(PROJ, { overrides: { chapterLevel: 2, book: null } });
+    await ws.openPath(PROJ);
+    await ws.applyAppDefaults({ ...api.appDefaults, chapterLevel: 3 });
+    expect(state().chapterLevel).toBe(2);
+    api.projectMetas.set(PROJ, { ...api.projectMetas.get(PROJ)!, overrides: { chapterLevel: null, book: null } });
+    await ws.openPath(PROJ);
+    expect(state().chapterLevel).toBe(3);
+  });
+
+  it('editing the project’s settings re-splits the open files, asking about unsaved edits first', async () => {
+    api.add('lv.md', '# Book\n\n## One\na\n');
+    const meta = api.addProject(PROJ);
+    await ws.openPath(PROJ);
+    await ws.openChapter(`${ROOT}/lv.md`, 0);
+    ws.setDraft(tabOf(`${ROOT}/lv.md`).id, '# Book EDIT');
+    api.unsavedAnswers = ['cancel'];
+    expect(await ws.updateProjectMeta({ ...meta, overrides: { chapterLevel: 2, book: null } })).toBe(false);
+    expect(state().chapterLevel).toBe(1);
+    api.unsavedAnswers = ['discard'];
+    expect(await ws.updateProjectMeta({ ...meta, overrides: { chapterLevel: 2, book: null } })).toBe(true);
+    expect(state().chapterLevel).toBe(2);
+    expect(state().project?.meta.overrides.chapterLevel).toBe(2);
+  });
+
+  it('closing the project returns to the home state, after resolving unsaved edits', async () => {
+    api.addProject(PROJ);
+    await ws.openPath(PROJ);
+    await ws.openChapter(A, 0);
+    ws.setDraft(tabOf(A).id, '# One\nEDIT');
+    api.unsavedAnswers = ['cancel'];
+    expect(await ws.closeProject()).toBe(false);
+    expect(state().root).not.toBeNull();
+    api.unsavedAnswers = ['discard'];
+    expect(await ws.closeProject()).toBe(true);
+    expect(state()).toMatchObject({ root: null, project: null, progress: null, tabs: [] });
+    expect(api.lastProject).toBeNull();
+  });
+
+  it('saving schedules a progress count', async () => {
+    api.addProject(PROJ);
+    await ws.openPath(PROJ);
+    const before = state().progress?.total ?? 0;
+    await ws.openChapter(A, 0);
+    ws.setDraft(tabOf(A).id, '# One\n' + 'word '.repeat(50));
+    await ws.save();
+    await sleep(1700);
+    expect(state().progress!.total).toBeGreaterThan(before);
+  });
+
+  it('openProject refuses a folder that is not a project', async () => {
+    expect(await ws.openProject('/nowhere')).toBe(false);
+    expect(state().error).toMatch(/not a project/);
+  });
+});

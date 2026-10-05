@@ -1,3 +1,4 @@
+import type { AppDefaults } from './appDefaults';
 import { clampLevel } from './chapters';
 import { sanitizeBookDetails, type BookDetails } from './export/model';
 import { isDate, sanitizeGoal, type Goal } from './progress';
@@ -289,3 +290,74 @@ export function defaultRootFolder(home: string): string {
 }
 
 export { isDate };
+
+// ---- app-level settings for projects --------------------------------------------------------
+
+export interface ProjectsSettings {
+  /** The Root Folder, or null for the default (`<home>\MDEdit`). */
+  rootFolder: string | null;
+  /** The first-run welcome has been completed. */
+  setupDone: boolean;
+  templates: ProjectTemplate[];
+  defaultTemplateId: string;
+  /** Open the project that was open last time when the app starts. */
+  reopenLast: boolean;
+  lastProject: string | null;
+}
+
+export function defaultProjectsSettings(): ProjectsSettings {
+  return { rootFolder: null, setupDone: false, templates: defaultTemplates(), defaultTemplateId: 'novel', reopenLast: true, lastProject: null };
+}
+
+export function sanitizeProjectsSettings(raw: unknown): ProjectsSettings {
+  const d = defaultProjectsSettings();
+  if (!isObj(raw)) return d;
+  const templates = sanitizeTemplates(raw.templates);
+  const wanted = typeof raw.defaultTemplateId === 'string' ? raw.defaultTemplateId : d.defaultTemplateId;
+  return {
+    rootFolder: typeof raw.rootFolder === 'string' && raw.rootFolder.trim() ? raw.rootFolder.trim().slice(0, 1000) : null,
+    setupDone: raw.setupDone === true,
+    templates,
+    defaultTemplateId: templates.some((t) => t.id === wanted) ? wanted : templates[0].id,
+    reopenLast: raw.reopenLast !== false,
+    lastProject: typeof raw.lastProject === 'string' && raw.lastProject ? raw.lastProject.slice(0, 1000) : null
+  };
+}
+
+/** What the renderer gets: the settings plus where the Root really is. */
+export interface ProjectsConfig extends ProjectsSettings {
+  /** The Root Folder in use (the saved one, or the default). */
+  root: string;
+  rootExists: boolean;
+}
+
+/** What the Projects home shows for one project. */
+export interface ProjectSummary {
+  path: string;
+  name: string;
+  meta: ProjectMeta;
+  /** Words in the files that count toward the goal. */
+  words: number;
+  files: number;
+  /** Most recent edit among the project's Markdown files (ms since epoch), or null if it has none. */
+  lastEdited: number | null;
+}
+
+export interface RootListing {
+  root: string;
+  /** False when the Root Folder is missing or can't be read. */
+  exists: boolean;
+  projects: ProjectSummary[];
+  /** Other folders in the Root: not projects yet (they can be converted). */
+  folders: { name: string; path: string }[];
+}
+
+
+/**
+ * The cascade for settings that exist at several levels: the app's defaults, overridden by the project's own
+ * chapter level and book defaults where it has them (a project made from a template starts with the template's).
+ */
+export function effectiveDefaults(app: AppDefaults, meta: ProjectMeta | null): AppDefaults {
+  if (!meta) return app;
+  return { chapterLevel: meta.overrides.chapterLevel ?? app.chapterLevel, book: meta.overrides.book ?? app.book };
+}

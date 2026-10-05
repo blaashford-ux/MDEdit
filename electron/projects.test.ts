@@ -211,3 +211,23 @@ describe('updateMeta / addMissingTemplateParts', () => {
     expect(await readFile(path.join(a.path, 'Manuscript', 'Draft.md'), 'utf8')).toBe('my words');
   });
 });
+
+describe('moveProjects', () => {
+  it('moves projects (not other folders) and reports clashes', async () => {
+    const { moveProjects } = await import('./projects');
+    await createProject(root, 'Alpha', blank());
+    await createProject(root, 'Beta', blank());
+    await mkdir(path.join(root, 'Plain'));
+    const dest = path.join(root, '..', path.basename(root) + '-new');
+    await mkdir(path.join(dest, 'Beta'), { recursive: true }); // a clash
+    try {
+      const r = await moveProjects(root, dest);
+      expect(r.moved).toEqual(['Alpha']);
+      expect(r.failed.map((f) => f.name)).toEqual(['Beta']);
+      expect(await names(root)).toEqual(['Beta', 'Plain']);
+      expect(await isProject(path.join(dest, 'Alpha'))).toBe(true);
+    } finally {
+      await rm(dest, { recursive: true, force: true });
+    }
+  });
+});

@@ -130,3 +130,37 @@ describe('names', () => {
     expect(defaultRootFolder('/home/me/')).toBe('/home/me/MDEdit');
   });
 });
+
+import { defaultProjectsSettings, sanitizeProjectsSettings } from './projects';
+describe('projects settings', () => {
+  it('defaults: no root chosen yet, built-in templates, Novel default, reopen last', () => {
+    const d = defaultProjectsSettings();
+    expect(d).toMatchObject({ rootFolder: null, setupDone: false, defaultTemplateId: 'novel', reopenLast: true, lastProject: null });
+    expect(d.templates).toHaveLength(4);
+  });
+  it('sanitises garbage and keeps valid choices', () => {
+    expect(sanitizeProjectsSettings('x')).toEqual(defaultProjectsSettings());
+    const s = sanitizeProjectsSettings({ rootFolder: ' D:\\Writing ', setupDone: true, templates: [{ id: 'mine', name: 'Mine' }], defaultTemplateId: 'gone', reopenLast: false, lastProject: 'D:\\Writing\\Book' });
+    expect(s).toMatchObject({ rootFolder: 'D:\\Writing', setupDone: true, defaultTemplateId: 'mine', reopenLast: false, lastProject: 'D:\\Writing\\Book' });
+    expect(s.templates.map((t) => t.id)).toEqual(['mine']);
+  });
+});
+
+import { defaultAppDefaults, sanitizeAppDefaults } from './appDefaults';
+import { effectiveDefaults } from './projects';
+describe('defaults cascade', () => {
+  const app = sanitizeAppDefaults({ chapterLevel: 2, book: { author: 'App Author' } });
+  const meta = (o: Partial<ReturnType<typeof newProjectMeta>['overrides']>) => ({ ...newProjectMeta({ id: 'x', name: 'x', template: defaultTemplates()[3], now: new Date() }), overrides: { chapterLevel: null, book: null, ...o } });
+  it('outside a project, or with nothing overridden, the app defaults apply', () => {
+    expect(effectiveDefaults(app, null)).toBe(app);
+    expect(effectiveDefaults(app, meta({}))).toEqual(app);
+  });
+  it('a project’s chapter level and book defaults win independently', () => {
+    const book = sanitizeAppDefaults({ book: { author: 'Project Author' } }).book;
+    expect(effectiveDefaults(app, meta({ chapterLevel: 3 }))).toEqual({ chapterLevel: 3, book: app.book });
+    const both = effectiveDefaults(app, meta({ book }));
+    expect(both.chapterLevel).toBe(2);
+    expect(both.book.author).toBe('Project Author');
+    expect(defaultAppDefaults().chapterLevel).toBe(1);
+  });
+});

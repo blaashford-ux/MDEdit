@@ -4,31 +4,10 @@ import path from 'node:path';
 import { localDate, recordSnapshot, sanitizeProgress, type Progress } from '../src/shared/progress';
 import {
   defaultTemplates, flattenFolders, newProjectMeta, PROGRESS_FILE, PROJECT_DIR, PROJECT_FILE, projectNameError, sanitizeProjectMeta,
-  type ProjectMeta, type ProjectTemplate
+  type ProjectMeta, type ProjectSummary, type ProjectTemplate, type RootListing
 } from '../src/shared/projects';
 import { countWords } from '../src/shared/words';
 import { writeFileAtomic } from './files';
-
-/** What the Projects home shows for one project. */
-export interface ProjectSummary {
-  path: string;
-  name: string;
-  meta: ProjectMeta;
-  /** Words in the files that count toward the goal. */
-  words: number;
-  files: number;
-  /** Most recent edit among the project's Markdown files (ms since epoch), or null if it has none. */
-  lastEdited: number | null;
-}
-
-export interface RootListing {
-  root: string;
-  /** False when the Root Folder is missing or can't be read. */
-  exists: boolean;
-  projects: ProjectSummary[];
-  /** Other folders in the Root: not projects yet (they can be converted). */
-  folders: { name: string; path: string }[];
-}
 
 export interface Deps {
   now?: () => Date;
@@ -310,4 +289,30 @@ export async function addMissingTemplateParts(dir: string, template: ProjectTemp
     }
   }
   return added;
+}
+
+/** Moves every project (and nothing else) from one Root Folder to another. Reports what could not be moved. */
+export async function moveProjects(oldRoot: string, newRoot: string): Promise<{ moved: string[]; failed: { name: string; error: string }[] }> {
+  const moved: string[] = [];
+  const failed: { name: string; error: string }[] = [];
+  if (path.resolve(oldRoot) === path.resolve(newRoot)) return { moved, failed };
+  await fs.mkdir(newRoot, { recursive: true });
+  const { projects } = await listProjects(oldRoot);
+  for (const p of projects) {
+    const to = path.join(newRoot, p.name);
+    try {
+      if (await exists(to)) throw new Error(`“${p.name}” already exists in the new Root Folder.`);
+      try {
+        await fs.rename(p.path, to);
+      } catch (e) {
+        if ((e as NodeJS.ErrnoException).code !== 'EXDEV') throw e;
+        await fs.cp(p.path, to, { recursive: true, errorOnExist: true }); // another drive: copy, then remove the original
+        await fs.rm(p.path, { recursive: true, force: true });
+      }
+      moved.push(p.name);
+    } catch (e) {
+      failed.push({ name: p.name, error: e instanceof Error ? e.message : String(e) });
+    }
+  }
+  return { moved, failed };
 }

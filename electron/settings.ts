@@ -1,6 +1,7 @@
 import { promises as fs } from 'node:fs';
 import type { Prefs, Session, ThemeSource } from '../src/shared/api';
 import { defaultAppDefaults, sanitizeAppDefaults, type AppDefaults } from '../src/shared/appDefaults';
+import { defaultProjectsSettings, sanitizeProjectsSettings, type ProjectsSettings } from '../src/shared/projects';
 import { writeFileAtomic } from './files';
 
 export interface WindowState {
@@ -18,6 +19,8 @@ export interface Settings {
   prefs?: Prefs;
   /** Chapter heading level and the new-book template (File → Settings). */
   appDefaults?: AppDefaults;
+  /** Root Folder, project templates and related options. */
+  projects?: ProjectsSettings;
   /** Open tabs etc., per folder, so switching back to a folder restores it. */
   sessions?: Record<string, Session>;
 }
@@ -61,6 +64,7 @@ export function sanitizeSettings(data: unknown): Settings {
   }
   if (isObj(data.prefs) && isNum(data.prefs.sidebarWidth)) out.prefs = { sidebarWidth: data.prefs.sidebarWidth };
   if (isObj(data.appDefaults)) out.appDefaults = sanitizeAppDefaults(data.appDefaults);
+  if (isObj(data.projects)) out.projects = sanitizeProjectsSettings(data.projects);
   if (isObj(data.sessions)) {
     const sessions: Record<string, Session> = {};
     for (const [folder, raw] of Object.entries(data.sessions)) {
@@ -93,6 +97,10 @@ export class SettingsStore {
 
   get(): Readonly<Settings> {
     return this.data;
+  }
+
+  projects(): ProjectsSettings {
+    return this.data.projects ?? defaultProjectsSettings();
   }
 
   appDefaults(): AppDefaults {
