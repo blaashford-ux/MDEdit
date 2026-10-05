@@ -124,7 +124,7 @@ automatically. See [docs/RELEASING.md](docs/RELEASING.md).
 - **New look**: borderless, tonal, rounded design with a palette drawn from the app icon, in light and dark, with line icons.
 - **Custom title bar**: frameless window with in-window File / Edit / Go / View / Help menus (mouse, arrows, Alt+letter), the open chapter and file, and window buttons (drawn by the OS on Windows).
 - The chapter heading and toolbar stay pinned while you scroll.
-- The AI disclosure on the copyright page is now a **Content Warning** (default text “Add Content Warnings here”).
+- The copyright page has an optional **Content Warning** notice (default text “Add Content Warnings here”).
 
 **Changed**
 - Export files (`<name>.export.json`) use the field names `contentWarning` / `contentWarningText`; older files are tidied automatically the first time they are read.
