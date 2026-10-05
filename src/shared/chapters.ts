@@ -152,3 +152,8 @@ export function updateChapter(doc: MarkdownDoc, index: number, newRaw: string): 
   chapters[index] = { ...old, title, raw };
   return { ...doc, chapters };
 }
+
+/** A chapter's text without line-ending differences or trailing newlines, for comparing content. */
+export function chapterBody(raw: string): string {
+  return raw.replace(/\r\n|\r/g, '\n').replace(/\n+$/, '');
+}

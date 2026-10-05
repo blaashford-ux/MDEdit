@@ -12,11 +12,14 @@ interface Props {
    * the editor may normalise the Markdown it was given.
    */
   onChange(markdown: string | null): void;
-  /** Bump after a successful save: the current content becomes the new "clean" baseline. */
-  savedVersion: number;
+  /**
+   * Set after each successful save: `markdown` (what was written) becomes the "clean" baseline.
+   * Anything typed while the save was in flight stays dirty.
+   */
+  saved: { version: number; markdown: string } | null;
 }
 
-export function Editor({ initial, onChange, savedVersion }: Props) {
+export function Editor({ initial, onChange, saved }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const crepeRef = useRef<Crepe | null>(null);
   const baseline = useRef<string | null>(null);
@@ -59,8 +62,11 @@ export function Editor({ initial, onChange, savedVersion }: Props) {
   }, []);
 
   useEffect(() => {
-    if (savedVersion > 0 && crepeRef.current) baseline.current = crepeRef.current.getMarkdown();
-  }, [savedVersion]);
+    if (!saved || !crepeRef.current) return;
+    baseline.current = saved.markdown;
+    const current = crepeRef.current.getMarkdown();
+    onChangeRef.current(current === saved.markdown ? null : current);
+  }, [saved?.version]);
 
   return <div className="editor" ref={host} />;
 }
