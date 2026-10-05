@@ -14,5 +14,8 @@ body { font: 14px system-ui, 'Segoe UI', sans-serif; color: #1f2328; }
 .muted { color: #656d76; }
 .pad { padding: 8px; }
 .content { flex: 1; padding: 16px 24px; overflow: auto; }
-.preview { white-space: pre-wrap; font: 13px Consolas, monospace; }
+
 .error { background: #ffebe9; border: 1px solid #ff818266; padding: 8px; margin-bottom: 12px; }
+.editor-head { display: flex; align-items: center; justify-content: space-between; }
+.dirty { color: #bf8700; }
+.editor { margin-top: 8px; }

@@ -134,15 +134,18 @@ export function joinChapters(doc: MarkdownDoc): string {
 
 /**
  * Replace one chapter's text, leaving all others byte-identical.
- * Newlines in `newRaw` are normalised to the document's line ending, and a
- * trailing newline is ensured so the next chapter's heading stays on its own line.
+ * Newlines in `newRaw` are normalised to the document's line ending. The chapter keeps
+ * its original run of trailing newlines (blank lines before the next heading, or no final
+ * newline at end of file), because WYSIWYG editors don't preserve those.
  * Returns a new document (the input is not mutated).
  */
 export function updateChapter(doc: MarkdownDoc, index: number, newRaw: string): MarkdownDoc {
   if (index < 0 || index >= doc.chapters.length) throw new RangeError(`No chapter at index ${index}`);
-  let raw = newRaw.replace(/\r\n|\r|\n/g, doc.eol);
+  const trailing = /(?:\r\n|\r|\n)*$/.exec(doc.chapters[index].raw)![0];
   const isLast = index === doc.chapters.length - 1;
-  if (!isLast && raw !== '' && !/[\r\n]$/.test(raw)) raw += doc.eol;
+  const body = newRaw.replace(/(?:\r\n|\r|\n)+$/, '').replace(/\r\n|\r|\n/g, doc.eol);
+  // A non-last chapter must end in a newline so the next heading starts its own line.
+  const raw = body === '' ? trailing : body + (trailing || (isLast ? '' : doc.eol));
   const old = doc.chapters[index];
   const title = old.isPreamble ? '' : (splitChapters(raw).chapters.find((c) => !c.isPreamble)?.title ?? old.title);
   const chapters = doc.chapters.slice();

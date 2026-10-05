@@ -15,10 +15,23 @@
   "build": {
     "appId": "com.blaashford.mdedit",
     "productName": "MDEdit",
-    "files": ["dist/**", "dist-electron/**", "package.json"],
-    "directories": { "output": "release" },
-    "win": { "target": ["nsis"] },
-    "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true }
+    "files": [
+      "dist/**",
+      "dist-electron/**",
+      "package.json"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
@@ -34,6 +47,8 @@
     "wait-on": "^8.0.0"
   },
   "dependencies": {
+    "@milkdown/crepe": "^7.22.2",
+    "@milkdown/kit": "^7.22.2",
     "react": "^18.3.0",
     "react-dom": "^18.3.0"
   }

@@ -19,6 +19,8 @@ export interface MdeditApi {
   /** Scans a folder recursively for Markdown files. Empty branches are omitted. */
   scanFolder(root: string): Promise<DirNode>;
   readFile(path: string): Promise<string>;
+  /** Atomically overwrites a Markdown file inside the opened folder. */
+  writeFile(path: string, content: string): Promise<void>;
 }
 
 declare global {

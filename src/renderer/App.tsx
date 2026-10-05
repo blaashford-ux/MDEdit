@@ -1,6 +1,7 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DirNode } from '../shared/api';
-import { splitChapters, type MarkdownDoc } from '../shared/chapters';
+import { joinChapters, splitChapters, updateChapter, type MarkdownDoc } from '../shared/chapters';
+import { Editor } from './Editor';
 import { chapterLabel, Tree, type Selection } from './Tree';
 import './styles.css';
 
@@ -10,8 +11,65 @@ export function App() {
   const [docs, setDocs] = useState<Map<string, MarkdownDoc>>(new Map());
   const [selection, setSelection] = useState<Selection | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Unsaved editor output for the open chapter, or null when it is unchanged.
+  const [draft, setDraft] = useState<string | null>(null);
+  const [savedVersion, setSavedVersion] = useState(0);
+  const saving = useRef(false);
+
+  const dirty = draft !== null;
+
+  /**
+   * Gate for anything that would leave the open chapter (switch chapter/file, change folder).
+   * Milestone 5 replaces this with a Save / Don't Save / Cancel dialog.
+   */
+  const confirmLeave = useCallback(
+    () => !dirty || window.confirm('You have unsaved changes. Discard them?'),
+    [dirty]
+  );
+
+  const save = useCallback(async () => {
+    if (!selection || draft === null || saving.current) return;
+    const doc = docs.get(selection.file);
+    if (!doc) return;
+    saving.current = true;
+    try {
+      const text = joinChapters(updateChapter(doc, selection.chapter, draft));
+      await window.mdedit.writeFile(selection.file, text);
+      // Re-split: the user may have added or removed a Heading 1.
+      setDocs((prev) => new Map(prev).set(selection.file, splitChapters(text)));
+      setDraft(null);
+      setSavedVersion((v) => v + 1);
+      setError(null);
+    } catch (e) {
+      setError(`Could not save: ${e}`);
+    } finally {
+      saving.current = false;
+    }
+  }, [selection, draft, docs]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        void save();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [save]);
+
+  const selectChapter = useCallback(
+    (sel: Selection) => {
+      if (sel.file === selection?.file && sel.chapter === selection.chapter) return;
+      if (!confirmLeave()) return;
+      setDraft(null);
+      setSelection(sel);
+    },
+    [selection, confirmLeave]
+  );
 
   const openFolder = useCallback(async () => {
+    if (!confirmLeave()) return;
     try {
       const folder = await window.mdedit.pickFolder();
       if (!folder) return;
@@ -19,11 +77,12 @@ export function App() {
       setExpanded(new Set());
       setDocs(new Map());
       setSelection(null);
+      setDraft(null);
       setError(null);
     } catch (e) {
       setError(String(e));
     }
-  }, []);
+  }, [confirmLeave]);
 
   const toggle = useCallback(
     async (path: string, isFile: boolean) => {
@@ -66,7 +125,7 @@ export function App() {
                 docs={docs}
                 selection={selection}
                 onToggle={toggle}
-                onSelect={setSelection}
+                onSelect={selectChapter}
               />
             )}
           </>
@@ -76,13 +135,24 @@ export function App() {
       </aside>
       <main className="content">
         {error && <div className="error">{error}</div>}
-        {chapter ? (
+        {chapter && selection ? (
           <>
-            <h2>{chapterLabel(chapter)}</h2>
-            <pre className="preview">{chapter.raw}</pre>
+            <div className="editor-head">
+              <h2>
+                {chapterLabel(chapter)}
+                {dirty && <span className="dirty" title="Unsaved changes"> ●</span>}
+              </h2>
+              <button onClick={save} disabled={!dirty}>Save (Ctrl+S)</button>
+            </div>
+            <Editor
+              key={`${selection.file}#${selection.chapter}`}
+              initial={chapter.raw}
+              onChange={setDraft}
+              savedVersion={savedVersion}
+            />
           </>
         ) : (
-          <p className="muted">Select a chapter to view it. (Editing arrives in the next milestone.)</p>
+          <p className="muted">Select a chapter to edit it.</p>
         )}
       </main>
     </div>

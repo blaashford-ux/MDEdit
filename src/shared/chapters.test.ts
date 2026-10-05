@@ -107,6 +107,12 @@ describe('updateChapter', () => {
     expect(joinChapters(updateChapter(d, 1, '# B\nz'))).toBe('# A\nx\n# B\nz');
   });
 
+  it('preserves blank lines before the next chapter and the final newline', () => {
+    const d = splitChapters('# A\nx\n\n\n# B\ny\n');
+    expect(joinChapters(updateChapter(d, 0, '# A\nedited'))).toBe('# A\nedited\n\n\n# B\ny\n');
+    expect(joinChapters(updateChapter(d, 1, '# B\nz'))).toBe('# A\nx\n\n\n# B\nz\n');
+  });
+
   it('updates the title when the heading is renamed', () => {
     const d = splitChapters('# A\nx\n');
     expect(updateChapter(d, 0, '# Renamed\nx\n').chapters[0].title).toBe('Renamed');

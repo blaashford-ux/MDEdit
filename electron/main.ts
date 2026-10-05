@@ -1,6 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain } from 'electron';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { writeFileAtomic } from './files';
 import { scanFolder } from './scan';
 
 // Paths the renderer may read: only inside the folder the user picked.
@@ -28,6 +29,10 @@ function registerIpc(): void {
   ipcMain.handle('fs:readFile', async (_e, p: string) => {
     if (!isInsideRoot(p)) throw new Error('Path is outside the opened folder');
     return fs.readFile(p, 'utf8');
+  });
+  ipcMain.handle('fs:writeFile', async (_e, p: string, content: string) => {
+    if (!isInsideRoot(p) || !/\.(md|markdown)$/i.test(p)) throw new Error('Refusing to write this path');
+    await writeFileAtomic(p, content);
   });
 }
 

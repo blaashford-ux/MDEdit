@@ -14,4 +14,5 @@ npm run dist      # Windows installer (run on Windows / CI)
 - [x] Scaffold (Electron, Vite, React, TypeScript, Vitest, CI Windows build)
 - [x] Chapter engine (`src/shared/chapters.ts`): lossless split/join by H1
 - [x] Folder picker, recursive file tree, chapters listed under each file (read-only preview)
-- [ ] WYSIWYG editor, save prompts, file watcher, remember last folder
+- [x] WYSIWYG chapter editor (Milkdown Crepe), dirty tracking, Ctrl+S atomic save
+- [ ] Save/Don't Save/Cancel dialog on navigate and close, file watcher, remember last folder
