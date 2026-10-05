@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { MdeditApi } from '../src/shared/api';
+import type { MdeditApi, MenuAction } from '../src/shared/api';
 
 const api: MdeditApi = {
   pickFolder: () => ipcRenderer.invoke('dialog:pickFolder'),
@@ -16,7 +16,12 @@ const api: MdeditApi = {
     ipcRenderer.on('app:saveBeforeClose', handler);
     return () => ipcRenderer.removeListener('app:saveBeforeClose', handler);
   },
-  reportSaveResult: (ok) => ipcRenderer.send('app:saveResult', ok)
+  reportSaveResult: (ok) => ipcRenderer.send('app:saveResult', ok),
+  onMenuAction: (cb) => {
+    const handler = (_e: unknown, action: MenuAction) => cb(action);
+    ipcRenderer.on('menu:action', handler);
+    return () => ipcRenderer.removeListener('menu:action', handler);
+  }
 };
 
 contextBridge.exposeInMainWorld('mdedit', api);

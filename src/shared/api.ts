@@ -19,6 +19,9 @@ export interface FileStamp {
   size: number;
 }
 
+/** Commands the native application menu can trigger in the renderer. */
+export type MenuAction = 'change-folder' | 'refresh' | 'save';
+
 export type UnsavedChoice = 'save' | 'discard' | 'cancel';
 
 export interface MdeditApi {
@@ -44,6 +47,8 @@ export interface MdeditApi {
   /** Main asks the renderer to save before the window closes. Returns an unsubscribe function. */
   onSaveBeforeClose(cb: () => void): () => void;
   reportSaveResult(ok: boolean): void;
+  /** Native menu item clicked. Returns an unsubscribe function. */
+  onMenuAction(cb: (action: MenuAction) => void): () => void;
 }
 
 declare global {

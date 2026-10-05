@@ -7,6 +7,7 @@ import {
   updateChapter,
   type MarkdownDoc
 } from '../shared/chapters';
+import { flattenPaths } from '../shared/tree';
 import { Editor } from './Editor';
 import { guardLeave } from './leaveGuard';
 import { chapterLabel, Tree, type Selection } from './Tree';
@@ -33,13 +34,15 @@ export function App() {
   const [saved, setSaved] = useState<{ version: number; markdown: string } | null>(null);
   // Bumped to remount the editor when the open chapter's content is replaced from outside.
   const [reloadKey, setReloadKey] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
 
   // What each open file looked like on disk when we last read or wrote it.
   const stamps = useRef(new Map<string, FileStamp>());
   const saving = useRef(false);
   // Async handlers read these instead of stale closures.
-  const latest = useRef({ docs, selection, draft, conflict });
-  latest.current = { docs, selection, draft, conflict };
+  const latest = useRef({ root, expanded, docs, selection, draft, conflict });
+  latest.current = { root, expanded, docs, selection, draft, conflict };
+  const checking = useRef(false);
 
   const dirty = draft !== null;
 
@@ -187,18 +190,6 @@ export function App() {
     [confirmLeave, refreshDoc]
   );
 
-  // Ctrl+S
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
-        e.preventDefault();
-        void save();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [save]);
-
   // Let the main process prompt on window close, and save when the user picks "Save".
   useEffect(() => {
     window.mdedit.setDirty(dirty && selection ? baseName(selection.file) : null);
@@ -211,52 +202,121 @@ export function App() {
     [save]
   );
 
-  // Notice edits made outside the app (Dropbox sync, another editor, git checkout...).
-  const openFile = selection?.file;
-  useEffect(() => {
-    if (!openFile) return;
-    let busy = false;
-    const check = async () => {
-      if (busy || saving.current) return;
-      busy = true;
+  /**
+   * Compares the open file with what is on disk. Edits made outside the app (Dropbox sync,
+   * another editor, git checkout...) reload silently when we have no unsaved edits, and raise
+   * a conflict banner when we do.
+   */
+  const checkOpenFile = useCallback(
+    async (file: string) => {
+      if (checking.current || saving.current) return;
+      checking.current = true;
       try {
-        const known = stamps.current.get(openFile);
-        const now = await window.mdedit.statFile(openFile);
+        const known = stamps.current.get(file);
+        const now = await window.mdedit.statFile(file);
         if (!now) {
           if (known) {
-            stamps.current.delete(openFile);
-            setConflict({ kind: 'missing', file: openFile });
+            stamps.current.delete(file);
+            setConflict({ kind: 'missing', file });
           }
           return;
         }
         if (known && sameStamp(known, now)) return;
         const pending = latest.current.conflict;
-        if (pending?.kind === 'changed' && pending.file === openFile && sameStamp(pending.stamp, now)) return;
+        if (pending?.kind === 'changed' && pending.file === file && sameStamp(pending.stamp, now)) return;
 
-        const { text, stamp } = await window.mdedit.readFile(openFile);
-        const doc = latest.current.docs.get(openFile);
+        const { text, stamp } = await window.mdedit.readFile(file);
+        const doc = latest.current.docs.get(file);
         if (doc && joinChapters(doc) === text) {
-          stamps.current.set(openFile, stamp); // touched, content identical
-          setConflict((c) => (c?.file === openFile && c.kind === 'missing' ? null : c));
+          stamps.current.set(file, stamp); // touched, content identical
+          setConflict((c) => (c?.file === file && c.kind === 'missing' ? null : c));
         } else if (latest.current.draft === null) {
-          applyDisk(openFile, text, stamp);
-          setNotice(`${baseName(openFile)} changed on disk and was reloaded.`);
+          applyDisk(file, text, stamp);
+          setNotice(`${baseName(file)} changed on disk and was reloaded.`);
         } else {
-          setConflict({ kind: 'changed', file: openFile, text, stamp });
+          setConflict({ kind: 'changed', file, text, stamp });
         }
       } catch {
         // transient read error (file mid-write): try again next tick
       } finally {
-        busy = false;
+        checking.current = false;
       }
-    };
-    const timer = setInterval(() => void check(), POLL_MS);
+    },
+    [applyDisk]
+  );
+
+  const openFile = selection?.file;
+  useEffect(() => {
+    if (!openFile) return;
+    const check = () => void checkOpenFile(openFile);
+    const timer = setInterval(check, POLL_MS);
     window.addEventListener('focus', check);
     return () => {
       clearInterval(timer);
       window.removeEventListener('focus', check);
     };
-  }, [openFile, applyDisk]);
+  }, [openFile, checkOpenFile]);
+
+  /** Rescans the folder and re-reads expanded files, keeping expansion, selection and unsaved edits. */
+  const refresh = useCallback(async () => {
+    const current = latest.current.root;
+    if (!current || refreshing) return;
+    setRefreshing(true);
+    try {
+      const tree = await window.mdedit.scanFolder(current.path);
+      const exists = flattenPaths(tree);
+      setRoot(tree);
+      setExpanded((prev) => new Set([...prev].filter((p) => exists.has(p))));
+      for (const file of [...latest.current.docs.keys()]) {
+        if (!exists.has(file)) {
+          stamps.current.delete(file);
+          setDocs((prev) => {
+            const next = new Map(prev);
+            next.delete(file);
+            return next;
+          });
+        } else if (file === latest.current.selection?.file) {
+          await checkOpenFile(file); // never touches unsaved edits: that raises the conflict banner
+        } else if (latest.current.expanded.has(file)) {
+          await refreshDoc(file).catch(() => undefined);
+        }
+      }
+      setError(null);
+    } catch (e) {
+      setError(`Could not refresh: ${e}`);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refreshing, checkOpenFile, refreshDoc]);
+
+  // Keyboard shortcuts and native menu share the same handlers.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const mod = e.ctrlKey || e.metaKey;
+      if (mod && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        void save();
+      } else if (mod && e.key.toLowerCase() === 'o') {
+        e.preventDefault();
+        void openFolder();
+      } else if (e.key === 'F5') {
+        e.preventDefault();
+        void refresh();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [save, openFolder, refresh]);
+
+  useEffect(
+    () =>
+      window.mdedit.onMenuAction((action) => {
+        if (action === 'save') void save();
+        else if (action === 'change-folder') void openFolder();
+        else void refresh();
+      }),
+    [save, openFolder, refresh]
+  );
 
   const chapter = selection ? docs.get(selection.file)?.chapters[selection.chapter] : undefined;
 
@@ -264,7 +324,16 @@ export function App() {
     <div className="app">
       <aside className="sidebar">
         <div className="toolbar">
-          <button onClick={openFolder}>Open Folder…</button>
+          <button onClick={() => void openFolder()} title="Choose a different folder (Ctrl+O)">
+            {root ? 'Change Folder…' : 'Open Folder…'}
+          </button>
+          <button
+            onClick={() => void refresh()}
+            disabled={!root || refreshing}
+            title="Rescan the folder for new, renamed and deleted files (F5)"
+          >
+            {refreshing ? 'Refreshing…' : '↻ Refresh'}
+          </button>
         </div>
         {root ? (
           <>

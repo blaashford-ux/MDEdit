@@ -1,6 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain } from 'electron';
 import path from 'node:path';
 import { readWithStamp, statStamp, writeFileAtomic } from './files';
+import { installMenu } from './menu';
 import { confirmOverwrite, confirmUnsaved } from './prompts';
 import { scanFolder } from './scan';
 import { existingLastFolder, saveSettings } from './settings';
@@ -116,6 +117,7 @@ function createWindow(): BrowserWindow {
 
 app.whenReady().then(() => {
   registerIpc();
+  installMenu();
   createWindow();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
