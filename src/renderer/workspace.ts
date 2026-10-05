@@ -325,15 +325,17 @@ export class Workspace {
 
   // ---- startup, folders -----------------------------------------------------------------
 
-  async init(): Promise<void> {
+  async init(opts: { restoreFolder?: boolean } = {}): Promise<void> {
     try {
       const defaults = await this.api.getAppDefaults();
       this.appLevel = clampLevel(defaults.chapterLevel);
       if (this.appLevel !== this.state.chapterLevel) this.set({ chapterLevel: this.appLevel });
       const prefs = await this.api.getPrefs();
       if (typeof prefs.sidebarWidth === 'number') this.setSidebarWidth(prefs.sidebarWidth, false);
-      const folder = await this.api.getLastFolder();
-      if (folder) await this.openPath(folder, true);
+      if (opts.restoreFolder !== false) {
+        const folder = await this.api.getLastFolder();
+        if (folder) await this.openPath(folder, true);
+      }
     } catch (e) {
       this.set({ error: String(e) });
     }
