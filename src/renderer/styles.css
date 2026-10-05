@@ -346,3 +346,7 @@ code.path { background: var(--raised); padding: 1px 6px; border-radius: 6px; }
 .mb-sub { color: var(--faint); }
 .mb-sep { height: 1px; margin: 5px 8px; background: var(--hover); border: 0; opacity: 0.8; }
 .mb-flyout { position: absolute; left: calc(100% - 2px); top: -6px; z-index: 61; }
+
+.statusbar { align-items: center; }
+.sb-undo { max-width: 340px; padding: 1px 10px; font-size: 12px; background: transparent; color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: inline-block; }
+.sb-undo:hover:not(:disabled) { background: var(--raised); }

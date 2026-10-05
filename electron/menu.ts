@@ -47,6 +47,8 @@ export function installMenu(theme: ThemeHooks): void {
       submenu: [
         { role: 'undo' },
         { role: 'redo' },
+        { label: 'Undo Last Action\tCtrl+Alt+Z', click: send('undo-action') },
+        { label: 'Redo Last Action\tCtrl+Alt+Y', click: send('redo-action') },
         { type: 'separator' },
         { role: 'cut' },
         { role: 'copy' },

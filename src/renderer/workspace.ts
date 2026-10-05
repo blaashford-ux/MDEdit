@@ -46,6 +46,23 @@ export interface WorkspaceState {
   sidebarWidth: number;
   /** The heading level that starts a chapter (File → Settings). */
   chapterLevel: number;
+  /** Labels of the actions Undo Last Action would reverse, oldest first (at most UNDO_DEPTH). */
+  undoLabels: string[];
+  /** Labels of undone actions Redo would re-apply, oldest first. */
+  redoLabels: string[];
+}
+
+/** How many structural actions (delete / move / add chapter, whole-file replace) can be undone. */
+export const UNDO_DEPTH = 5;
+
+interface UndoEntry {
+  label: string;
+  file: string;
+  /** The whole file's text before and after the action. */
+  before: string;
+  after: string;
+  chapterBefore: number | null;
+  chapterAfter: number | null;
 }
 
 export interface WorkspaceOptions {
@@ -78,8 +95,12 @@ export class Workspace {
     notice: null,
     refreshing: false,
     sidebarWidth: SIDEBAR_DEFAULT,
-    chapterLevel: 1
+    chapterLevel: 1,
+    undoLabels: [],
+    redoLabels: []
   };
+  private undoStack: UndoEntry[] = [];
+  private redoStack: UndoEntry[] = [];
   private listeners = new Set<() => void>();
   private stamps = new Map<string, FileStamp>();
   private nextId = 1;
@@ -146,6 +167,15 @@ export class Workspace {
   }
   private setDoc(file: string, doc: MarkdownDoc): void {
     this.set({ docs: new Map(this.state.docs).set(file, doc) });
+  }
+
+  private publishUndo(): void {
+    this.set({ undoLabels: this.undoStack.map((e) => e.label), redoLabels: this.redoStack.map((e) => e.label) });
+  }
+  private clearUndo(): void {
+    this.undoStack = [];
+    this.redoStack = [];
+    this.publishUndo();
   }
 
   setError(message: string | null): void {
@@ -229,7 +259,9 @@ export class Workspace {
     this.clearAllTimers();
     this.stamps.clear();
     this.lastSession = '';
-    this.set({ root, expanded: new Set(), docs: new Map(), tabs: [], activeId: null, error: null, notice: null });
+    this.undoStack = [];
+    this.redoStack = [];
+    this.set({ root, expanded: new Set(), docs: new Map(), tabs: [], activeId: null, error: null, notice: null, undoLabels: [], redoLabels: [] });
     if (restore) await this.applySession(await this.api.getSession(folder), root);
     await this.recoverDrafts();
   }
@@ -762,6 +794,7 @@ export class Workspace {
     const docs = new Map([...this.state.docs].map(([k, v]) => [re(k), v] as const));
     const stamps = new Map([...this.stamps].map(([k, v]) => [re(k), v] as const));
     this.stamps = stamps;
+    for (const e of [...this.undoStack, ...this.redoStack]) e.file = re(e.file);
     const renamed = this.state.tabs.filter((t) => re(t.file) !== t.file);
     renamed.forEach((t) => this.dropDraft(t.file));
     this.set({
@@ -786,6 +819,9 @@ export class Workspace {
       return false;
     }
     this.removeTabs(affected.map((t) => t.id));
+    this.undoStack = this.undoStack.filter((e) => !isInside(e.file, path));
+    this.redoStack = this.redoStack.filter((e) => !isInside(e.file, path));
+    this.publishUndo();
     await this.refresh();
     return true;
   }
@@ -803,14 +839,18 @@ export class Workspace {
    */
   private async editStructure(
     file: string,
+    label: (doc: MarkdownDoc) => string,
     edit: (doc: MarkdownDoc) => { doc: MarkdownDoc; index: number | null; remapIndex: (old: number) => number } | null
   ): Promise<{ index: number | null } | null> {
     const tab = this.tabForFile(file);
     if (tab && !(await this.leaveTab(tab))) return null;
     try {
       const { text } = await this.api.readFile(file);
-      const result = edit(this.split(text));
+      const before = this.split(text);
+      const result = edit(before);
       if (!result) return null;
+      const actionLabel = label(before);
+      const chapterBefore = this.tabForFile(file)?.chapter ?? null;
       const out = joinChapters(result.doc);
       const stamp = await this.api.writeFile(file, out);
       this.stamps.set(file, stamp);
@@ -824,6 +864,19 @@ export class Workspace {
           conflict: null,
           reloadKey: t.reloadKey + 1
         }));
+      }
+      if (out !== text) {
+        this.undoStack.push({
+          label: actionLabel,
+          file,
+          before: text,
+          after: out,
+          chapterBefore,
+          chapterAfter: this.tabForFile(file)?.chapter ?? null
+        });
+        if (this.undoStack.length > UNDO_DEPTH) this.undoStack.shift();
+        this.redoStack = [];
+        this.publishUndo();
       }
       return { index: result.index };
     } catch (e) {
@@ -840,7 +893,7 @@ export class Workspace {
   async replaceInFile(file: string, find: FindOptions, replacement: string): Promise<number | null> {
     if (compileFind(find)?.error) return null;
     let count = 0;
-    const done = await this.editStructure(file, (doc) => {
+    const done = await this.editStructure(file, () => `Replace “${find.query}” with “${replacement}” in ${basename(file)}`, (doc) => {
       const next = mapChapters(doc, (raw) => {
         const r = replaceAllInText(raw, find, replacement);
         count += r.count;
@@ -852,7 +905,7 @@ export class Workspace {
   }
 
   async newChapter(file: string, afterIndex: number, title: string): Promise<boolean> {
-    const r = await this.editStructure(file, (doc) => {
+    const r = await this.editStructure(file, () => `Add chapter “${title.trim()}”`, (doc) => {
       const ins = insertChapter(doc, afterIndex, title);
       return { doc: ins.doc, index: ins.index, remapIndex: (old) => (old >= ins.index ? old + 1 : old) };
     });
@@ -864,7 +917,7 @@ export class Workspace {
 
   /** Returns the chapter's new index, or null if it could not be moved. */
   async moveChapter(file: string, index: number, delta: -1 | 1): Promise<number | null> {
-    const r = await this.editStructure(file, (doc) => {
+    const r = await this.editStructure(file, (doc) => `Move chapter “${doc.chapters[index]?.title || 'untitled'}” ${delta < 0 ? 'up' : 'down'}`, (doc) => {
       const moved = moveChapterIn(doc, index, delta);
       if (!moved) return null;
       return {
@@ -880,12 +933,66 @@ export class Workspace {
     const title = this.state.docs.get(file)?.chapters[index]?.title || 'this chapter';
     const tab = this.tabForFile(file);
     if (!(await this.api.confirmDelete(title, 'chapter', tab?.draft !== null && tab?.chapter === index))) return false;
-    const r = await this.editStructure(file, (doc) => {
+    const r = await this.editStructure(file, () => `Delete chapter “${title}”`, (doc) => {
       const next = deleteChapterIn(doc, index);
       if (!next) return null;
       return { doc: next, index: null, remapIndex: (old) => (old > index ? old - 1 : old) };
     });
     return r !== null;
+  }
+
+  // ---- undo / redo of structural actions ------------------------------------------------
+
+  /** Reverses the latest delete / move / add chapter or whole-file replace (up to UNDO_DEPTH of them). */
+  undoAction(): Promise<boolean> {
+    return this.stepUndo('undo');
+  }
+  redoAction(): Promise<boolean> {
+    return this.stepUndo('redo');
+  }
+
+  private async stepUndo(dir: 'undo' | 'redo'): Promise<boolean> {
+    const from = dir === 'undo' ? this.undoStack : this.redoStack;
+    const entry = from[from.length - 1];
+    if (!entry) {
+      this.set({ notice: dir === 'undo' ? 'Nothing to undo.' : 'Nothing to redo.' });
+      return false;
+    }
+    const target = dir === 'undo' ? entry.before : entry.after;
+    const expected = dir === 'undo' ? entry.after : entry.before;
+    const tab = this.tabForFile(entry.file);
+    if (tab && !(await this.leaveTab(tab))) return false;
+    try {
+      const { text } = await this.api.readFile(entry.file);
+      if (text !== expected) {
+        from.pop();
+        this.publishUndo();
+        this.set({ error: `Can’t ${dir} “${entry.label}”: ${basename(entry.file)} has been changed since.` });
+        return false;
+      }
+      const stamp = await this.api.writeFile(entry.file, target);
+      this.stamps.set(entry.file, stamp);
+      const doc = this.split(target);
+      this.setDoc(entry.file, doc);
+      const open = this.tabForFile(entry.file);
+      if (open) {
+        const wanted = dir === 'undo' ? entry.chapterBefore : entry.chapterAfter;
+        this.patchTab(open.id, (t) => ({
+          chapter: Math.max(0, Math.min(wanted ?? t.chapter, doc.chapters.length - 1)),
+          draft: null,
+          conflict: null,
+          reloadKey: t.reloadKey + 1
+        }));
+      }
+      from.pop();
+      (dir === 'undo' ? this.redoStack : this.undoStack).push(entry);
+      this.publishUndo();
+      this.set({ notice: `${dir === 'undo' ? 'Undid' : 'Redid'}: ${entry.label}` });
+      return true;
+    } catch (e) {
+      this.set({ error: `Could not ${dir}: ${e instanceof Error ? e.message : e}` });
+      return false;
+    }
   }
 
   // ---- crash recovery -------------------------------------------------------------------

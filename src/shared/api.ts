@@ -37,6 +37,8 @@ export type MenuAction =
   | 'new-folder'
   | 'export'
   | 'settings'
+  | 'undo-action'
+  | 'redo-action'
   | 'find'
   | 'replace'
   | 'find-next'

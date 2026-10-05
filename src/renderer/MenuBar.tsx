@@ -150,7 +150,7 @@ export function MenuBar() {
   );
 
   return (
-    <div className="menubar" role="menubar" ref={root}>
+    <div className="menubar" role="menubar" ref={root} onMouseDown={(e) => e.preventDefault()}>
       {menu.map((m, i) => (
         <div key={m.id} className="mb-top-wrap">
           <button

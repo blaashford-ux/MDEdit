@@ -813,3 +813,130 @@ describe('replace in file', () => {
     expect(state().docs.get(`${ROOT}/r.md`)!.chapters.map((c) => c.title)).toEqual(['One', 'Two']);
   });
 });
+
+describe('undo / redo of structural actions', () => {
+  const F = `${ROOT}/u.md`;
+  const BOOK5 = '# One\na\n\n# Two\nb\n\n# Three\nc\n\n# Four\nd\n';
+  const titles = () => state().docs.get(F)!.chapters.map((c) => c.title);
+
+  it('undoes a chapter delete, restoring the file and the open chapter', async () => {
+    api.add('u.md', BOOK5);
+    await ws.openChapter(F, 1);
+    api.deleteAnswers = [true];
+    await ws.deleteChapter(F, 1);
+    expect(titles()).toEqual(['One', 'Three', 'Four']);
+    expect(state().undoLabels).toEqual(['Delete chapter “Two”']);
+    expect(await ws.undoAction()).toBe(true);
+    expect(api.text(F)).toBe(BOOK5);
+    expect(titles()).toEqual(['One', 'Two', 'Three', 'Four']);
+    expect(tabOf(F).chapter).toBe(1);
+    expect(state().undoLabels).toEqual([]);
+    expect(state().redoLabels).toEqual(['Delete chapter “Two”']);
+    expect(state().notice).toMatch(/Undid: Delete chapter/);
+  });
+
+  it('redo re-applies it', async () => {
+    api.add('u.md', BOOK5);
+    api.deleteAnswers = [true];
+    await ws.openChapter(F, 0);
+    await ws.deleteChapter(F, 2);
+    await ws.undoAction();
+    expect(await ws.redoAction()).toBe(true);
+    expect(titles()).toEqual(['One', 'Two', 'Four']);
+    expect(state().redoLabels).toEqual([]);
+    expect(state().undoLabels).toHaveLength(1);
+  });
+
+  it('keeps only the last 5 actions and unwinds them in order', async () => {
+    api.add('u.md', '# A\n');
+    await ws.openChapter(F, 0);
+    for (const t of ['B', 'C', 'D', 'E', 'F', 'G', 'H']) await ws.newChapter(F, state().docs.get(F)!.chapters.length - 1, t);
+    expect(titles()).toEqual(['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']);
+    expect(state().undoLabels).toHaveLength(5);
+    for (let i = 0; i < 5; i++) expect(await ws.undoAction()).toBe(true);
+    expect(titles()).toEqual(['A', 'B', 'C']); // seven actions made, the oldest two fell off
+    expect(await ws.undoAction()).toBe(false);
+    expect(state().notice).toBe('Nothing to undo.');
+  });
+
+  it('undoes moving a chapter and adding one', async () => {
+    api.add('u.md', BOOK5);
+    await ws.openChapter(F, 0);
+    await ws.moveChapter(F, 1, 1);
+    expect(titles()).toEqual(['One', 'Three', 'Two', 'Four']);
+    await ws.newChapter(F, 0, 'Extra');
+    expect(state().undoLabels).toEqual(['Move chapter “Two” down', 'Add chapter “Extra”']);
+    await ws.undoAction();
+    await ws.undoAction();
+    expect(api.text(F)).toBe(BOOK5);
+  });
+
+  it('undoes a whole-file Replace All', async () => {
+    api.add('u.md', '# One\nDave\n\n# Two\nDave\n');
+    await ws.openChapter(F, 0);
+    await ws.replaceInFile(F, { query: 'dave', caseSensitive: false, wholeWord: false, regex: false }, 'Mark');
+    expect(api.text(F)).toBe('# One\nMark\n\n# Two\nMark\n');
+    expect(state().undoLabels[0]).toMatch(/Replace “dave” with “Mark”/);
+    await ws.undoAction();
+    expect(api.text(F)).toBe('# One\nDave\n\n# Two\nDave\n');
+  });
+
+  it('a new action clears what could be redone', async () => {
+    api.add('u.md', BOOK5);
+    api.deleteAnswers = [true];
+    await ws.openChapter(F, 0);
+    await ws.deleteChapter(F, 3);
+    await ws.undoAction();
+    expect(state().redoLabels).toHaveLength(1);
+    await ws.newChapter(F, 0, 'X');
+    expect(state().redoLabels).toEqual([]);
+  });
+
+  it('refuses (and drops the entry) when the file was changed after the action', async () => {
+    api.add('u.md', BOOK5);
+    api.deleteAnswers = [true];
+    await ws.openChapter(F, 0);
+    await ws.deleteChapter(F, 3);
+    api.external(F, '# One\nedited elsewhere\n');
+    expect(await ws.undoAction()).toBe(false);
+    expect(state().error).toMatch(/has been changed since/);
+    expect(api.text(F)).toBe('# One\nedited elsewhere\n');
+    expect(state().undoLabels).toEqual([]);
+  });
+
+  it('asks about unsaved edits first; Cancel keeps the action undoable', async () => {
+    api.add('u.md', BOOK5);
+    api.deleteAnswers = [true];
+    await ws.openChapter(F, 0);
+    await ws.deleteChapter(F, 3);
+    ws.setDraft(tabOf(F).id, '# One\nTYPING');
+    api.unsavedAnswers = ['cancel'];
+    expect(await ws.undoAction()).toBe(false);
+    expect(state().undoLabels).toHaveLength(1);
+    expect(tabOf(F).draft).toBe('# One\nTYPING');
+    api.unsavedAnswers = ['discard'];
+    expect(await ws.undoAction()).toBe(true);
+    expect(api.text(F)).toBe(BOOK5);
+  });
+
+  it('follows a renamed file, forgets deleted ones, and starts empty in a new folder', async () => {
+    api.add('u.md', BOOK5);
+    api.deleteAnswers = [true, true];
+    await ws.openChapter(F, 0);
+    await ws.deleteChapter(F, 3);
+    await ws.renameNode(F, 'renamed.md');
+    expect(await ws.undoAction()).toBe(true);
+    expect(api.text(`${ROOT}/renamed.md`)).toBe(BOOK5);
+    await ws.deleteChapter(`${ROOT}/renamed.md`, 3);
+    await ws.deleteNode(`${ROOT}/renamed.md`, 'file');
+    expect(state().undoLabels).toEqual([]);
+    await ws.deleteChapter(`${ROOT}/a.md`, 0);
+    await ws.openPath(ROOT);
+    expect(state().undoLabels).toEqual([]);
+  });
+
+  it('nothing to redo says so', async () => {
+    expect(await ws.redoAction()).toBe(false);
+    expect(state().notice).toBe('Nothing to redo.');
+  });
+});

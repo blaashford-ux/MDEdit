@@ -310,6 +310,8 @@ export function App() {
     'prev-tab': () => ws.cycleTab(-1),
     'next-chapter': () => void ws.gotoChapter(1),
     'prev-chapter': () => void ws.gotoChapter(-1),
+    'undo-action': () => void ws.undoAction(),
+    'redo-action': () => void ws.redoAction(),
     find: () => openFind(false),
     replace: () => openFind(true),
     'find-next': () => findStep(1),
@@ -343,6 +345,8 @@ export function App() {
       else if (mod && k === 'p') name = 'focus-filter';
       else if (mod && !e.shiftKey && k === 'e') name = 'export';
       else if (mod && !e.shiftKey && e.key === ',') name = 'settings';
+      else if (mod && e.altKey && !e.shiftKey && k === 'z') name = 'undo-action';
+      else if (mod && e.altKey && ((!e.shiftKey && k === 'y') || (e.shiftKey && k === 'z'))) name = 'redo-action';
       else if (mod && !e.shiftKey && !e.altKey && k === 'f') name = 'find';
       else if (mod && !e.shiftKey && !e.altKey && k === 'h') name = 'replace';
       else if (e.key === 'F3' && !mod) name = e.shiftKey ? 'find-prev' : 'find-next';
@@ -640,6 +644,11 @@ export function App() {
             autosaved={activeTab.autosavedAt !== null}
             eol={activeDoc.eol}
             mode={activeTab.mode}
+            undoLabel={s.undoLabels[s.undoLabels.length - 1] ?? null}
+            undoCount={s.undoLabels.length}
+            redoLabel={s.redoLabels[s.redoLabels.length - 1] ?? null}
+            onUndo={() => void ws.undoAction()}
+            onRedo={() => void ws.redoAction()}
           />
         )}
       </main>
