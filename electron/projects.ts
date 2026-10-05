@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { localDate, recordSnapshot, sanitizeProgress, type Progress } from '../src/shared/progress';
@@ -17,7 +17,9 @@ export interface Deps {
 }
 
 const metaPath = (dir: string) => path.join(dir, PROJECT_DIR, PROJECT_FILE);
-const progressPath = (dir: string) => path.join(dir, PROJECT_DIR, PROGRESS_FILE);
+/** History file: one for the whole project, and one per active manuscript (named from a hash of its relative path). */
+const progressPath = (dir: string, manuscript: string | null = null) =>
+  path.join(dir, PROJECT_DIR, manuscript ? `progress-${createHash('sha1').update(manuscript.toLowerCase()).digest('hex').slice(0, 12)}.json` : PROGRESS_FILE);
 const MD = /\.(md|markdown)$/i;
 const exists = (p: string) => fs.lstat(p).then(() => true, () => false);
 
@@ -111,6 +113,10 @@ async function summarise(dir: string, now: () => Date): Promise<ProjectSummary |
   const meta = await readMeta(dir, now);
   if (!meta) return null;
   const c = await countProject(dir, meta.excludedFolders);
+  if (meta.activeManuscript) {
+    const n = await countFile(dir, meta.activeManuscript);
+    if (n !== null) return { path: dir, name: path.basename(dir), meta, ...c, words: n };
+  }
   return { path: dir, name: path.basename(dir), meta, ...c };
 }
 
@@ -147,26 +153,47 @@ async function childNames(root: string): Promise<string[]> {
 
 // ---- progress ---------------------------------------------------------------------------
 
-export async function readProgress(dir: string): Promise<Progress> {
+export async function readProgress(dir: string, manuscript: string | null = null): Promise<Progress> {
   try {
-    return sanitizeProgress(JSON.parse(await fs.readFile(progressPath(dir), 'utf8')));
+    return sanitizeProgress(JSON.parse(await fs.readFile(progressPath(dir, manuscript), 'utf8')));
   } catch {
     return sanitizeProgress(null);
   }
 }
 
-/** Counts the project's words now and notes them in the history (today's date). Returns the history and the total. */
-export async function recordProgress(dir: string, now: () => Date = () => new Date()): Promise<{ progress: Progress; total: number }> {
-  const meta = await readMeta(dir, now);
+/** Words in one file of the project (0 when it is missing). */
+async function countFile(dir: string, rel: string): Promise<number | null> {
+  try {
+    return countWords(await fs.readFile(path.join(dir, ...rel.split('/')), 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Counts the words that goals follow now (the active manuscript, or the project's counted folders) and notes them in
+ * that history for today. If the active manuscript has been deleted or moved away, it is cleared.
+ */
+export async function recordProgress(dir: string, now: () => Date = () => new Date()): Promise<{ progress: Progress; total: number; manuscript: string | null }> {
+  let meta = await readMeta(dir, now);
   if (!meta) throw new Error('That folder is not a project.');
-  const { words } = await countProject(dir, meta.excludedFolders);
-  const before = await readProgress(dir);
+  let manuscript = meta.activeManuscript;
+  let words: number;
+  if (manuscript) {
+    const n = await countFile(dir, manuscript);
+    if (n === null) {
+      meta = await updateMeta(dir, { activeManuscript: null }, now);
+      manuscript = null;
+      words = (await countProject(dir, meta.excludedFolders)).words;
+    } else words = n;
+  } else words = (await countProject(dir, meta.excludedFolders)).words;
+  const before = await readProgress(dir, manuscript);
   const after = recordSnapshot(before, localDate(now()), words);
   if (after !== before) {
     await fs.mkdir(path.join(dir, PROJECT_DIR), { recursive: true });
-    await writeFileAtomic(progressPath(dir), JSON.stringify(after, null, 2) + '\n');
+    await writeFileAtomic(progressPath(dir, manuscript), JSON.stringify(after, null, 2) + '\n');
   }
-  return { progress: after, total: words };
+  return { progress: after, total: words, manuscript };
 }
 
 // ---- operations -------------------------------------------------------------------------
@@ -239,9 +266,12 @@ export async function duplicateProject(dir: string, newName: string, deps: Deps 
     if (!meta) throw new Error('That folder is not a project.');
     const copy: ProjectMeta = { ...meta, id: (deps.uuid ?? randomUUID)(), name: clean, createdAt: now().toISOString() };
     await writeMeta(tmp, copy);
-    await fs.rm(progressPath(tmp), { force: true });
-    const { words } = await countProject(tmp, copy.excludedFolders);
-    await writeFileAtomic(progressPath(tmp), JSON.stringify(recordSnapshot(sanitizeProgress(null), localDate(now()), words), null, 2) + '\n');
+    for (const f of await fs.readdir(path.join(tmp, PROJECT_DIR)).catch(() => [] as string[])) {
+      if (/^progress.*\.json(\.bak)?$/.test(f)) await fs.rm(path.join(tmp, PROJECT_DIR, f), { force: true });
+    }
+    const manuscriptWords = copy.activeManuscript ? await countFile(tmp, copy.activeManuscript) : null;
+    const words = manuscriptWords ?? (await countProject(tmp, copy.excludedFolders)).words;
+    await writeFileAtomic(progressPath(tmp, manuscriptWords === null ? null : copy.activeManuscript), JSON.stringify(recordSnapshot(sanitizeProgress(null), localDate(now()), words), null, 2) + '\n');
     if (await exists(target)) throw new Error(`There is already a project or folder called “${clean}”.`);
     await fs.rename(tmp, target);
     return { path: target, meta: copy };

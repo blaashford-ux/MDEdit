@@ -1,11 +1,11 @@
 import { useMemo, useState } from 'react';
 import { addDays, burnDown, dailySeries, dateRange, firstDay, localDate, summarize, type Goal, type Progress, type Projection } from '../shared/progress';
-import type { ProjectMeta } from '../shared/projects';
+import { goalFor, type ProjectMeta } from '../shared/projects';
 import { useEscape } from './useEscape';
 
 interface Props {
   project: { path: string; meta: ProjectMeta };
-  progress: { progress: Progress; total: number } | null;
+  progress: { progress: Progress; total: number; manuscript: string | null } | null;
   onClose(): void;
   onSetGoal(): void;
 }
@@ -34,7 +34,9 @@ export function ProgressDialog({ project, progress, onClose, onSetGoal }: Props)
   const [range, setRange] = useState<Range>(30);
   const [hover, setHover] = useState<string | null>(null);
   const today = localDate(new Date());
-  const goal = project.meta.goal;
+  const goal = goalFor(project.meta);
+  const manuscript = progress?.manuscript ?? project.meta.activeManuscript;
+  const fileName = manuscript ? manuscript.split('/').pop() : null;
   const p = progress?.progress ?? null;
   const total = progress?.total ?? 0;
 
@@ -54,7 +56,10 @@ export function ProgressDialog({ project, progress, onClose, onSetGoal }: Props)
     return (
       <div className="modal-backdrop">
         <div className="modal progress-dialog" role="dialog" aria-modal="true" aria-label="Progress">
-          <h3>Progress — {project.meta.name}</h3>
+          <h3>
+          Progress — {project.meta.name}
+          {fileName && <span className="ms-name"> · {fileName}</span>}
+        </h3>
           <p className="muted">Counting words…</p>
           <div className="modal-actions">
             <button onClick={onClose}>Close</button>
@@ -94,10 +99,13 @@ export function ProgressDialog({ project, progress, onClose, onSetGoal }: Props)
   return (
     <div className="modal-backdrop">
       <div className="modal progress-dialog" role="dialog" aria-modal="true" aria-label="Progress">
-        <h3>Progress — {project.meta.name}</h3>
+        <h3>
+          Progress — {project.meta.name}
+          {fileName && <span className="ms-name"> · {fileName}</span>}
+        </h3>
 
         <div className="tiles">
-          <Tile label="Words" value={fmt(total)} sub={goal ? `of ${fmt(goal.targetWords)} (${s!.percent}%)` : undefined} />
+          <Tile label={fileName ?? 'Words'} value={fmt(total)} sub={goal ? `of ${fmt(goal.targetWords)} (${s!.percent}%)` : undefined} />
           <Tile label="Today" value={fmt(s?.writtenToday ?? series.find((d) => d.date === today)?.written ?? 0)} />
           <Tile label="3-day average" value={`${fmt(s?.avg3 ?? avg(series, today, 3))}/day`} />
           <Tile label="5-day average" value={`${fmt(s?.avg5 ?? avg(series, today, 5))}/day`} />
@@ -129,7 +137,7 @@ export function ProgressDialog({ project, progress, onClose, onSetGoal }: Props)
 
         <div className="chart-head">
           <div className="legend">
-            <span className="lg bars">Words written</span>
+            <span className="lg bars">{fileName ? `${fileName}: words written` : 'Words written'}</span>
             {goal && <span className="lg burn">Words remaining</span>}
             {goal?.targetDate && <span className="lg ideal">Steady pace</span>}
           </div>
@@ -141,7 +149,7 @@ export function ProgressDialog({ project, progress, onClose, onSetGoal }: Props)
             ))}
           </div>
         </div>
-        <svg className="chart" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Words written per day" onMouseLeave={() => setHover(null)}>
+        <svg className="chart" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`Words written per day${fileName ? ` in ${fileName}` : ''}`} onMouseLeave={() => setHover(null)}>
           {[0, 0.5, 1].map((f) => (
             <g key={f}>
               <line x1={M.l} x2={W - M.r} y1={M.t + ih * (1 - f)} y2={M.t + ih * (1 - f)} className="grid" />
@@ -155,6 +163,11 @@ export function ProgressDialog({ project, progress, onClose, onSetGoal }: Props)
               )}
             </g>
           ))}
+          {fileName && (
+            <text x={M.l} y={10} className="axis">
+              {fileName}
+            </text>
+          )}
           {todayIdx >= 0 && <line x1={x(todayIdx)} x2={x(todayIdx)} y1={M.t} y2={M.t + ih} className="today-line" />}
           {required > 0 && <line x1={M.l} x2={W - M.r} y1={yBar(required)} y2={yBar(required)} className="need-line" />}
           {series.map((d, i) => (

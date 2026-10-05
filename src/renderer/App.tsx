@@ -18,6 +18,7 @@ import { ProgressDialog } from './ProgressDialog';
 import { QuickSwitcher } from './QuickSwitcher';
 import { WelcomeDialog } from './WelcomeDialog';
 import { localDate, writtenOn } from '../shared/progress';
+import { goalFor, relativeTo } from '../shared/projects';
 import { projectNameError, uniqueName, type ProjectStatus, type ProjectSummary, type ProjectsConfig, type RootListing } from '../shared/projects';
 import { RelinkDialog } from './RelinkDialog';
 import { SettingsDialog } from './SettingsDialog';
@@ -290,7 +291,16 @@ export function App() {
               { label: 'Unmark for Export', onClick: () => void ws.setMarked(row.path, false) }
             ]
           : [{ label: 'Mark for Export', onClick: () => void markAndEdit(row.path) }];
+      const active = !!s.project && s.project.meta.activeManuscript === relativeTo(s.project.path, row.path);
+      const manuscriptItems: MenuItem[] = s.project
+        ? [
+            active
+              ? { label: 'Clear Active Manuscript', onClick: () => void ws.setActiveManuscript(null) }
+              : { label: 'Active Manuscript', onClick: () => void ws.setActiveManuscript(row.path) }
+          ]
+        : [];
       return [
+        ...manuscriptItems,
         ...exportItems,
         { label: 'Rename…', hint: 'F2', onClick: () => promptRename(row) },
         reveal,
@@ -655,6 +665,7 @@ export function App() {
                 onRename={promptRename}
                 onDelete={deleteRow}
                 onMoveChapter={(r, d) => void moveRow(r, d)}
+                isManuscript={(r) => r.kind === 'file' && !!s.project?.meta.activeManuscript && relativeTo(s.project.path, r.path) === s.project.meta.activeManuscript}
               />
             )}
           </>
@@ -819,7 +830,7 @@ export function App() {
               s.project && s.progress
                 ? {
                     total: s.progress.total,
-                    goal: s.project.meta.goal?.targetWords ?? null,
+                    goal: goalFor(s.project.meta)?.targetWords ?? null,
                     today: writtenOn(s.progress.progress, localDate(new Date()))
                   }
                 : null

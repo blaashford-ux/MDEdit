@@ -1,3 +1,5 @@
+import { relativeTo } from '../shared/projects';
+import { dirname } from '../shared/paths';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { FakeApi } from './testing/fakeApi';
 import { Workspace } from './workspace';
@@ -1025,5 +1027,19 @@ describe('projects in the workspace', () => {
   it('openProject refuses a folder that is not a project', async () => {
     expect(await ws.openProject('/nowhere')).toBe(false);
     expect(state().error).toMatch(/not a project/);
+  });
+
+  it('Active Manuscript: one at a time, swapped without prompting, and it follows a rename', async () => {
+    api.addProject(PROJ, { name: 'Saga' });
+    await ws.openPath(PROJ);
+    expect(await ws.setActiveManuscript(A)).toBe(true);
+    expect(state().project?.meta.activeManuscript).toBe(relativeTo(PROJ, A));
+    expect(state().progress?.manuscript).toBe(relativeTo(PROJ, A));
+    expect(await ws.setActiveManuscript(B)).toBe(true);
+    expect(state().project?.meta.activeManuscript).toBe(relativeTo(PROJ, B));
+    expect(await ws.renameNode(B, 'Renamed.md')).toBe(true);
+    expect(state().project?.meta.activeManuscript).toBe(relativeTo(PROJ, dirname(B) + '/Renamed.md'));
+    expect(await ws.setActiveManuscript(null)).toBe(true);
+    expect(state().project?.meta.activeManuscript).toBeNull();
   });
 });

@@ -139,7 +139,7 @@ export interface DraftRecord {
 }
 
 /** Fields of a project's metadata that can be changed after it is created. */
-export type ProjectPatch = Partial<Pick<ProjectMeta, 'status' | 'notes' | 'archived' | 'goal' | 'excludedFolders'>> & {
+export type ProjectPatch = Partial<Pick<ProjectMeta, 'status' | 'notes' | 'archived' | 'goal' | 'activeManuscript' | 'manuscriptGoals' | 'excludedFolders'>> & {
   overrides?: Partial<ProjectMeta['overrides']>;
 };
 
@@ -222,7 +222,7 @@ export interface MdeditApi {
   /** Adds template folders / starter files the project is missing; returns what was added. */
   addMissingTemplateParts(path: string, templateId: string): Promise<string[]>;
   /** Counts the project's words now, notes them in its history, and returns the history. */
-  recordProgress(path: string): Promise<{ progress: Progress; total: number }>;
+  recordProgress(path: string): Promise<{ progress: Progress; total: number; manuscript: string | null }>;
   /** Moves every project in the Root to a new Root Folder (best effort; reports what failed). */
   moveProjects(newRoot: string): Promise<{ moved: string[]; failed: { name: string; error: string }[] }>;
   /** Remembers which project is open (so it can be reopened at startup). */

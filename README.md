@@ -129,6 +129,9 @@ automatically. See [docs/RELEASING.md](docs/RELEASING.md).
 - **Project status** (Planning, Drafting, Revising, Editing, Published, On hold) and notes.
 - **Word-count goals and progress**: target and optional deadline; Progress window with a day-by-day bar chart, burn-down against a steady-pace line, words per day needed, and estimated completion at the 3-day and 5-day averages; running total in the status bar.
 
+- **Series template** (replaces Series Book): a Manuscripts folder for several books (no book files created) plus a series bible.
+- **Active Manuscript**: right-click a file → *Active Manuscript* to make word-count goals and progress follow that single file (one at a time; choosing another swaps without asking). A target marker shows on the file in the browser, the Progress chart and tiles are labelled with its filename, and each manuscript keeps its own goal and writing history.
+
 **Changed**
 - The sidebar's folder button became the project switcher; File → Change Folder is now **Open Folder**.
 

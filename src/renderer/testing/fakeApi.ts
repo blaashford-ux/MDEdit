@@ -120,12 +120,17 @@ export class FakeApi implements MdeditApi {
   getProjectMeta = async (p: string) => this.projectMetas.get(p) ?? null;
   setLastProject = (p: string | null) => void (this.lastProject = p);
   recordProgress = async (p: string) => {
+    const manuscript = this.projectMetas.get(p)?.activeManuscript ?? null;
     let total = 0;
-    for (const [f, v] of this.files) if (f.startsWith(p + '/')) total += v.text.split(/\s+/).filter(Boolean).length;
-    const prev = this.progressByProject.get(p) ?? emptyProgress();
+    for (const [f, v] of this.files) {
+      if (!f.startsWith(p + '/') || (manuscript && f !== `${p}/${manuscript}`)) continue;
+      total += v.text.split(/\s+/).filter(Boolean).length;
+    }
+    const key = manuscript ? `${p}::${manuscript}` : p;
+    const prev = this.progressByProject.get(key) ?? emptyProgress();
     const next = recordSnapshot(prev, '2026-10-05', total);
-    this.progressByProject.set(p, next);
-    return { progress: next, total };
+    this.progressByProject.set(key, next);
+    return { progress: next, total, manuscript };
   };
   getProjectsConfig = async (): Promise<ProjectsConfig> => ({ ...this.projectsSettings, root: '/root', defaultRoot: '/home/MDEdit', rootExists: true });
   setProjectsConfig = async (patch: Partial<ProjectsSettings>) => {

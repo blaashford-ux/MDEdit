@@ -10,7 +10,7 @@ const novel = () => defaultTemplates().find((t) => t.id === 'novel')!;
 describe('built-in templates', () => {
   it('ships Novel, Series Book, Short Story and Blank, all valid', () => {
     const ts = defaultTemplates();
-    expect(ts.map((t) => t.name)).toEqual(['Novel', 'Series Book', 'Short Story', 'Blank']);
+    expect(ts.map((t) => t.name)).toEqual(['Novel', 'Series', 'Short Story', 'Blank']);
     for (const t of ts) expect(templateErrors(t)).toEqual([]);
   });
   it('Novel makes the expected folders and counts only the manuscript', () => {
@@ -74,7 +74,7 @@ describe('sanitising templates', () => {
   it('rejects nonsense and falls back to the built-ins when nothing is usable', () => {
     expect(sanitizeTemplate(null)).toBeNull();
     expect(sanitizeTemplate({ name: 'no id' })).toBeNull();
-    expect(sanitizeTemplates('x').map((x) => x.id)).toEqual(['novel', 'series-book', 'short-story', 'blank']);
+    expect(sanitizeTemplates('x').map((x) => x.id)).toEqual(['novel', 'series', 'short-story', 'blank']);
     expect(sanitizeTemplates([]).length).toBe(4);
   });
   it('makes duplicate ids unique', () => {
@@ -162,5 +162,38 @@ describe('defaults cascade', () => {
     expect(both.chapterLevel).toBe(2);
     expect(both.book.author).toBe('Project Author');
     expect(defaultAppDefaults().chapterLevel).toBe(1);
+  });
+});
+
+import { goalFor, relativeTo, withGoal } from './projects';
+import { defaultTemplates as templatesForManuscriptTests } from './projects';
+
+describe('active manuscript', () => {
+  const meta = () => newProjectMeta({ id: 'x', name: 'S', template: templatesForManuscriptTests().find((t) => t.id === 'series')!, now: new Date('2026-10-05T10:00:00Z') });
+  const g = { targetWords: 90000, startDate: '2026-10-05', targetDate: null };
+  it('the Series template has a Manuscripts folder and no book files', () => {
+    const t = templatesForManuscriptTests().find((x) => x.id === 'series')!;
+    expect(t.name).toBe('Series');
+    expect(t.folders.map((f) => f.name)).toContain('Manuscripts');
+    expect(t.files.map((f) => f.path).filter((f) => f.startsWith('Manuscripts'))).toEqual([]);
+  });
+  it('goalFor follows the active manuscript, otherwise the project goal', () => {
+    let m = withGoal(meta(), g);
+    expect(goalFor(m)).toEqual(g);
+    m = { ...m, activeManuscript: 'Manuscripts/Book 1.md' };
+    expect(goalFor(m)).toBeNull();
+    m = withGoal(m, { ...g, targetWords: 70000 });
+    expect(goalFor(m)?.targetWords).toBe(70000);
+    expect(m.goal?.targetWords).toBe(90000); // the project goal is untouched
+    expect(goalFor(withGoal(m, null))).toBeNull();
+  });
+  it('is sanitised: bad paths and goals are dropped', () => {
+    const m = sanitizeProjectMeta({ ...meta(), activeManuscript: '../evil.md', manuscriptGoals: { 'A/b.md': g, '../x.md': g, 'C.md': { targetWords: -1 } } }, 'S', '2026-10-05');
+    expect(m.activeManuscript).toBeNull();
+    expect(Object.keys(m.manuscriptGoals)).toEqual(['A/b.md']);
+  });
+  it('relativeTo gives "/" paths inside the project', () => {
+    expect(relativeTo('C:\\Root\\P', 'C:\\Root\\P\\Manuscripts\\Book 1.md')).toBe('Manuscripts/Book 1.md');
+    expect(relativeTo('/r/P', '/r/P/a/b.md')).toBe('a/b.md');
   });
 });

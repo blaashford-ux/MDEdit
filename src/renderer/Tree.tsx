@@ -3,6 +3,8 @@ import { useEffect, useRef } from 'react';
 import { navigate, type NavKey, type Row } from './treeRows';
 
 interface Props {
+  /** True for the file that goals follow (the project's active manuscript). */
+  isManuscript?(row: Row): boolean;
   rows: Row[];
   focusKey: string | null;
   /** Key of the chapter row shown in the active tab. */
@@ -107,6 +109,11 @@ export function Tree(p: Props) {
               {r.kind !== 'chapter' && <Icon name={r.kind === 'dir' ? 'folder' : 'file'} size={15} className={'kind-' + r.kind} />}
               <span className="text">{r.label}</span>
             </span>
+            {p.isManuscript?.(r) && (
+              <span className="ms-badge" title="Active manuscript: word-count goals follow this file" aria-label="active manuscript">
+                <Icon name="target" size={14} />
+              </span>
+            )}
             {r.marked && (
               <span className="book-badge" title="Marked for export" aria-label="marked for export">
                 <Icon name="book" size={14} />

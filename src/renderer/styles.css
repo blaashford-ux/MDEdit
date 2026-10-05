@@ -496,3 +496,6 @@ code.path { background: var(--raised); padding: 1px 6px; border-radius: 6px; }
 .chart .today-line { stroke: var(--faint); stroke-width: 1; opacity: 0.5; }
 .chart-readout { min-height: 1.5em; font-size: 12.5px; color: var(--muted); }
 .home-head-actions { display: flex; gap: 8px; align-items: center; flex: none; }
+.ms-badge { display: inline-flex; color: var(--gold); flex: none; }
+.card-ms { color: var(--muted); font-size: 12px; margin-top: -4px; }
+.ms-name { color: var(--gold); font-weight: 600; }

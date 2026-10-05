@@ -76,14 +76,11 @@ export function defaultTemplates(): ProjectTemplate[] {
       [{ path: 'Manuscript/Draft.md', content: '# Chapter 1\n\n' }]
     ),
     t(
-      'series-book',
-      'Series Book',
-      'A book that belongs to a series, with a series bible.',
-      [folder('Manuscript', true), folder('Series Bible'), folder('Characters'), folder('Research'), folder('Exports')],
-      [
-        { path: 'Manuscript/Draft.md', content: '# Chapter 1\n\n' },
-        { path: 'Series Bible/Series Bible.md', content: '# Series Bible\n\n' }
-      ]
+      'series',
+      'Series',
+      'Several books in one project: a Manuscripts folder for the books, and a series bible.',
+      [folder('Manuscripts', true), folder('Series Bible'), folder('Characters'), folder('Research'), folder('Exports')],
+      [{ path: 'Series Bible/Series Bible.md', content: '# Series Bible\n\n' }]
     ),
     t('short-story', 'Short Story', 'A short story: drafts, notes and exports.', [folder('Drafts', true), folder('Notes'), folder('Exports')], [
       { path: 'Drafts/Draft.md', content: '# Title\n\n' }
@@ -208,7 +205,12 @@ export interface ProjectMeta {
   status: ProjectStatus;
   notes: string;
   archived: boolean;
+  /** The project-wide goal, used when no manuscript is active. */
   goal: Goal | null;
+  /** The one manuscript (file, relative to the project, "/" separated) that goals and progress follow; null = the whole project. */
+  activeManuscript: string | null;
+  /** A goal per manuscript, keyed by its relative path. */
+  manuscriptGoals: Record<string, Goal>;
   /** Folders (relative, "/" separated) whose words do not count toward the goal. */
   excludedFolders: string[];
   overrides: ProjectOverrides;
@@ -227,6 +229,8 @@ export function newProjectMeta(opts: { id: string; name: string; template: Proje
     notes: '',
     archived: false,
     goal: null,
+    activeManuscript: null,
+    manuscriptGoals: {},
     excludedFolders: uncountedFolders(t.folders),
     overrides: { chapterLevel: t.chapterLevel, book: t.book ? structuredClone(t.book) : null }
   };
@@ -247,6 +251,8 @@ export function sanitizeProjectMeta(raw: unknown, fallbackName: string, today: s
     notes: longText(r.notes, 5000),
     archived: r.archived === true,
     goal: sanitizeGoal(r.goal, today),
+    activeManuscript: typeof r.activeManuscript === 'string' && safeRelPath(r.activeManuscript.replace(/\\/g, '/')) ? r.activeManuscript.replace(/\\/g, '/') : null,
+    manuscriptGoals: sanitizeManuscriptGoals(r.manuscriptGoals, today),
     excludedFolders: Array.isArray(r.excludedFolders)
       ? r.excludedFolders.filter((x): x is string => typeof x === 'string' && safeRelPath(x.replace(/\\/g, '/'))).map((x) => x.replace(/\\/g, '/')).slice(0, 200)
       : [],
@@ -255,6 +261,39 @@ export function sanitizeProjectMeta(raw: unknown, fallbackName: string, today: s
       book: isObj(o.book) ? sanitizeBookDetails(o.book) : null
     }
   };
+}
+
+function sanitizeManuscriptGoals(raw: unknown, today: string): Record<string, Goal> {
+  const out: Record<string, Goal> = {};
+  if (!isObj(raw)) return out;
+  for (const [k, v] of Object.entries(raw).slice(0, 200)) {
+    const key = k.replace(/\\/g, '/');
+    const g = sanitizeGoal(v, today);
+    if (g && safeRelPath(key)) out[key] = g;
+  }
+  return out;
+}
+
+/** The goal that applies now: the active manuscript's own goal, or the project's when no manuscript is active. */
+export function goalFor(meta: Pick<ProjectMeta, 'goal' | 'activeManuscript' | 'manuscriptGoals'>): Goal | null {
+  return meta.activeManuscript ? (meta.manuscriptGoals[meta.activeManuscript] ?? null) : meta.goal;
+}
+
+/** The same metadata with the applicable goal replaced (null removes it). */
+export function withGoal<T extends Pick<ProjectMeta, 'goal' | 'activeManuscript' | 'manuscriptGoals'>>(meta: T, goal: Goal | null): T {
+  if (!meta.activeManuscript) return { ...meta, goal };
+  const goals = { ...meta.manuscriptGoals };
+  if (goal) goals[meta.activeManuscript] = goal;
+  else delete goals[meta.activeManuscript];
+  return { ...meta, manuscriptGoals: goals };
+}
+
+/** A path inside the project as the "/"-separated relative path used in its metadata ("" for the project itself). */
+export function relativeTo(projectPath: string, file: string): string {
+  const norm = (x: string) => x.replace(/\\/g, '/').replace(/\/+$/, '');
+  const base = norm(projectPath);
+  const f = norm(file);
+  return f === base ? '' : f.startsWith(base + '/') ? f.slice(base.length + 1) : f;
 }
 
 function hash(s: string): number {

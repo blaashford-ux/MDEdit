@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { STATUS_LABELS, STATUSES, type ProjectStatus, type ProjectSummary, type ProjectsConfig, type RootListing } from '../shared/projects';
+import { goalFor, STATUS_LABELS, STATUSES, type ProjectStatus, type ProjectSummary, type ProjectsConfig, type RootListing } from '../shared/projects';
 import { ContextMenu, type MenuItem } from './ContextMenu';
 import { Icon } from './Icon';
 
@@ -141,7 +141,7 @@ export function ProjectsHome(p: Props) {
 
         <div className="project-grid">
           {shown.map((x) => {
-            const g = x.meta.goal;
+            const g = goalFor(x.meta);
             const pct = g ? Math.min(100, Math.round((x.words / g.targetWords) * 100)) : null;
             return (
               <div
@@ -180,6 +180,11 @@ export function ProjectsHome(p: Props) {
                   <span className={`status-chip s-${x.meta.status}`}>{STATUS_LABELS[x.meta.status]}</span>
                   <span className="muted small">{x.meta.templateName}</span>
                 </div>
+                {x.meta.activeManuscript && (
+                  <div className="card-ms" title="Active manuscript">
+                    <Icon name="target" size={12} /> {x.meta.activeManuscript.split('/').pop()}
+                  </div>
+                )}
                 <div className="card-words">
                   <strong>{x.words.toLocaleString()}</strong> <span className="muted">words{g ? ` of ${g.targetWords.toLocaleString()}` : ''}</span>
                 </div>

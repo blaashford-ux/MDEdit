@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { AppDefaults } from '../shared/appDefaults';
 import type { TreeNode } from '../shared/api';
 import { localDate, sanitizeGoal } from '../shared/progress';
-import { STATUS_LABELS, STATUSES, type ProjectMeta, type ProjectStatus, type ProjectsConfig } from '../shared/projects';
+import { goalFor, STATUS_LABELS, STATUSES, withGoal, type ProjectMeta, type ProjectStatus, type ProjectsConfig } from '../shared/projects';
 import { DefaultsEditor } from './DefaultsEditor';
 import { Field, NumberField, TextArea, Toggle } from './formParts';
 import { useEscape } from './useEscape';
@@ -45,7 +45,7 @@ export function ProjectSettingsDialog({ path, config, onClose, onChanged }: Prop
         if (!m) return setError('That folder is not a project.');
         setMeta(m);
         setInitial(JSON.stringify(m));
-        setGoalOn(m.goal !== null);
+        setGoalOn(goalFor(m) !== null);
         setApp(a);
         setFolders(relFolders(tree));
       })
@@ -76,9 +76,10 @@ export function ProjectSettingsDialog({ path, config, onClose, onChanged }: Prop
   }
 
   const patch = (p: Partial<ProjectMeta>) => setMeta({ ...meta, ...p });
-  const goal = meta.goal;
+  const goal = goalFor(meta);
+  const fileName = meta.activeManuscript ? meta.activeManuscript.split('/').pop() : null;
   const setGoal = (g: Partial<NonNullable<ProjectMeta['goal']>>) =>
-    setMeta({ ...meta, goal: { targetWords: 80000, startDate: today, targetDate: null, ...meta.goal, ...g } });
+    setMeta(withGoal(meta, { targetWords: 80000, startDate: today, targetDate: null, ...goal, ...g }));
   const excluded = new Set(meta.excludedFolders);
   const toggleFolder = (f: string, counted: boolean) => {
     const next = new Set(excluded);
@@ -89,10 +90,10 @@ export function ProjectSettingsDialog({ path, config, onClose, onChanged }: Prop
 
   const save = async () => {
     if (saving) return;
-    let finalGoal = meta.goal;
+    let finalGoal = goal;
     if (!goalOn) finalGoal = null;
     else {
-      finalGoal = sanitizeGoal(meta.goal, today);
+      finalGoal = sanitizeGoal(goal, today);
       if (!finalGoal) {
         setTab('goal');
         return setError('Enter a target word count above zero, and a deadline that is not before the start date.');
@@ -105,7 +106,7 @@ export function ProjectSettingsDialog({ path, config, onClose, onChanged }: Prop
         status: meta.status,
         notes: meta.notes,
         archived: meta.archived,
-        goal: finalGoal,
+        ...(({ goal: g, manuscriptGoals }) => ({ goal: g, manuscriptGoals }))(withGoal(meta, finalGoal)),
         excludedFolders: meta.excludedFolders,
         overrides: meta.overrides
       });
@@ -188,6 +189,15 @@ export function ProjectSettingsDialog({ path, config, onClose, onChanged }: Prop
 
           {tab === 'goal' && (
             <section>
+              <p className="muted small">
+                {fileName ? (
+                  <>
+                    This goal is for the active manuscript, <strong>{fileName}</strong>. Right-click another file and choose “Active Manuscript” to give that one its own goal.
+                  </>
+                ) : (
+                  'This goal covers the whole project. Right-click a file and choose “Active Manuscript” to track one book on its own.'
+                )}
+              </p>
               <Toggle label="Set a word-count goal" checked={goalOn} onChange={(v) => (setGoalOn(v), v && !goal && setGoal({}))} />
               {goalOn && goal && (
                 <>
@@ -196,7 +206,9 @@ export function ProjectSettingsDialog({ path, config, onClose, onChanged }: Prop
                   <Field label="Finish by (optional)" type="date" value={goal.targetDate ?? ''} onChange={(v) => setGoal({ targetDate: v || null })} hint="With a deadline you’ll see the words per day you need." />
                 </>
               )}
-              <h4>What counts</h4>
+              {fileName ? null : <h4>What counts</h4>}
+              {!fileName && (
+                <>
               <p className="muted small">Words in checked folders count toward the goal. Files directly in the project folder always count.</p>
               {folders.length === 0 ? (
                 <p className="muted small">This project has no subfolders.</p>
@@ -208,6 +220,8 @@ export function ProjectSettingsDialog({ path, config, onClose, onChanged }: Prop
                     </label>
                   ))}
                 </div>
+              )}
+                </>
               )}
             </section>
           )}

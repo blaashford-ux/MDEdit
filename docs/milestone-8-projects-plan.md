@@ -32,7 +32,7 @@ C:\Users\you\MDEdit\                 ← Root Folder (default; chosen at first r
   under "Not projects" with a one-click **Convert to project** (creates the marker, changes nothing else).
 * The `.mdedit` folder is hidden from the file tree. The existing `<name>.export.json` sidecars stay beside their manuscripts.
 * Everything is plain JSON, written atomically, sanitised on read (same approach as Book Details), and tidied on first read.
-* Built-in templates: **Novel** (Manuscript, Characters, Worldbuilding, Research, Exports), **Series Book** (Book 1…, Series Bible),
+* Built-in templates: **Novel** (Manuscript, Characters, Worldbuilding, Research, Exports), **Series** (Manuscripts, Series Bible…),
   **Short Story** (Drafts, Notes, Exports), **Blank** (no subfolders). Editable; "Reset to defaults" restores them.
 
 ## 3. What the user sees

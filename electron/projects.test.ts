@@ -231,3 +231,33 @@ describe('moveProjects', () => {
     }
   });
 });
+
+describe('active manuscript', () => {
+  const series = () => defaultTemplates().find((t) => t.id === 'series')!;
+  it('a Series project starts with a Manuscripts folder and no book files', async () => {
+    const a = await createProject(root, 'Saga', series(), { now: at('2026-10-05T08:00:00') });
+    expect(await names(path.join(a.path, 'Manuscripts'))).toEqual([]);
+  });
+  it('progress and summaries follow only the active manuscript, each with its own history', async () => {
+    const a = await createProject(root, 'Saga', series(), { now: at('2026-10-05T08:00:00') });
+    await writeFile(path.join(a.path, 'Manuscripts', 'One.md'), 'w '.repeat(100));
+    await writeFile(path.join(a.path, 'Manuscripts', 'Two.md'), 'w '.repeat(40));
+    await updateMeta(a.path, { activeManuscript: 'Manuscripts/One.md' });
+    let r = await recordProgress(a.path, at('2026-10-05T12:00:00'));
+    expect(r).toMatchObject({ total: 100, manuscript: 'Manuscripts/One.md' });
+    expect((await listProjects(root)).projects[0].words).toBe(100);
+    await updateMeta(a.path, { activeManuscript: 'Manuscripts/Two.md' }); // swap, no prompt, own history
+    r = await recordProgress(a.path, at('2026-10-05T13:00:00'));
+    expect(r.total).toBe(40);
+    expect(r.progress.days['2026-10-05']).toEqual({ start: 40, end: 40 });
+    expect((await readProgress(a.path, 'Manuscripts/One.md')).days['2026-10-05'].end).toBe(100);
+  });
+  it('a deleted manuscript is cleared and the project is counted again', async () => {
+    const a = await createProject(root, 'Saga', series(), { now: at('2026-10-05T08:00:00') });
+    await updateMeta(a.path, { activeManuscript: 'Manuscripts/Gone.md' });
+    const r = await recordProgress(a.path, at('2026-10-05T12:00:00'));
+    expect(r.manuscript).toBeNull();
+    expect((await readMeta(a.path))!.activeManuscript).toBeNull();
+  });
+});
+

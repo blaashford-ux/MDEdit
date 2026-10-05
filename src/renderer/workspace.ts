@@ -14,7 +14,7 @@ import {
 import type { AppDefaults } from '../shared/appDefaults';
 import { compileFind, replaceAllInText, type FindOptions } from '../shared/find';
 import type { Progress } from '../shared/progress';
-import type { ProjectMeta } from '../shared/projects';
+import { relativeTo, type ProjectMeta } from '../shared/projects';
 import { basename, dirname, isInside, remapPath } from '../shared/paths';
 import { collectFiles, collectOrphans, flattenPaths } from '../shared/tree';
 
@@ -53,7 +53,7 @@ export interface WorkspaceState {
   /** The open folder is a project (it carries `.mdedit/project.json`). */
   project: { path: string; meta: ProjectMeta } | null;
   /** The open project's word total and day-by-day history (null until counted). */
-  progress: { progress: Progress; total: number } | null;
+  progress: { progress: Progress; total: number; manuscript: string | null } | null;
   /** Labels of undone actions Redo would re-apply, oldest first. */
   redoLabels: string[];
 }
@@ -303,6 +303,21 @@ export class Workspace {
     this.set({ project: { ...project, meta } });
     if (changed) this.resplitAll(level);
     return true;
+  }
+
+  /** Makes `file` (or nothing, with null) the active manuscript: goals and progress follow it. Swaps without prompting. */
+  async setActiveManuscript(file: string | null): Promise<boolean> {
+    const project = this.state.project;
+    if (!project) return false;
+    try {
+      const meta = await this.api.updateProject(project.path, { activeManuscript: file === null ? null : relativeTo(project.path, file) });
+      this.set({ project: { ...project, meta }, progress: null });
+      await this.refreshProgress();
+      return true;
+    } catch (e) {
+      this.set({ error: String(e instanceof Error ? e.message : e) });
+      return false;
+    }
   }
 
   /** Counts the project's words and notes them in its history (soon, and not more than once in a while). */
@@ -877,11 +892,28 @@ export class Workspace {
     try {
       const to = await this.api.renameNode(path, newName);
       this.remap(path, to);
+      await this.followActiveManuscript(path, to);
       await this.refresh();
       return true;
     } catch (e) {
       this.set({ error: String(e instanceof Error ? e.message : e) });
       return false;
+    }
+  }
+
+  /** A renamed file (or folder) that holds the active manuscript: point the project at its new path. */
+  private async followActiveManuscript(from: string, to: string): Promise<void> {
+    const project = this.state.project;
+    const active = project?.meta.activeManuscript;
+    if (!project || !active) return;
+    const moved = remapPath(active, relativeTo(project.path, from), relativeTo(project.path, to));
+    if (moved === active) return;
+    try {
+      const meta = await this.api.updateProject(project.path, { activeManuscript: moved });
+      this.set({ project: { ...project, meta } });
+      void this.refreshProgress();
+    } catch {
+      // the next progress count clears a manuscript that can't be found
     }
   }
 
