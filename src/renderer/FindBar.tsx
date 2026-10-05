@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { countByChapter, type FindOptions, type FindStatus } from '../shared/find';
+import { Icon } from './Icon';
 import type { FindJump, SceneNav } from './sceneNav';
 
 export interface FindForm {
@@ -208,7 +209,7 @@ export function FindBar({ form, setForm, handle, chapterIndex, chapterTexts, fil
           title="Replace (Ctrl+H)"
           onClick={() => setForm({ replace: !form.replace })}
         >
-          {form.replace ? '▾' : '▸'}
+          <Icon name="chevron" size={14} className={form.replace ? 'open' : ''} />
         </button>
         <input
           ref={inputRef}
@@ -238,13 +239,13 @@ export function FindBar({ form, setForm, handle, chapterIndex, chapterTexts, fil
         </span>
         {message && <span className="find-flash">{message}</span>}
         <button type="button" aria-label="Previous match" title="Previous match (Shift+F3)" disabled={!opts.query || busy} onClick={() => void step(-1)}>
-          ↑
+          <Icon name="up" size={15} />
         </button>
         <button type="button" aria-label="Next match" title="Next match (F3)" disabled={!opts.query || busy} onClick={() => void step(1)}>
-          ↓
+          <Icon name="down" size={15} />
         </button>
         <button type="button" aria-label="Close find" title="Close (Esc)" onClick={onClose}>
-          ✕
+          <Icon name="close" size={14} />
         </button>
       </div>
       {form.replace && (

@@ -1,3 +1,4 @@
+import { Icon } from './Icon';
 import { basename, dirname } from '../shared/paths';
 import type { Tab } from './workspace';
 
@@ -61,7 +62,7 @@ export function Tabs({ tabs, activeId, onActivate, onClose }: Props) {
                 onClose(t.id);
               }}
             >
-              ×
+              <Icon name="close" size={12} />
             </button>
           </div>
         );

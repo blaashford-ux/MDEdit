@@ -267,6 +267,8 @@ function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
     ...restoredBounds(),
     title: 'MDEdit',
+    // match the app's shell colour so there is no white flash while the page loads
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#1a1430' : '#ece9f8',
     icon: path.join(app.getAppPath(), 'assets', 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),

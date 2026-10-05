@@ -6,6 +6,8 @@ import { countWords } from '../shared/words';
 import { BookDetailsDialog } from './BookDetailsDialog';
 import { ContextMenu, type MenuItem } from './ContextMenu';
 import { Editor } from './Editor';
+import { Icon } from './Icon';
+import logo from './logo.png';
 import { ExportDialog } from './ExportDialog';
 import { FindBar, initialFindForm, type FindForm } from './FindBar';
 import { PromptDialog, type PromptSpec } from './PromptDialog';
@@ -417,6 +419,10 @@ export function App() {
   return (
     <div className="app" style={{ gridTemplateColumns: `${s.sidebarWidth}px 6px minmax(0, 1fr)` }}>
       <aside className="sidebar">
+        <div className="brand">
+          <img src={logo} alt="" width={26} height={26} />
+          <span className="wordmark">MDEdit</span>
+        </div>
         <div className="toolbar">
           <button onClick={() => void ws.openFolder()} title="Choose a different folder (Ctrl+O)">
             {s.root ? 'Change Folder…' : 'Open Folder…'}
@@ -426,13 +432,13 @@ export function App() {
             disabled={!s.root || toolbarBusy}
             title="Rescan the folder for new, renamed and deleted files (F5)"
           >
-            {toolbarBusy ? 'Refreshing…' : '↻ Refresh'}
+            <Icon name="refresh" /> {toolbarBusy ? 'Refreshing…' : 'Refresh'}
           </button>
           <button onClick={() => actions.export()} disabled={!s.root} title="Export marked books for KDP (Ctrl+E)">
-            ⬇ Export…
+            <Icon name="download" /> Export…
           </button>
           <button onClick={() => promptNewFile(dirFor(null))} disabled={!s.root} title="New file (Ctrl+N)" aria-label="New file">
-            ＋ File
+            <Icon name="filePlus" /> File
           </button>
           <button
             onClick={() => promptNewFolder(dirFor(null))}
@@ -440,7 +446,7 @@ export function App() {
             title="New folder (Ctrl+Shift+N)"
             aria-label="New folder"
           >
-            ＋ Folder
+            <Icon name="folderPlus" /> Folder
           </button>
         </div>
         {s.root ? (
@@ -565,16 +571,16 @@ export function App() {
                   )}
                   <div className="head-actions">
                     <button aria-label="Previous chapter" title="Previous chapter (Ctrl+PgUp)" disabled={tab.chapter === 0} onClick={() => void ws.gotoChapter(-1)}>
-                      ‹
+                      <Icon name="left" />
                     </button>
                     <button aria-label="Next chapter" title="Next chapter (Ctrl+PgDn)" disabled={tab.chapter >= doc.chapters.length - 1} onClick={() => void ws.gotoChapter(1)}>
-                      ›
+                      <Icon name="right" />
                     </button>
                     <button aria-label="Previous scene break" title="Previous scene break (Ctrl+↑)" onClick={() => gotoScene(-1)}>
-                      ↑ Scene
+                      <Icon name="up" /> Scene
                     </button>
                     <button aria-label="Next scene break" title="Next scene break (Ctrl+↓)" onClick={() => gotoScene(1)}>
-                      ↓ Scene
+                      <Icon name="down" /> Scene
                     </button>
                     <button
                       onClick={() => ws.setMode(tab.id, tab.mode === 'visual' ? 'source' : 'visual')}
@@ -582,7 +588,7 @@ export function App() {
                     >
                       {tab.mode === 'visual' ? 'Source' : 'Visual'}
                     </button>
-                    <button onClick={() => void ws.save(tab.id)} disabled={!dirty}>
+                    <button className="save-btn" onClick={() => void ws.save(tab.id)} disabled={!dirty}>
                       Save (Ctrl+S)
                     </button>
                   </div>

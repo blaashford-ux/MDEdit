@@ -1,3 +1,4 @@
+import { Icon } from './Icon';
 import { useEffect, useRef } from 'react';
 import { navigate, type NavKey, type Row } from './treeRows';
 
@@ -97,18 +98,18 @@ export function Tree(p: Props) {
                   p.onToggle(r);
                 }}
               >
-                {r.expanded ? '▾' : '▸'}
+                <Icon name="chevron" size={14} className={r.expanded ? 'open' : ''} />
               </span>
             ) : (
               <span className="caret" aria-hidden />
             )}
             <span className="label">
-              {r.kind === 'dir' ? '📁 ' : r.kind === 'file' ? '📄 ' : ''}
-              {r.label}
+              {r.kind !== 'chapter' && <Icon name={r.kind === 'dir' ? 'folder' : 'file'} size={15} className={'kind-' + r.kind} />}
+              <span className="text">{r.label}</span>
             </span>
             {r.marked && (
               <span className="book-badge" title="Marked for export" aria-label="marked for export">
-                📕
+                <Icon name="book" size={14} />
               </span>
             )}
             {dirty && (

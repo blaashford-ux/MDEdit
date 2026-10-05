@@ -5,7 +5,6 @@ import { $prose, replaceAll } from '@milkdown/kit/utils';
 import { useEffect, useRef } from 'react';
 import '@milkdown/crepe/theme/common/style.css';
 import '@milkdown/crepe/theme/classic.css';
-import './milkdownDark';
 import { pickScene } from '../shared/sceneBreaks';
 import { findApiFor, findPlugin } from './findPlugin';
 import type { SceneNav } from './sceneNav';
