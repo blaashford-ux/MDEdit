@@ -15,7 +15,9 @@ export const FICTION_TEXT =
 export const REPRODUCTION_TEXT =
   'No part of this book may be reproduced, distributed, or transmitted in any form or by any means, including photocopying, recording, or other electronic or mechanical methods, without the prior written permission of the author, except in the case of brief quotations embodied in critical reviews and certain other noncommercial uses permitted by copyright law.';
 export const MATURE_TEXT = 'This book contains mature themes and explicit content intended for readers 18 and older.';
-export const AI_TEXT = 'This book was created using a Human-in-the-Loop Generative AI system.';
+export const CONTENT_WARNING_TEXT = 'Add Content Warnings here';
+/** The wording this field had before it became the Content Warning; saved books that still hold it are moved to the new default. */
+const LEGACY_AI_TEXT = 'This book was created using a Human-in-the-Loop Generative AI system.';
 
 export interface LinkItem {
   label: string;
@@ -36,6 +38,7 @@ export interface CopyrightDetails {
   reproductionText: string;
   matureNotice: boolean;
   matureText: string;
+  /** The Content Warning notice (stored under its original key so saved books keep working). */
   aiDisclosure: boolean;
   aiText: string;
   /** Extra free-text lines, shown after the notices and before the edition line. */
@@ -148,7 +151,7 @@ export function defaultBookDetails(seed: { title?: string; author?: string; year
       matureNotice: false,
       matureText: MATURE_TEXT,
       aiDisclosure: false,
-      aiText: AI_TEXT,
+      aiText: CONTENT_WARNING_TEXT,
       extraLines: []
     },
     dedication: { enabled: false, text: '' },
@@ -218,7 +221,7 @@ export function sanitizeBookDetails(raw: unknown, seed: { title?: string; author
       matureNotice: bool(c.matureNotice, d.copyright.matureNotice),
       matureText: str(c.matureText, d.copyright.matureText),
       aiDisclosure: bool(c.aiDisclosure, d.copyright.aiDisclosure),
-      aiText: str(c.aiText, d.copyright.aiText),
+      aiText: ((t) => (t.trim() === LEGACY_AI_TEXT ? CONTENT_WARNING_TEXT : t))(str(c.aiText, d.copyright.aiText)),
       extraLines: Array.isArray(c.extraLines)
         ? c.extraLines.filter((x): x is string => typeof x === 'string').slice(0, 20).map((x) => str(x, '', 1000))
         : []

@@ -80,3 +80,16 @@ describe('font settings', () => {
     expect(sanitizeBookDetails({}).export.epub.font).toBe('EB Garamond');
   });
 });
+
+describe('content warning', () => {
+  it('defaults to “Add Content Warnings here”, off', () => {
+    const d = defaultBookDetails({ title: 'x', author: 'y' });
+    expect(d.copyright.aiText).toBe('Add Content Warnings here');
+    expect(d.copyright.aiDisclosure).toBe(false);
+  });
+  it('a saved book still holding the old AI wording is moved to the new default; edited wording is kept', () => {
+    const old = 'This book was created using a Human-in-the-Loop Generative AI system.';
+    expect(sanitizeBookDetails({ copyright: { aiDisclosure: true, aiText: old } }).copyright).toMatchObject({ aiDisclosure: true, aiText: 'Add Content Warnings here' });
+    expect(sanitizeBookDetails({ copyright: { aiText: 'Contains violence.' } }).copyright.aiText).toBe('Contains violence.');
+  });
+});

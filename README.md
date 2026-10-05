@@ -60,7 +60,7 @@ npm run dist      # Windows installer (run on Windows / CI)
 1. Right-click a `.md` file → **Mark for Export**. It gets a 📕 badge and a `<name>.export.json` beside it (title page, copyright page,
    back matter and your last export choices). Your manuscript is never modified.
 2. **Book Details…** (opens automatically when you mark a file): title, subtitle, author; copyright page (year, edition, publisher, ISBN, fiction
-   disclaimer, 18+ notice, AI disclosure, extra lines — shown in a live preview in the skill's fixed order); dedication; epigraph; back matter
+   disclaimer, 18+ notice, content warning, extra lines — shown in a live preview in the skill's fixed order); dedication; epigraph; back matter
    (Continue the Story, Also by, About the Author, a custom page). Only links you type are ever added.
 3. **Export…** (toolbar, File menu, Ctrl+E) → confirm the title/subtitle/author read-back → pick outputs and their variables → Export.
 

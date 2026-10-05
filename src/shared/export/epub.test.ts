@@ -171,7 +171,7 @@ describe('buildEpub content', () => {
     expect(css).toMatch(/\.titlepage \{ text-align: center/);
     expect(css).toMatch(/p\.booktitle \{ text-align: center/);
     const cr = read(files, 'OEBPS/text/copyright.xhtml');
-    const order = ['The Lost King', 'Copyright © 2031 by A. Writer', 'All rights reserved.', 'This is a work of fiction', 'No part of this book', 'mature themes', 'Human-in-the-Loop', 'Published by Acme Press', 'ISBN:', 'First Edition'].map((t) => cr.indexOf(t));
+    const order = ['The Lost King', 'Copyright © 2031 by A. Writer', 'All rights reserved.', 'This is a work of fiction', 'No part of this book', 'mature themes', 'Add Content Warnings here', 'Published by Acme Press', 'ISBN:', 'First Edition'].map((t) => cr.indexOf(t));
     expect(order.every((i) => i >= 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
     expect(cr).toContain('<strong>This book contains mature themes');

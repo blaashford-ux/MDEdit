@@ -15,7 +15,7 @@ conversation) and *how the files are built* (no LibreOffice on Windows).
    - **Title page** — Title, Subtitle (optional), Author / pen name. Captured verbatim: never auto-split, never
      auto-cased (skill rule). The Export dialog reads them back for confirmation.
    - **Copyright page** — Year (default: current), Edition label ("First Edition"), toggles for the fiction
-     disclaimer, the 18+ mature-content notice, and the "Human-in-the-Loop Generative AI" disclosure (each with
+     disclaimer, the 18+ mature-content notice, and a "Content Warning" notice (each with
      editable wording), plus optional Publisher / ISBN and extra free-text lines. Line order follows the skill.
    - **Other front matter** (each optional) — Dedication, Epigraph (text + attribution).
    - **Back matter** (each optional, each its own page) — *Continue the Story* / *Also by <Author>* (list of

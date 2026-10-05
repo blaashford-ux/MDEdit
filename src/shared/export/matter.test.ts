@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildBackMatter, buildFrontMatter, safeUrl } from './matter';
-import { AI_TEXT, defaultBookDetails, FICTION_TEXT, MATURE_TEXT, REPRODUCTION_TEXT } from './model';
+import { CONTENT_WARNING_TEXT, defaultBookDetails, FICTION_TEXT, MATURE_TEXT, REPRODUCTION_TEXT } from './model';
 
 const base = () => {
   const d = defaultBookDetails({ title: 'The Book', author: 'Pen Name', year: 2031 });
@@ -36,7 +36,7 @@ describe('copyright page order (from the format-for-kdp skill)', () => {
     d.copyright.edition = 'Second Edition';
     const lines = copyright(d);
     expect(lines).toEqual([
-      'The Book', 'Copyright © 2031 by Pen Name', 'All rights reserved.', FICTION_TEXT, REPRODUCTION_TEXT, MATURE_TEXT, AI_TEXT,
+      'The Book', 'Copyright © 2031 by Pen Name', 'All rights reserved.', FICTION_TEXT, REPRODUCTION_TEXT, MATURE_TEXT, CONTENT_WARNING_TEXT,
       'Published by Acme Press', 'ISBN: 978-1-23456-789-7', 'Cover by Z', 'Edited by Y', 'Second Edition'
     ]);
     const blocks = buildFrontMatter(d)[1].blocks;
