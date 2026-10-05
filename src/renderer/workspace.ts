@@ -600,6 +600,19 @@ export class Workspace {
     }
   }
 
+  /** Creates a folder and reveals it in the tree. Returns its path, or null on failure. */
+  async createFolder(dir: string, name: string): Promise<string | null> {
+    try {
+      const folder = await this.api.createFolder(dir, name.trim());
+      await this.refresh();
+      this.expandPath(folder); // opens the parents so the new folder is visible
+      return folder;
+    } catch (e) {
+      this.set({ error: String(e instanceof Error ? e.message : e) });
+      return null;
+    }
+  }
+
   async renameNode(path: string, newName: string): Promise<boolean> {
     try {
       const to = await this.api.renameNode(path, newName);

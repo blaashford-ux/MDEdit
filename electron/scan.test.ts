@@ -31,14 +31,19 @@ describe('scanFolder', () => {
     expect(names(tree)).toEqual(['sub', 'a2.MD', 'a10.md', 'b.md', 'z.markdown']);
   });
 
-  it('omits empty branches and hidden/node_modules folders', async () => {
+  it('keeps empty folders and folders without Markdown, but skips hidden and node_modules', async () => {
     await touch('docs/readme.txt');
     await touch('.git/x.md');
     await touch('node_modules/pkg/readme.md');
     await touch('keep/deep/er/file.md');
     await mkdir(path.join(root, 'empty'));
+    await mkdir(path.join(root, 'empty-nested/inner'), { recursive: true });
     const tree = await scanFolder(root);
-    expect(names(tree)).toEqual(['keep']);
+    expect(names(tree)).toEqual(['docs', 'empty', 'empty-nested', 'keep']);
+    const find = (n: { children: { name: string }[] }, name: string) => n.children.find((c) => c.name === name) as { children: unknown[] };
+    expect(find(tree, 'empty').children).toEqual([]);
+    expect(names(find(tree, 'empty-nested') as never)).toEqual(['inner']);
+    expect(find(tree, 'docs').children).toEqual([]); // the .txt is not listed
   });
 
   it('skips symlinks', async () => {

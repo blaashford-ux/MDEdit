@@ -298,7 +298,7 @@ describe('refresh', () => {
     await ws.refresh();
     const names = state().root!.children.map((c) => c.name);
     expect(names).toContain('new.md');
-    expect(names).not.toContain('sub');
+    expect(names).toContain('sub'); // the folder is still on disk, now empty
     expect(tabOf(A).draft).toBe('# One\nMINE');
   });
 });
@@ -466,6 +466,48 @@ describe('file operations', () => {
     expect(await ws.deleteNode(A, 'file')).toBe(false);
     expect(state().tabs).toHaveLength(1);
     expect(state().error).toMatch(/trash unavailable/);
+  });
+});
+
+describe('folders', () => {
+  it('shows empty folders', async () => {
+    api.addDir('empty');
+    await ws.refresh();
+    const empty = state().root!.children.find((c) => c.name === 'empty');
+    expect(empty).toMatchObject({ kind: 'dir', children: [] });
+  });
+
+  it('creates a folder, refreshes the tree and reveals it', async () => {
+    await ws.toggleExpanded(`${ROOT}/sub`, false);
+    const p = await ws.createFolder(`${ROOT}/sub`, '  chapters ');
+    expect(p).toBe(`${ROOT}/sub/chapters`);
+    const sub = state().root!.children.find((c) => c.name === 'sub') as { children: { name: string }[] };
+    expect(sub.children.map((c) => c.name)).toContain('chapters');
+  });
+
+  it('expands the parents of a folder created deep inside a collapsed tree', async () => {
+    await ws.createFolder(`${ROOT}/sub`, 'inner');
+    expect(state().expanded.has(`${ROOT}/sub`)).toBe(true);
+  });
+
+  it('reports a clash and returns null', async () => {
+    api.addDir('dup');
+    expect(await ws.createFolder(ROOT, 'dup')).toBeNull();
+    expect(state().error).toMatch(/already exists/);
+  });
+
+  it('a new empty folder can receive a file straight away', async () => {
+    const dir = (await ws.createFolder(ROOT, 'fresh'))!;
+    expect(await ws.createFile(dir, 'first')).toBe(true);
+    expect(api.text(`${ROOT}/fresh/first.md`)).toBe('# first\n\n');
+  });
+
+  it('renames and deletes an empty folder', async () => {
+    const dir = (await ws.createFolder(ROOT, 'tmp'))!;
+    expect(await ws.renameNode(dir, 'tmp2')).toBe(true);
+    expect(state().root!.children.map((c) => c.name)).toContain('tmp2');
+    expect(await ws.deleteNode(`${ROOT}/tmp2`, 'folder')).toBe(true);
+    expect(state().root!.children.map((c) => c.name)).not.toContain('tmp2');
   });
 });
 

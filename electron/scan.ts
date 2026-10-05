@@ -9,9 +9,9 @@ const byName = (a: TreeNode, b: TreeNode) =>
   a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
 
 /**
- * Recursively collects Markdown files under `dir`. Folders come before files,
- * both sorted naturally. Hidden folders, node_modules and symlinks are skipped
- * (no loops), and folders containing no Markdown files are left out.
+ * Recursively collects Markdown files and folders under `dir`. Folders come before files,
+ * both sorted naturally. Empty folders are kept (so you can add files to them); hidden
+ * folders, node_modules and symlinks are skipped (no loops).
  */
 export async function scanFolder(dir: string): Promise<DirNode> {
   const entries = await fs.readdir(dir, { withFileTypes: true });
@@ -25,8 +25,7 @@ export async function scanFolder(dir: string): Promise<DirNode> {
       if (e.isDirectory()) {
         if (e.name.startsWith('.') || SKIP_DIRS.has(e.name)) return;
         try {
-          const sub = await scanFolder(full);
-          if (sub.children.length > 0) dirs.push(sub);
+          dirs.push(await scanFolder(full));
         } catch {
           // unreadable folder (permissions): skip it
         }

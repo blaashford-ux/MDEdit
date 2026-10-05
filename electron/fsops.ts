@@ -26,6 +26,17 @@ export async function createFile(dir: string, name: string, content = ''): Promi
   return target;
 }
 
+export async function createFolder(dir: string, name: string): Promise<string> {
+  const target = path.join(dir, checkName(name));
+  try {
+    await fs.mkdir(target);
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === 'EEXIST') throw new Error(`"${path.basename(target)}" already exists.`);
+    throw e;
+  }
+  return target;
+}
+
 /** Renames in place. Files keep a Markdown extension. Never overwrites another item. */
 export async function renameNode(from: string, newName: string): Promise<string> {
   const st = await fs.lstat(from);

@@ -92,6 +92,22 @@ export function App() {
       onSubmit: async (name) => ((await ws.createFile(dir, name)) ? null : takeError())
     });
 
+  const promptNewFolder = (dir: string) =>
+    setPrompt({
+      title: 'New folder',
+      hint: `In folder “${basename(dir)}”`,
+      label: 'Folder name',
+      initial: '',
+      confirm: 'Create',
+      validate: validateName,
+      onSubmit: async (name) => {
+        const created = await ws.createFolder(dir, name);
+        if (!created) return takeError();
+        setFocusKey(created);
+        return null;
+      }
+    });
+
   const promptRename = (row: Row) =>
     setPrompt({
       title: row.kind === 'dir' ? 'Rename folder' : 'Rename file',
@@ -133,7 +149,7 @@ export function App() {
   const activateRow = async (row: Row) => {
     setFocusKey(row.key);
     if (row.kind === 'chapter') return ws.openChapter(row.path, row.chapter!);
-    if (row.kind === 'dir') return ws.toggleExpanded(row.path, false);
+    if (row.kind === 'dir') return row.expandable ? ws.toggleExpanded(row.path, false) : undefined;
     // A file row: open it if it has no tab, switch to its tab if it isn't the active one, and only
     // collapse/expand when you click the file you are already on.
     const tab = ws.tabForFile(row.path);
@@ -155,6 +171,7 @@ export function App() {
     if (row.kind === 'dir') {
       return [
         { label: 'New File Here…', onClick: () => promptNewFile(row.path) },
+        { label: 'New Folder Here…', onClick: () => promptNewFolder(row.path) },
         { label: 'Rename…', hint: 'F2', onClick: () => promptRename(row) },
         reveal,
         { label: 'Delete Folder…', danger: true, hint: 'Del', onClick: () => deleteRow(row) }
@@ -190,6 +207,7 @@ export function App() {
     'change-folder': () => void ws.openFolder(),
     refresh: () => void ws.refresh(),
     'new-file': () => s.root && promptNewFile(dirFor(null)),
+    'new-folder': () => s.root && promptNewFolder(dirFor(null)),
     'close-tab': () => s.activeId && void ws.closeTab(s.activeId),
     'next-tab': () => ws.cycleTab(1),
     'prev-tab': () => ws.cycleTab(-1),
@@ -210,6 +228,7 @@ export function App() {
       let name: keyof typeof actions | null = null;
       if (mod && !e.shiftKey && k === 's') name = 'save';
       else if (mod && k === 'o') name = 'change-folder';
+      else if (mod && e.shiftKey && k === 'n') name = 'new-folder';
       else if (mod && k === 'n') name = 'new-file';
       else if (mod && k === 'w') name = 'close-tab';
       else if (mod && k === 'p') name = 'focus-filter';
@@ -264,7 +283,15 @@ export function App() {
             {toolbarBusy ? 'Refreshing…' : '↻ Refresh'}
           </button>
           <button onClick={() => promptNewFile(dirFor(null))} disabled={!s.root} title="New file (Ctrl+N)" aria-label="New file">
-            ＋
+            ＋ File
+          </button>
+          <button
+            onClick={() => promptNewFolder(dirFor(null))}
+            disabled={!s.root}
+            title="New folder (Ctrl+Shift+N)"
+            aria-label="New folder"
+          >
+            ＋ Folder
           </button>
         </div>
         {s.root ? (
@@ -290,7 +317,7 @@ export function App() {
               }}
             />
             {s.root.children.length === 0 ? (
-              <p className="muted pad">No Markdown files found.</p>
+              <p className="muted pad">This folder is empty. Use “＋ File” or “＋ Folder” to add something.</p>
             ) : rows.length === 0 ? (
               <p className="muted pad">No files match “{filter}”.</p>
             ) : (

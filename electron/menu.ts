@@ -29,6 +29,7 @@ export function installMenu(theme: ThemeHooks): void {
       label: '&File',
       submenu: [
         { label: 'New File…\tCtrl+N', click: send('new-file') },
+        { label: 'New Folder…\tCtrl+Shift+N', click: send('new-folder') },
         { label: 'Change Folder…\tCtrl+O', click: send('change-folder') },
         { label: 'Refresh\tF5', click: send('refresh') },
         { type: 'separator' },

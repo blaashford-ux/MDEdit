@@ -25,6 +25,7 @@ export type MenuAction =
   | 'refresh'
   | 'save'
   | 'new-file'
+  | 'new-folder'
   | 'close-tab'
   | 'next-tab'
   | 'prev-tab'
@@ -70,6 +71,8 @@ export interface MdeditApi {
 
   /** New Markdown file in `dir` (".md" is added if missing). Fails if it exists. Returns its path. */
   createFile(dir: string, name: string, content?: string): Promise<string>;
+  /** New folder in `dir`. Fails if the name is taken. Returns its path. */
+  createFolder(dir: string, name: string): Promise<string>;
   /** Renames within the same folder. Returns the new path. */
   renameNode(path: string, newName: string): Promise<string>;
   /** Moves to the Recycle Bin. */

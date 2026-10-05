@@ -9,6 +9,7 @@ const api: MdeditApi = {
   statFile: (p) => ipcRenderer.invoke('fs:statFile', p),
   writeFile: (p, content) => ipcRenderer.invoke('fs:writeFile', p, content),
   createFile: (dir, name, content) => ipcRenderer.invoke('fs:createFile', dir, name, content),
+  createFolder: (dir, name) => ipcRenderer.invoke('fs:createFolder', dir, name),
   renameNode: (p, name) => ipcRenderer.invoke('fs:renameNode', p, name),
   trashNode: (p) => ipcRenderer.invoke('fs:trashNode', p),
   reveal: (p) => ipcRenderer.send('shell:reveal', p),

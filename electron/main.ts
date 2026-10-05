@@ -3,7 +3,7 @@ import path from 'node:path';
 import type { DraftRecord, Prefs, Session, ThemeSource } from '../src/shared/api';
 import { DraftStore } from './drafts';
 import { readWithStamp, statStamp, writeFileAtomic } from './files';
-import { createFile, renameNode } from './fsops';
+import { createFile, createFolder, renameNode } from './fsops';
 import { installMenu } from './menu';
 import { confirmDelete, confirmOverwrite, confirmRecover, confirmUnsaved } from './prompts';
 import { scanFolder } from './scan';
@@ -63,6 +63,9 @@ function registerIpc(): void {
   });
   ipcMain.handle('fs:createFile', (_e, dir: string, name: string, content?: string) =>
     createFile(inRoot(dir, { allowRoot: true }), name, content)
+  );
+  ipcMain.handle('fs:createFolder', (_e, dir: string, name: string) =>
+    createFolder(inRoot(dir, { allowRoot: true }), name)
   );
   ipcMain.handle('fs:renameNode', (_e, p: string, newName: string) => renameNode(inRoot(p), newName));
   ipcMain.handle('fs:trashNode', (_e, p: string) => shell.trashItem(inRoot(p)));

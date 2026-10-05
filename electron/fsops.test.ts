@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createFile, renameNode } from './fsops';
+import { createFile, createFolder, renameNode } from './fsops';
 
 let dir: string;
 beforeEach(async () => {
@@ -24,6 +24,16 @@ describe('createFile', () => {
   it('rejects invalid names and path tricks', async () => {
     for (const bad of ['', 'a/b', '..', 'x:y', 'CON']) await expect(createFile(dir, bad)).rejects.toThrow();
     expect(await readdir(dir)).toEqual([]);
+  });
+});
+
+describe('createFolder', () => {
+  it('creates a folder once, rejecting clashes and bad names', async () => {
+    const p = await createFolder(dir, 'notes');
+    expect(path.basename(p)).toBe('notes');
+    await expect(createFolder(dir, 'notes')).rejects.toThrow(/already exists/);
+    for (const bad of ['', 'a/b', '..', 'CON']) await expect(createFolder(dir, bad)).rejects.toThrow();
+    expect(await readdir(dir)).toEqual(['notes']);
   });
 });
 

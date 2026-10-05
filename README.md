@@ -25,6 +25,7 @@ npm run dist      # Windows installer (run on Windows / CI)
 - [x] Dark mode (follows Windows; View > Theme to override)
 - [x] Chapter navigation (Ctrl+PgUp/PgDn), word counts in the tree, Source/Visual toggle per tab
 - [x] Tree: arrow-key navigation, file filter (Ctrl+P), resizable sidebar
+- [x] Empty folders are shown; New Folder (toolbar, right-click, Ctrl+Shift+N)
 - [x] New file, rename, delete (Recycle Bin), show in Explorer; new/move/delete chapter from the sidebar
 - [x] Autosaved drafts: unsaved edits survive a crash and are offered back on next start
 - [ ] Packaging: app icon, single-instance, open-with, code signing
@@ -33,7 +34,7 @@ npm run dist      # Windows installer (run on Windows / CI)
 | Key | Action |
 |---|---|
 | Ctrl+S | Save |
-| Ctrl+O / Ctrl+N | Change folder / New file |
+| Ctrl+O / Ctrl+N / Ctrl+Shift+N | Change folder / New file / New folder |
 | Ctrl+W | Close tab |
 | Ctrl+Tab, Ctrl+Shift+Tab | Next / previous tab |
 | Ctrl+PgDn, Ctrl+PgUp | Next / previous chapter |

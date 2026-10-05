@@ -14,6 +14,8 @@ import { basename, dirname, isInside } from '../../shared/paths';
 /** In-memory stand-in for the Electron bridge, with scripted dialog answers. */
 export class FakeApi implements MdeditApi {
   files = new Map<string, { text: string; mtime: number }>();
+  /** Folders that exist on disk (like a real file system, they survive deleting their files). */
+  dirs = new Set<string>();
   clock = 1;
   lastFolder: string | null = null;
   prefs: Prefs = {};
@@ -38,6 +40,14 @@ export class FakeApi implements MdeditApi {
 
   add(rel: string, text: string): void {
     this.files.set(`${this.root}/${rel}`, { text, mtime: this.clock++ });
+    this.registerParents(`${this.root}/${rel}`);
+  }
+  addDir(rel: string): void {
+    this.dirs.add(`${this.root}/${rel}`);
+    this.registerParents(`${this.root}/${rel}`);
+  }
+  private registerParents(path: string): void {
+    for (let d = dirname(path); d.length > this.root.length; d = dirname(d)) this.dirs.add(d);
   }
   /** Simulates another program editing the file. */
   external(path: string, text: string): void {
@@ -52,17 +62,15 @@ export class FakeApi implements MdeditApi {
   }
 
   private buildTree(dir: string): DirNode {
-    const dirs = new Set<string>();
-    const nodes: TreeNode[] = [];
-    for (const p of [...this.files.keys()].sort()) {
-      if (!isInside(p, dir) || p === dir) continue;
-      const rest = p.slice(dir.length + 1);
-      const slash = rest.indexOf('/');
-      if (slash < 0) nodes.push({ kind: 'file', name: rest, path: p });
-      else dirs.add(rest.slice(0, slash));
-    }
-    const dirNodes = [...dirs].sort().map((d) => this.buildTree(`${dir}/${d}`));
-    return { kind: 'dir', name: basename(dir), path: dir, children: [...dirNodes, ...nodes] };
+    const dirNodes: TreeNode[] = [...this.dirs]
+      .filter((d) => dirname(d) === dir)
+      .sort()
+      .map((d) => this.buildTree(d));
+    const fileNodes: TreeNode[] = [...this.files.keys()]
+      .filter((p) => dirname(p) === dir)
+      .sort()
+      .map((p) => ({ kind: 'file' as const, name: basename(p), path: p }));
+    return { kind: 'dir', name: basename(dir), path: dir, children: [...dirNodes, ...fileNodes] };
   }
 
   pickFolder = async () => this.pickResult;
@@ -90,6 +98,12 @@ export class FakeApi implements MdeditApi {
     this.files.set(p, { text: content, mtime: this.clock++ });
     return p;
   };
+  createFolder = async (dir: string, name: string) => {
+    const p = `${dir}/${name}`;
+    if (this.dirs.has(p) || this.files.has(p)) throw new Error(`"${name}" already exists.`);
+    this.dirs.add(p);
+    return p;
+  };
   renameNode = async (p: string, newName: string) => {
     const isFile = this.files.has(p);
     const to = `${dirname(p)}/${isFile && !/\.(md|markdown)$/i.test(newName) ? newName + '.md' : newName}`;
@@ -100,11 +114,18 @@ export class FakeApi implements MdeditApi {
         this.files.set(to + k.slice(p.length), v);
       }
     }
+    for (const d of [...this.dirs]) {
+      if (isInside(d, p)) {
+        this.dirs.delete(d);
+        this.dirs.add(to + d.slice(p.length));
+      }
+    }
     return to;
   };
   trashNode = async (p: string) => {
     if (this.failTrash) throw new Error('trash unavailable');
     for (const k of [...this.files.keys()]) if (isInside(k, p)) this.files.delete(k);
+    for (const d of [...this.dirs]) if (isInside(d, p)) this.dirs.delete(d);
     this.trashed.push(p);
   };
   reveal = (p: string) => void this.revealed.push(p);

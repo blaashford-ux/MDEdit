@@ -17,11 +17,16 @@ export interface Row {
   words?: number;
 }
 
-/** Keeps files whose name matches and the folders leading to them. Null when nothing matches. */
+/**
+ * Keeps items whose name matches, plus the folders leading to them. A folder whose own name
+ * matches is kept whole (empty or not). Null when nothing matches.
+ */
 export function filterTree(node: TreeNode, query: string): TreeNode | null {
   const q = query.trim().toLowerCase();
   if (!q) return node;
-  if (node.kind === 'file') return node.name.toLowerCase().includes(q) ? node : null;
+  const nameMatches = node.name.toLowerCase().includes(q);
+  if (node.kind === 'file') return nameMatches ? node : null;
+  if (nameMatches) return node;
   const children = node.children.map((c) => filterTree(c, q)).filter((c): c is TreeNode => c !== null);
   return children.length > 0 ? { ...node, children } : null;
 }
@@ -47,14 +52,16 @@ export function buildRows(
 
   const walk = (nodes: TreeNode[], depth: number, parentKey: string | null) => {
     for (const n of nodes) {
-      const open = n.kind === 'dir' ? filtering || expanded.has(n.path) : expanded.has(n.path);
+      // An empty folder has nothing to expand, so it gets no arrow.
+      const expandable = n.kind === 'file' || n.children.length > 0;
+      const open = expandable && (n.kind === 'dir' ? filtering || expanded.has(n.path) : expanded.has(n.path));
       rows.push({
         key: n.path,
         kind: n.kind,
         path: n.path,
         depth,
         label: n.name,
-        expandable: true,
+        expandable,
         expanded: open,
         parentKey
       });
