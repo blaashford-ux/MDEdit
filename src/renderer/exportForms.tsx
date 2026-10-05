@@ -1,6 +1,7 @@
 import type { BookDetails, ParagraphStyle } from '../shared/export/model';
 import { OUTPUT_LABELS, type OutputKind } from '../shared/export/outputs';
 import { TRIM_SIZES } from '../shared/export/trim';
+import { FontSelect } from './FontSelect';
 import { Field, NumberField, Select, TextArea, Toggle } from './formParts';
 
 export const PSTYLE: { value: ParagraphStyle; label: string }[] = [
@@ -34,6 +35,12 @@ export function OutputsForm({ details, edit, template }: ExportFormProps) {
                         <Field label="Language code" value={e.epub.language} width={160} onChange={(v) => edit((d) => void (d.export.epub.language = v))} hint="e.g. en, en-GB, fr" />
                         <Select label="Paragraphs" value={e.epub.paragraphStyle} options={PSTYLE} onChange={(v) => edit((d) => void (d.export.epub.paragraphStyle = v))} />
                       </div>
+                      <FontSelect
+                        label="Font"
+                        value={e.epub.font}
+                        onChange={(v) => edit((d) => void (d.export.epub.font = v))}
+                        hint="The included fonts are embedded in the ebook so every reader shows them. A font installed on your computer is only named — e-readers use it only if they have it."
+                      />
                       <TextArea label="Description" rows={3} value={e.epub.description} onChange={(v) => edit((d) => void (d.export.epub.description = v))} hint="Stored in the ebook’s metadata (KDP uses its own listing form for the store description)." />
                       <div className="row2">
                         <Field label="Publisher" value={details.copyright.publisher} onChange={(v) => edit((d) => void (d.copyright.publisher = v))} hint="Also printed on the copyright page." />
@@ -77,6 +84,12 @@ export function OutputsForm({ details, edit, template }: ExportFormProps) {
                         <Select label="Trim size" value={e.pdf.trim} options={TRIM_OPTIONS} onChange={(v) => edit((d) => void (d.export.pdf.trim = v))} hint="KDP paperback sizes, from 5 × 8 in." />
                         <Select label="Paragraphs" value={e.pdf.paragraphStyle} options={PSTYLE} onChange={(v) => edit((d) => void (d.export.pdf.paragraphStyle = v))} />
                       </div>
+                      <FontSelect
+                        label="Font"
+                        value={e.pdf.font}
+                        onChange={(v) => edit((d) => void (d.export.pdf.font = v))}
+                        hint="Any font is embedded in the PDF. Check that your licence allows commercial printing."
+                      />
                       <div className="row3">
                         <Select
                           label="Inside (gutter) margin"

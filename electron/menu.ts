@@ -98,7 +98,7 @@ export function installMenu(theme: ThemeHooks): void {
                 '',
                 `Electron ${process.versions.electron} · Chromium ${process.versions.chrome} · Node ${process.versions.node}`,
                 '',
-                'Bundled font: EB Garamond (SIL Open Font License 1.1).',
+                'Bundled fonts: EB Garamond, Crimson Pro, Libre Baskerville (SIL Open Font License 1.1).',
                 'Print layout: Paged.js (MIT).'
               ].join('\n'),
               buttons: ['OK']

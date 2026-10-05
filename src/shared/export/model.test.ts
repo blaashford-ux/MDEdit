@@ -65,3 +65,18 @@ describe('sanitizeBookDetails', () => {
     expect(sanitizeBookDetails({ export: { pdf: { gutter: 0.625 } } }).export.pdf.gutter).toBe(0.625);
   });
 });
+
+describe('font settings', () => {
+  it('default to EB Garamond for the ebook and the print PDF', () => {
+    const d = defaultBookDetails({ title: 'x', author: 'y' });
+    expect(d.export.epub.font).toBe('EB Garamond');
+    expect(d.export.pdf.font).toBe('EB Garamond');
+  });
+  it('are kept when valid, cleaned when hostile, defaulted when missing', () => {
+    const d = sanitizeBookDetails({ export: { epub: { font: 'Crimson Pro' }, pdf: { font: 'Evil"</style>' } } });
+    expect(d.export.epub.font).toBe('Crimson Pro');
+    expect(d.export.pdf.font).toBe('Evil/style');
+    expect(sanitizeBookDetails({ export: { pdf: { font: 7 } } }).export.pdf.font).toBe('EB Garamond');
+    expect(sanitizeBookDetails({}).export.epub.font).toBe('EB Garamond');
+  });
+});

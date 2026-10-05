@@ -184,3 +184,6 @@ code.path { background: var(--hover); padding: 1px 5px; border-radius: 3px; }
 .modal input[type='checkbox'], .toggle input[type='checkbox'] { display: inline-block; width: auto; flex: none; margin: 3px 0 0; padding: 0; }
 .field select { text-overflow: ellipsis; }
 .toggle input[type='checkbox'] { margin-right: 4px; }
+
+.font-field select { width: 100%; }
+.font-preview { margin-top: 6px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 4px; font-size: 16px; line-height: 1.4; overflow-wrap: anywhere; }

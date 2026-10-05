@@ -213,6 +213,30 @@ describe.skipIf(!haveEnv)('print PDF (real Electron + Paged.js)', () => {
     expect(all).toContain('•  •  •'.replace(/\s+/g, ' '));
   });
 
+  describe('fonts', () => {
+    it.each([
+      ['Crimson Pro', /CrimsonPro/],
+      ['Libre Baskerville', /LibreBaskerville/]
+    ])('bundled font %s is used and embedded', async (family, re) => {
+      const m = await render((d) => (d.export.pdf.font = family));
+      const fonts = pdfFonts(m.pdf);
+      if (!fonts) return; // poppler not installed
+      expect(fonts.every((f) => f.embedded)).toBe(true);
+      expect(fonts.map((f) => f.name).join(' ')).toMatch(re);
+      expect(fonts.map((f) => f.name).join(' ')).not.toMatch(/EBGaramond/);
+    }, 240_000);
+
+    it('an installed system font is used and embedded', async () => {
+      if (spawnSync('fc-list', [':family=DejaVu Serif']).stdout?.toString().trim() === '') return; // not on this machine
+      const m = await render((d) => (d.export.pdf.font = 'DejaVu Serif'));
+      const fonts = pdfFonts(m.pdf);
+      if (!fonts) return;
+      expect(fonts.every((f) => f.embedded)).toBe(true);
+      expect(fonts.map((f) => f.name).join(' ')).toMatch(/DejaVuSerif/);
+      expect(fonts.map((f) => f.name).join(' ')).not.toMatch(/EBGaramond/);
+    }, 240_000);
+  });
+
   describe('options', () => {
     it('manual gutter + outer margin + font size are honoured', async () => {
       const m = await render((d) => {
@@ -260,8 +284,24 @@ describe.skipIf(!haveEnv)('print PDF (real Electron + Paged.js)', () => {
           if (i >= start && (opener.has(i) || backOpener)) expect(head(p), `opener ${i + 1}`).toBe('');
           return;
         }
-        expect(head(p).replace(/\s+/g, '').toLowerCase(), `page ${i + 1}`).toBe((i + 1) % 2 === 1 ? 'thelostking' : 'a.writer');
+        // The small-caps head uses real small-cap glyphs, which pdf.js reads back with gaps; compare loosely here
+        // and check the exact text with poppler below.
+        const got = head(p).replace(/[\s\u0000]+/g, '').toLowerCase();
+        const want = (i + 1) % 2 === 1 ? /^t.*k$/ : /^a.*w/;
+        expect(want.test(got), `page ${i + 1}: ${JSON.stringify(got)}`).toBe(true);
       });
+    }, 240_000);
+
+    it('the running heads read “A. Writer” (left) and “The Lost King” (right) to a PDF text extractor', async () => {
+      const m = await render((d) => (d.export.pdf.runningHead = 'authorTitle'));
+      const f = path.join(work, 'rh.pdf');
+      writeFileSync(f, m.pdf);
+      const first = (n: number) => spawnSync('pdftotext', ['-f', String(n), '-l', String(n), '-layout', f, '-']);
+      if (first(1).error) return; // poppler not installed
+      const verso = chapterPage(m.pages, 1) + 1; // physical page numbers are 1-based: even = left-hand
+      expect((verso + 1) % 2).toBe(0);
+      expect(first(verso + 1).stdout.toString().split('\n')[0].trim()).toBe('A. Writer');
+      expect(first(verso + 2).stdout.toString().split('\n')[0].trim()).toBe('The Lost King');
     }, 240_000);
 
     it('paragraph styles: indent shows first-line indents; gap style adds a blank line between paragraphs', async () => {

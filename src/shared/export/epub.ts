@@ -2,7 +2,11 @@ import { strToU8, unzipSync, zipSync, type Zippable } from 'fflate';
 import type { BookBuild, BuiltChapter } from './assemble';
 import { blocksHtml, chapterHeadingHtml, esc, matterPageHtml } from './html';
 import type { MatterPage } from './matter';
+import { bundledFont, embeddedFileName, FONT_FILES, fontFaceCss, fontStack } from './fonts';
 import type { ParagraphStyle } from './model';
+
+/** The files of a bundled font family, to embed. Keys are FONT_FILES names. */
+export type EpubFonts = Record<string, Uint8Array>;
 
 export interface EpubCover {
   bytes: Uint8Array;
@@ -13,23 +17,26 @@ export interface EpubCover {
 const XHTML_NS = 'xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"';
 
 /** The skill's EPUB stylesheet, with the per-book options applied. */
-export function epubCss(opts: { fontSize: number; paragraphStyle: ParagraphStyle; dropCaps: boolean }): string {
+export function epubCss(opts: { fontSize: number; paragraphStyle: ParagraphStyle; dropCaps: boolean; font?: string; embedFont?: boolean }): string {
+  const stack = fontStack(opts.font ?? 'EB Garamond');
+  const bundled = bundledFont(opts.font ?? 'EB Garamond');
+  const faces = opts.embedFont && bundled ? fontFaceCss(bundled, (f) => `fonts/${embeddedFileName(bundled, f)}`) + '\n' : '';
   const para =
     opts.paragraphStyle === 'blockGap'
       ? 'p { text-align: justify; text-indent: 0; margin: 0 0 1em 0; }'
       : opts.paragraphStyle === 'blockNoGap'
         ? 'p { text-align: justify; text-indent: 0; margin: 0; }'
         : 'p { text-align: justify; text-indent: 1.5em; margin: 0; }\np.first, p.center, p.right, p.scenebreak, p.booktitle, p.booksubtitle, p.bookauthor, p.crline, p.crpara, p.linkline { text-indent: 0; }';
-  return `h1 {
-  font-family: Garamond, "EB Garamond", serif;
+  return `${faces}h1 {
+  font-family: ${stack};
   font-size: 1.6em;
   margin-top: 1em;
   margin-bottom: 2em;
   text-align: center;
 }
-h2.sub, h3.sub, h4.sub, h5.sub, h6.sub { font-family: Garamond, "EB Garamond", serif; text-align: center; margin: 1.5em 0 1em 0; }
+h2.sub, h3.sub, h4.sub, h5.sub, h6.sub { font-family: ${stack}; text-align: center; margin: 1.5em 0 1em 0; }
 
-body, p { font-family: Garamond, "EB Garamond", serif; font-size: ${opts.fontSize}pt; }
+body, p { font-family: ${stack}; font-size: ${opts.fontSize}pt; }
 
 ${para}
 p.first { margin-top: 0; }
@@ -110,10 +117,12 @@ interface Item {
 }
 
 /** Builds the EPUB 3 package (with an NCX for older Kindle firmware). Pure: bytes in, bytes out. */
-export function buildEpub(book: BookBuild, cover?: EpubCover): Uint8Array {
+export function buildEpub(book: BookBuild, cover?: EpubCover, fonts?: EpubFonts): Uint8Array {
   const s = book.settings;
   const m = book.meta;
-  const css = epubCss({ fontSize: s.epub.fontSize, paragraphStyle: s.epub.paragraphStyle, dropCaps: s.epub.dropCaps });
+  const bundled = bundledFont(s.epub.font);
+  const embed = !!bundled && !!fonts && FONT_FILES.every((f) => fonts[f.file]);
+  const css = epubCss({ fontSize: s.epub.fontSize, paragraphStyle: s.epub.paragraphStyle, dropCaps: s.epub.dropCaps, font: s.epub.font, embedFont: embed });
   const lang = m.language;
   const files: Record<string, string> = {};
   const items: Item[] = [];
@@ -224,6 +233,9 @@ ${ncxPoints}
   meta.push(`<meta property="dcterms:modified">${esc(m.modified)}</meta>`);
   if (cover) meta.push('<meta name="cover" content="cover-image"/>');
 
+  if (embed && bundled) {
+    FONT_FILES.forEach((f, i) => items.push({ id: `font-${i + 1}`, href: `fonts/${embeddedFileName(bundled, f)}`, type: 'font/ttf' }));
+  }
   const manifest = items
     .map((i) => `<item id="${i.id}" href="${i.href}" media-type="${i.type}"${i.properties ? ` properties="${i.properties}"` : ''}/>`)
     .join('\n');
@@ -253,6 +265,7 @@ ${spine.map((id) => `<itemref idref="${id}"/>`).join('\n')}
   const zip: Zippable = { mimetype: [strToU8('application/epub+zip'), { level: 0, mtime }] };
   for (const [name, text] of Object.entries(files)) zip[name] = [strToU8(text), { level: 6, mtime }];
   if (cover) zip[`OEBPS/images/cover.${cover.ext}`] = [cover.bytes, { level: 0, mtime }];
+  if (embed && bundled && fonts) for (const f of FONT_FILES) zip[`OEBPS/fonts/${embeddedFileName(bundled, f)}`] = [fonts[f.file], { level: 6, mtime }];
   return zipSync(zip);
 }
 

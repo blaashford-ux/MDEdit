@@ -4,7 +4,7 @@ import type { DraftRecord, Prefs, Session, ThemeSource } from '../src/shared/api
 import { DraftStore } from './drafts';
 import { readWithStamp, statStamp, writeBytesAtomic, writeFileAtomic } from './files';
 import { sanitizeBookDetails } from '../src/shared/export/model';
-import { makeExportDeps } from './export/deps';
+import { makeExportDeps, pdfResources } from './export/deps';
 import { planExport, runExport } from './export/run';
 import { fileFromArgv } from './launch';
 import { runSmokeTest } from './smokeTest';
@@ -15,6 +15,8 @@ import { promises as fsp } from 'node:fs';
 import { installMenu } from './menu';
 import { confirmDelete, confirmOverwrite, confirmRecover, confirmUnsaved } from './prompts';
 import { scanFolder } from './scan';
+import { bundledFont } from '../src/shared/export/fonts';
+import { listInstalledFonts } from './fonts';
 import { sanitizeAppDefaults } from '../src/shared/appDefaults';
 import { existingFolder, SettingsStore, type WindowState } from './settings';
 
@@ -151,6 +153,13 @@ function registerIpc(): void {
     if (exportedFiles.has(path.resolve(p))) shell.showItemInFolder(path.resolve(p));
   });
   ipcMain.handle('export:open', (_e, p: string) => (exportedFiles.has(path.resolve(p)) ? shell.openPath(path.resolve(p)) : Promise.resolve('Not an exported file')));
+  ipcMain.handle('fonts:installed', () => listInstalledFonts());
+  ipcMain.handle('fonts:preview', async (_e, family: string) => {
+    const b = bundledFont(String(family));
+    if (!b) return null;
+    const data = await fsp.readFile(path.join(pdfResources().fontsDir, b.slug, 'Regular.ttf')).catch(() => null);
+    return data ? `data:font/ttf;base64,${data.toString('base64')}` : null;
+  });
   ipcMain.handle('export:pickCover', async (e) => {
     const win = winOf(e);
     const opts = { properties: ['openFile' as const], filters: [{ name: 'Images', extensions: ['jpg', 'jpeg', 'png'] }] };
@@ -333,6 +342,10 @@ if (!firstInstance) {
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
     });
+  }).catch((e) => {
+    // Never fail silently: a startup error would otherwise leave a running process with no window.
+    console.error('MDEdit failed to start:', e);
+    app.exit(1);
   });
 }
 

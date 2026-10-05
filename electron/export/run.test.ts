@@ -215,3 +215,74 @@ describe('runExport with a chapter heading level setting', () => {
     expect(r.warnings.join(' ')).not.toMatch(/Heading 2/);
   });
 });
+
+describe('runExport fonts', () => {
+  const only = (kind: 'epub' | 'pdf') => (d: BookDetails) => void (d.export.outputs = { epub: kind === 'epub', pdf: kind === 'pdf', docx: false });
+  const files4 = () => ({ 'Regular.ttf': new Uint8Array([1]), 'Italic.ttf': new Uint8Array([2]), 'Bold.ttf': new Uint8Array([3]), 'BoldItalic.ttf': new Uint8Array([4]) });
+
+  it('embeds a bundled family in the EPUB and says nothing about it', async () => {
+    const { deps, files } = setup((d) => {
+      only('epub')(d);
+      d.export.epub.font = 'Libre Baskerville';
+    });
+    let asked = '';
+    deps.loadBundledFont = async (f) => ((asked = f), files4());
+    const r = await runExport(MD, deps);
+    expect(r.errors).toEqual([]);
+    expect(asked).toBe('Libre Baskerville');
+    expect(r.warnings.join(' ')).not.toMatch(/font/i);
+    const zip = unzipSync(files.get(r.outputs[0].path) as Uint8Array);
+    expect(Object.keys(zip).filter((n) => n.startsWith('OEBPS/fonts/'))).toHaveLength(4);
+  });
+
+  it('a system font in the EPUB is named but not embedded, with a warning', async () => {
+    const { deps, files } = setup((d) => {
+      only('epub')(d);
+      d.export.epub.font = 'Georgia';
+    });
+    deps.loadBundledFont = async () => files4();
+    const r = await runExport(MD, deps);
+    expect(r.warnings.join(' ')).toMatch(/“Georgia” is installed on your computer but isn’t embedded in the EPUB/);
+    expect(Object.keys(unzipSync(files.get(r.outputs[0].path) as Uint8Array)).some((n) => n.startsWith('OEBPS/fonts/'))).toBe(false);
+  });
+
+  it('a PDF font that is not installed falls back to EB Garamond with a warning', async () => {
+    const { deps } = setup((d) => {
+      only('pdf')(d);
+      d.export.pdf.font = 'Papyrus';
+    });
+    deps.installedFonts = async () => ['Georgia', 'Times New Roman'];
+    let used = '';
+    deps.buildPdf = async (book) => ((used = book.settings.pdf.font), { bytes: new Uint8Array([37]), pages: 30, gutter: 0.375, warnings: [] });
+    const r = await runExport(MD, deps);
+    expect(used).toBe('EB Garamond');
+    expect(r.warnings.join(' ')).toMatch(/“Papyrus” isn’t installed on this computer/);
+  });
+
+  it('an installed PDF font is used as chosen (case-insensitively); an unknown font list never blocks', async () => {
+    for (const list of [['georgia'], []]) {
+      const { deps } = setup((d) => {
+        only('pdf')(d);
+        d.export.pdf.font = 'Georgia';
+      });
+      deps.installedFonts = async () => list;
+      let used = '';
+      deps.buildPdf = async (book) => ((used = book.settings.pdf.font), { bytes: new Uint8Array([37]), pages: 30, gutter: 0.375, warnings: [] });
+      const r = await runExport(MD, deps);
+      expect(used).toBe('Georgia');
+      expect(r.warnings.join(' ')).not.toMatch(/isn’t installed/);
+    }
+  });
+
+  it('a bundled PDF font never needs the installed list', async () => {
+    const { deps } = setup((d) => {
+      only('pdf')(d);
+      d.export.pdf.font = 'Crimson Pro';
+    });
+    deps.installedFonts = async () => ['Georgia'];
+    let used = '';
+    deps.buildPdf = async (book) => ((used = book.settings.pdf.font), { bytes: new Uint8Array([37]), pages: 30, gutter: 0.375, warnings: [] });
+    await runExport(MD, deps);
+    expect(used).toBe('Crimson Pro');
+  });
+});

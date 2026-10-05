@@ -53,6 +53,11 @@ describe('printCss options', () => {
   ] as const)('paragraph style %s', (style, css) => {
     expect(printCss(book((d) => (d.export.pdf.paragraphStyle = style)), layout())).toContain(css);
   });
+  it('uses the chosen font family with a serif fallback', () => {
+    const css = printCss(book((d) => (d.export.pdf.font = 'Palatino Linotype')), layout());
+    expect(css).toContain('font-family: "Palatino Linotype", serif;');
+    expect(css).not.toContain('EB Garamond');
+  });
   it('Garamond at the chosen size, justified, unhyphenated', () => {
     const css = printCss(book((d) => (d.export.pdf.fontSize = 10.5)), layout());
     expect(css).toContain('font-size: 10.5pt');

@@ -159,3 +159,9 @@ Defaults I'm assuming unless you say otherwise (each is a one-line change):
 - **Settings template for new books.** File → Settings → Title & copyright / Front matter / Back matter / Export use the same forms as Book Details
   and Export. A file marked for export for the first time starts from that template (title from the file name; a blank copyright year means the
   current year). Existing books keep their own details. Stored in the app's `settings.json` (`appDefaults`), not beside your manuscripts.
+- **Fonts.** EPUB and print PDF each have a Font dropdown: *Included with MDEdit* (EB Garamond — the default — Crimson Pro and Libre Baskerville, all SIL OFL 1.1,
+  shipped as full static TTFs in `assets/fonts/<family>/`), then *Installed on this computer* (listed with the `font-list` package, cached per session).
+  A bundled font is embedded in the EPUB (four faces, `font/ttf`, epubcheck-clean) and in the PDF. An installed font is embedded in the PDF by Chromium
+  but only *named* in the EPUB, because we can't know that its licence allows redistribution (a warning says so). If a book's saved PDF font isn't installed
+  on the machine exporting it, the export falls back to EB Garamond with a warning. DOCX still names Garamond (Word substitutes if it is missing).
+  Defaults for new books are set in Settings → Export.

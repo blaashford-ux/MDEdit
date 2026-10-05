@@ -1,7 +1,8 @@
 import type { ExportKind, ExportOutput, ExportPlan, ExportProgress, ExportResult } from '../../src/shared/api';
 import { assembleBook, type BookBuild } from '../../src/shared/export/assemble';
 import { buildDocx } from '../../src/shared/export/docx';
-import { buildEpub, verifyEpub, type EpubCover } from '../../src/shared/export/epub';
+import { buildEpub, verifyEpub, type EpubCover, type EpubFonts } from '../../src/shared/export/epub';
+import { bundledFont, DEFAULT_FONT } from '../../src/shared/export/fonts';
 import type { BookDetails } from '../../src/shared/export/model';
 import { outputFileName, resolveOutputDir } from '../../src/shared/export/outputs';
 import { joinPath } from '../../src/shared/paths';
@@ -19,6 +20,10 @@ export interface ExportDeps {
     onProgress: (message: string) => void,
     signal?: AbortSignal
   ): Promise<{ bytes: Uint8Array; pages: number; gutter: number; warnings: string[] }>;
+  /** The files of a bundled font family (keyed by FONT_FILES names), for embedding in the EPUB. */
+  loadBundledFont?(family: string): Promise<EpubFonts | null>;
+  /** Families installed on this computer; empty or absent when that can't be known. */
+  installedFonts?(): Promise<string[]>;
   /** The heading level that starts a chapter (default 1). */
   chapterLevel?(): number;
   now?(): Date;
@@ -76,6 +81,34 @@ export async function runExport(
   const book = assembled.build;
   result.warnings.push(...book.warnings);
 
+  // Fonts: a family the profile names but this computer no longer has falls back to the default, loudly.
+  let installed: string[] | null = null;
+  const isInstalled = async (family: string) => {
+    installed ??= (await deps.installedFonts?.().catch(() => [])) ?? [];
+    return installed.length === 0 || installed.some((f) => f.toLowerCase() === family.toLowerCase());
+  };
+  if (wanted.includes('pdf')) {
+    const family = book.settings.pdf.font;
+    if (!bundledFont(family) && !(await isInstalled(family))) {
+      result.warnings.push(`The font “${family}” isn’t installed on this computer, so the print PDF used ${DEFAULT_FONT} instead.`);
+      book.settings = { ...book.settings, pdf: { ...book.settings.pdf, font: DEFAULT_FONT } };
+    }
+  }
+  let epubFonts: EpubFonts | undefined;
+  if (wanted.includes('epub')) {
+    const family = book.settings.epub.font;
+    if (bundledFont(family)) {
+      epubFonts = (await deps.loadBundledFont?.(family).catch(() => null)) ?? undefined;
+      if (!epubFonts) {
+        result.warnings.push(`The font files for “${family}” couldn’t be read, so the EPUB doesn’t embed them.`);
+      }
+    } else {
+      result.warnings.push(
+        `“${family}” is installed on your computer but isn’t embedded in the EPUB (its licence may not allow it), so e-readers will use their own font unless they have it. Pick one of the bundled fonts to embed it.`
+      );
+    }
+  }
+
   const dir = resolveOutputDir(file, details.export.outputDir);
   try {
     await deps.mkdirp(dir);
@@ -107,7 +140,7 @@ export async function runExport(
             out.warnings.push(`The cover image couldn’t be read (${coverPath}), so it was left out.`);
           }
         }
-        bytes = buildEpub(book, cover);
+        bytes = buildEpub(book, cover, epubFonts);
         const problems = verifyEpub(bytes);
         if (problems.length) throw new Error(`the EPUB failed its self-check: ${problems.join('; ')}`);
       } else if (kind === 'pdf') {

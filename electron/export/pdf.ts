@@ -3,13 +3,14 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { BookBuild } from '../../src/shared/export/assemble';
+import { bundledFont, FONT_FILES, fontFaceCss } from '../../src/shared/export/fonts';
 import { layoutWithGutter } from '../../src/shared/export/gutter';
 import { buildPrintHtml, postLayoutConfig, type PrintLayout } from '../../src/shared/export/printHtml';
 import { estimatePages, KDP_MAX_PAGES, KDP_MIN_PAGES, trimByKey } from '../../src/shared/export/trim';
 
 /** Where the print pipeline finds its bundled files. */
 export interface PdfResources {
-  /** Folder holding the EB Garamond .woff2 files. */
+  /** Folder holding one sub-folder of .ttf files per bundled font family. */
   fontsDir: string;
   /** Path to Paged.js's paged.polyfill.js. */
   pagedJsPath: string;
@@ -30,23 +31,16 @@ export interface PdfResult {
   warnings: string[];
 }
 
-const LATIN = 'U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD';
-const LATIN_EXT = 'U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF';
-
-/** @font-face rules with the font files inlined, so the page needs no file access. */
-export async function loadFontCss(fontsDir: string): Promise<string> {
-  const faces: string[] = [];
-  for (const [subset, range] of [['latin', LATIN], ['latin-ext', LATIN_EXT]] as const) {
-    for (const weight of [400, 700]) {
-      for (const style of ['normal', 'italic']) {
-        const data = await fs.readFile(path.join(fontsDir, `eb-garamond-${subset}-${weight}-${style}.woff2`));
-        faces.push(
-          `@font-face { font-family: "EB Garamond"; font-style: ${style}; font-weight: ${weight}; font-display: block; src: url(data:font/woff2;base64,${data.toString('base64')}) format("woff2"); unicode-range: ${range}; }`
-        );
-      }
-    }
-  }
-  return faces.join('\n');
+/**
+ * @font-face rules with the font files inlined, so the page needs no file access. Only the bundled
+ * families need this; any other family is an installed font that Chromium finds by name (and embeds).
+ */
+export async function loadFontCss(fontsDir: string, family: string): Promise<string> {
+  const bundled = bundledFont(family);
+  if (!bundled) return '';
+  const data = new Map<string, string>();
+  for (const f of FONT_FILES) data.set(f.file, (await fs.readFile(path.join(fontsDir, bundled.slug, f.file))).toString('base64'));
+  return fontFaceCss(bundled, (f) => `data:font/ttf;base64,${data.get(f.file)}`);
 }
 
 interface Rendered {
@@ -126,7 +120,7 @@ export async function buildPrintPdf(
   const s = book.settings.pdf;
   const trim = trimByKey(s.trim);
   onProgress({ stage: 'preparing' });
-  const [fontCss, paged] = await Promise.all([loadFontCss(resources.fontsDir), fs.readFile(resources.pagedJsPath, 'utf8')]);
+  const [fontCss, paged] = await Promise.all([loadFontCss(resources.fontsDir, s.font), fs.readFile(resources.pagedJsPath, 'utf8')]);
   const scripts = `<script>window.PagedConfig = { auto: false };</script>\n<script>${paged.replace(/<\/script/gi, '<\\/script')}</script>`;
 
   const estimate = estimatePages({

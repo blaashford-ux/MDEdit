@@ -1,7 +1,9 @@
 import { app } from 'electron';
 import { promises as fsp } from 'node:fs';
 import path from 'node:path';
+import { bundledFont, FONT_FILES } from '../../src/shared/export/fonts';
 import { writeBytesAtomic } from '../files';
+import { listInstalledFonts } from '../fonts';
 import { buildPrintPdf, type PdfResources } from './pdf';
 import type { ExportDeps } from './run';
 import { defaultAppDefaults, type AppDefaults } from '../../src/shared/appDefaults';
@@ -26,6 +28,14 @@ export function makeExportDeps(resources: PdfResources = pdfResources(), getDefa
       return new Uint8Array(await fsp.readFile(p));
     },
     writeBytes: writeBytesAtomic,
+    loadBundledFont: async (family) => {
+      const b = bundledFont(family);
+      if (!b) return null;
+      const out: Record<string, Uint8Array> = {};
+      for (const f of FONT_FILES) out[f.file] = new Uint8Array(await fsp.readFile(path.join(resources.fontsDir, b.slug, f.file)));
+      return out;
+    },
+    installedFonts: listInstalledFonts,
     mkdirp: (d) => fsp.mkdir(d, { recursive: true }).then(() => undefined),
     exists: (p) => fsp.lstat(p).then(() => true, () => false),
     loadDetails: async (p) => (await loadDetails(p, getDefaults())).details,

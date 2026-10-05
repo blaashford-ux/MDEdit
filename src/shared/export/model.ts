@@ -3,6 +3,8 @@
  * last-used export variables. Stored as JSON beside the manuscript (see sidecar.ts).
  */
 
+import { cleanFamily, DEFAULT_FONT } from './fonts';
+
 export type ParagraphStyle = 'blockGap' | 'blockNoGap' | 'indent';
 export type ChapterHeadingStyle = 'verbatim' | 'numberWord';
 export type RunningHead = 'none' | 'author' | 'title' | 'authorTitle';
@@ -57,6 +59,8 @@ export interface ExportSettings {
     dropCaps: boolean;
     paragraphStyle: ParagraphStyle;
     fontSize: number;
+    /** Font family. A bundled family is embedded in the EPUB; any other is only named. */
+    font: string;
   };
   pdf: {
     trim: string;
@@ -70,6 +74,8 @@ export interface ExportSettings {
     runningHead: RunningHead;
     fontSize: number;
     paragraphStyle: ParagraphStyle;
+    /** Font family: bundled, or any font installed on this computer. Embedded in the PDF either way. */
+    font: string;
   };
   docx: {
     trim: string;
@@ -106,7 +112,7 @@ export function defaultExportSettings(): ExportSettings {
     chapterHeading: 'verbatim',
     smartQuotes: 'auto',
     sceneBreak: '•  •  •',
-    epub: { language: 'en', description: '', coverImage: '', dropCaps: true, paragraphStyle: 'blockGap', fontSize: 11 },
+    epub: { language: 'en', description: '', coverImage: '', dropCaps: true, paragraphStyle: 'blockGap', fontSize: 11, font: DEFAULT_FONT },
     pdf: {
       trim: DEFAULT_TRIM,
       gutter: 'auto',
@@ -117,7 +123,8 @@ export function defaultExportSettings(): ExportSettings {
       pageNumbers: true,
       runningHead: 'none',
       fontSize: 11,
-      paragraphStyle: 'blockNoGap'
+      paragraphStyle: 'blockNoGap',
+      font: DEFAULT_FONT
     },
     docx: { trim: DEFAULT_TRIM, paragraphStyle: 'blockGap', fontSize: 11 }
   };
@@ -248,7 +255,8 @@ export function sanitizeBookDetails(raw: unknown, seed: { title?: string; author
         coverImage: str(ep.coverImage, '', 2000),
         dropCaps: bool(ep.dropCaps, e.epub.dropCaps),
         paragraphStyle: oneOf(ep.paragraphStyle, PSTYLES, e.epub.paragraphStyle),
-        fontSize: num(ep.fontSize, e.epub.fontSize, 8, 20)
+        fontSize: num(ep.fontSize, e.epub.fontSize, 8, 20),
+        font: cleanFamily(ep.font, e.epub.font)
       },
       pdf: {
         trim: str(pd.trim, e.pdf.trim, 20) || e.pdf.trim,
@@ -260,7 +268,8 @@ export function sanitizeBookDetails(raw: unknown, seed: { title?: string; author
         pageNumbers: bool(pd.pageNumbers, e.pdf.pageNumbers),
         runningHead: oneOf(pd.runningHead, ['none', 'author', 'title', 'authorTitle'] as const, e.pdf.runningHead),
         fontSize: num(pd.fontSize, e.pdf.fontSize, 8, 16),
-        paragraphStyle: oneOf(pd.paragraphStyle, PSTYLES, e.pdf.paragraphStyle)
+        paragraphStyle: oneOf(pd.paragraphStyle, PSTYLES, e.pdf.paragraphStyle),
+        font: cleanFamily(pd.font, e.pdf.font)
       },
       docx: {
         trim: str(dx.trim, e.docx.trim, 20) || e.docx.trim,

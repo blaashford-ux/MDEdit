@@ -1,9 +1,9 @@
 import type { BookBuild } from './assemble';
+import { fontStack } from './fonts';
 import { blocksHtml, chapterHeadingHtml, esc, matterPageHtml } from './html';
 import type { ParagraphStyle } from './model';
 import { trimByKey } from './trim';
 
-export const PRINT_FONT_FAMILY = '"EB Garamond", Garamond, serif';
 
 export interface PrintLayout {
   trimKey: string;
@@ -59,10 +59,11 @@ export function pageCss(book: BookBuild, layout: PrintLayout): string {
 export function printCss(book: BookBuild, layout: PrintLayout): string {
   const s = book.settings.pdf;
   const breakBefore = s.rectoStarts ? 'right' : 'page';
+  const stack = fontStack(s.font);
   return `${pageCss(book, layout)}
 
-html { font-family: ${PRINT_FONT_FAMILY}; font-size: ${s.fontSize}pt; }
-body { margin: 0; font-family: ${PRINT_FONT_FAMILY}; font-size: ${s.fontSize}pt; line-height: 1.25; color: #000; hyphens: none; -webkit-hyphens: none; }
+html { font-family: ${stack}; font-size: ${s.fontSize}pt; }
+body { margin: 0; font-family: ${stack}; font-size: ${s.fontSize}pt; line-height: 1.25; color: #000; hyphens: none; -webkit-hyphens: none; }
 p { text-align: justify; orphans: 2; widows: 2; }
 ${paragraphCss(s.paragraphStyle)}
 em { font-style: italic; } strong { font-weight: 700; }

@@ -132,6 +132,10 @@ export interface MdeditApi {
   setMarked(file: string, marked: boolean): Promise<{ backedUp: boolean }>;
   /** Attaches an orphaned export-settings file to a manuscript in the same folder. */
   relinkSidecar(sidecar: string, markdownFile: string): Promise<void>;
+  /** Font families installed on this computer (empty if the OS can't list them). */
+  listInstalledFonts(): Promise<string[]>;
+  /** The regular face of a bundled font as a data: URL, so the form can preview it. */
+  bundledFontPreview(family: string): Promise<string | null>;
   /** Native image picker for the EPUB cover. */
   pickCoverImage(): Promise<string | null>;
 

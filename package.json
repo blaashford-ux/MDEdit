@@ -50,7 +50,7 @@
       "installerHeaderIcon": "build/icon.ico",
       "deleteAppDataOnUninstall": false
     },
-    "copyright": "Copyright \u00a9 2026 blaashford-ux",
+    "copyright": "Copyright © 2026 blaashford-ux",
     "fileAssociations": [
       {
         "ext": [
@@ -87,6 +87,7 @@
     "electron-builder": "^25.0.0",
     "esbuild": "^0.21.5",
     "fflate": "^0.8.3",
+    "font-list": "^2.1.0",
     "pagedjs": "^0.4.3",
     "pdfjs-dist": "^6.4.299",
     "react": "^18.3.0",
@@ -98,7 +99,6 @@
     "vitest": "^2.1.0",
     "wait-on": "^8.0.0"
   },
-  "dependencies": {},
   "author": "blaashford-ux",
   "homepage": "https://github.com/blaashford-ux/MDEdit",
   "private": true

@@ -2,7 +2,10 @@ import { DOMParser } from '@xmldom/xmldom';
 import { strFromU8, unzipSync } from 'fflate';
 import { describe, expect, it } from 'vitest';
 import { assembleBook, type BookBuild } from './assemble';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { buildEpub, epubCss, verifyEpub } from './epub';
+import { bundledFont, embeddedFileName, FONT_FILES } from './fonts';
 import { defaultBookDetails, type BookDetails } from './model';
 import { epubcheckAvailable, runEpubcheck } from './testing/epubcheck';
 
@@ -267,6 +270,14 @@ describe('verifyEpub catches broken books', () => {
 });
 
 describe.skipIf(!epubcheckAvailable)('epubcheck (the real validator)', () => {
+  it.each(['EB Garamond', 'Crimson Pro', 'Libre Baskerville'])('accepts a book that embeds the real %s font files', (family) => {
+    const b = bundledFont(family)!;
+    const fonts = Object.fromEntries(FONT_FILES.map((f) => [f.file, new Uint8Array(readFileSync(path.resolve(__dirname, '../../../assets/fonts', b.slug, f.file)))]));
+    const r = runEpubcheck(buildEpub(book((d) => (d.export.epub.font = family)), undefined, fonts));
+    expect(r.output).toContain('No errors or warnings detected');
+    expect(r.ok).toBe(true);
+  }, 120_000);
+
   it('accepts a fully featured book with zero errors or warnings', () => {
     const r = runEpubcheck(buildEpub(book()));
     expect(r.output).toContain('No errors or warnings detected');
@@ -281,5 +292,44 @@ describe.skipIf(!epubcheckAvailable)('epubcheck (the real validator)', () => {
     const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
     const withCover = runEpubcheck(buildEpub(book(), { bytes: new Uint8Array(png), ext: 'png' }));
     expect(withCover.output).toContain('No errors or warnings detected');
+  });
+});
+
+describe('embedded fonts', () => {
+  const fakeFonts = () => Object.fromEntries(FONT_FILES.map((f) => [f.file, new Uint8Array([0, 1, 0, 0, f.weight & 255])]));
+
+  it('a bundled family is embedded: four faces, manifest items, css @font-face, and still passes the self-check', () => {
+    const b = book((d) => (d.export.epub.font = 'Crimson Pro'));
+    const bytes = buildEpub(b, undefined, fakeFonts());
+    const files = unzip(bytes);
+    const crimson = bundledFont('Crimson Pro')!;
+    for (const f of FONT_FILES) expect(files[`OEBPS/fonts/${embeddedFileName(crimson, f)}`]).toBeTruthy();
+    const css = read(files, 'OEBPS/stylesheet.css');
+    expect(css.match(/@font-face/g)).toHaveLength(4);
+    expect(css).toContain('src: url("fonts/crimson-pro-Regular.ttf")');
+    expect(css).toContain('body, p { font-family: "Crimson Pro", serif;');
+    const opf = read(files, 'OEBPS/content.opf');
+    expect(opf.match(/media-type="font\/ttf"/g)).toHaveLength(4);
+    expect(verifyEpub(bytes)).toEqual([]);
+  });
+
+  it('the default family is embedded too, keeping the Garamond fallback', () => {
+    const files = unzip(buildEpub(book(), undefined, fakeFonts()));
+    expect(read(files, 'OEBPS/stylesheet.css')).toContain('font-family: "EB Garamond", Garamond, serif;');
+    expect(Object.keys(files).filter((n) => n.startsWith('OEBPS/fonts/'))).toHaveLength(4);
+  });
+
+  it('a system font is only named, never embedded', () => {
+    const files = unzip(buildEpub(book((d) => (d.export.epub.font = 'Georgia')), undefined, fakeFonts()));
+    expect(Object.keys(files).some((n) => n.startsWith('OEBPS/fonts/'))).toBe(false);
+    const css = read(files, 'OEBPS/stylesheet.css');
+    expect(css).not.toContain('@font-face');
+    expect(css).toContain('font-family: "Georgia", serif;');
+  });
+
+  it('no font files supplied: nothing is embedded and the book is still valid', () => {
+    const bytes = buildEpub(book());
+    expect(Object.keys(unzip(bytes)).some((n) => n.startsWith('OEBPS/fonts/'))).toBe(false);
+    expect(verifyEpub(bytes)).toEqual([]);
   });
 });
