@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { joinChapters, splitChapters, updateChapter } from './chapters';
+import { deleteChapter, insertChapter, joinChapters, moveChapter, splitChapters, updateChapter } from './chapters';
 
 const titles = (s: string) => splitChapters(s).chapters.map((c) => (c.isPreamble ? '(pre)' : c.title));
 
@@ -120,5 +120,70 @@ describe('updateChapter', () => {
 
   it('throws on a bad index', () => {
     expect(() => updateChapter(splitChapters('# A\n'), 5, 'x')).toThrow(RangeError);
+  });
+});
+
+describe('chapter structure edits', () => {
+  const T = (d: { chapters: { title: string; isPreamble: boolean }[] }) => d.chapters.map((c) => (c.isPreamble ? '(pre)' : c.title));
+
+  it('moves a chapter down and up, keeping others byte-identical', () => {
+    const d = splitChapters('# A\na\n\n# B\nb\n\n# C\nc\n');
+    const down = moveChapter(d, 0, 1)!;
+    expect(joinChapters(down.doc)).toBe('# B\nb\n\n# A\na\n\n# C\nc\n');
+    expect(down.index).toBe(1);
+    const up = moveChapter(down.doc, 1, -1)!;
+    expect(joinChapters(up.doc)).toBe('# A\na\n\n# B\nb\n\n# C\nc\n');
+  });
+
+  it('moving the last chapter (no final newline) up does not glue headings and keeps "no final newline"', () => {
+    const d = splitChapters('# A\na\n# B\nb');
+    const r = moveChapter(d, 1, -1)!;
+    expect(joinChapters(r.doc)).toBe('# B\nb\n# A\na');
+    expect(T(r.doc)).toEqual(['B', 'A']);
+    expect(r.index).toBe(0);
+  });
+
+  it('keeps CRLF', () => {
+    const d = splitChapters('# A\r\na\r\n# B\r\nb');
+    expect(joinChapters(moveChapter(d, 1, -1)!.doc)).toBe('# B\r\nb\r\n# A\r\na');
+  });
+
+  it('refuses to move the preamble, past the preamble, or off the ends', () => {
+    const d = splitChapters('intro\n# A\na\n# B\nb\n');
+    expect(moveChapter(d, 0, 1)).toBeNull();
+    expect(moveChapter(d, 1, -1)).toBeNull();
+    expect(moveChapter(d, 2, 1)).toBeNull();
+    expect(joinChapters(moveChapter(d, 1, 1)!.doc)).toBe('intro\n# B\nb\n# A\na\n');
+  });
+
+  it('inserts a chapter after another, including at the end of a file with no final newline', () => {
+    const d = splitChapters('# A\na\n# B\nb');
+    const mid = insertChapter(d, 0, 'New');
+    expect(joinChapters(mid.doc)).toBe('# A\na\n# New\n\n# B\nb');
+    expect(T(mid.doc)).toEqual(['A', 'New', 'B']);
+    expect(mid.index).toBe(1);
+    const end = insertChapter(d, 1, 'Last');
+    expect(joinChapters(end.doc)).toBe('# A\na\n# B\nb\n# Last');
+    expect(end.index).toBe(2);
+  });
+
+  it('inserts into an empty file', () => {
+    const r = insertChapter(splitChapters(''), 0, 'First');
+    expect(T(r.doc)).toEqual(['First']);
+    expect(r.index).toBe(0);
+  });
+
+  it('deletes a chapter and keeps the rest intact', () => {
+    const d = splitChapters('pre\n# A\na\n\n# B\nb\n\n# C\nc');
+    expect(joinChapters(deleteChapter(d, 2)!)).toBe('pre\n# A\na\n\n# C\nc');
+    expect(joinChapters(deleteChapter(d, 3)!)).toBe('pre\n# A\na\n\n# B\nb');
+    expect(deleteChapter(d, 9)).toBeNull();
+  });
+
+  it('every edit result re-splits to what it claims', () => {
+    const d = splitChapters('# A\n```\n# x\n```\n# B\nb\n');
+    const r = moveChapter(d, 1, -1)!;
+    expect(T(r.doc)).toEqual(['B', 'A']);
+    expect(joinChapters(r.doc)).toBe('# B\nb\n# A\n```\n# x\n```\n');
   });
 });

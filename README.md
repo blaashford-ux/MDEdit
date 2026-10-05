@@ -19,4 +19,25 @@ npm run dist      # Windows installer (run on Windows / CI)
 - [x] External-change detection (auto-reload when clean, conflict banner when dirty, overwrite check on save)
 - [x] Reopens the last folder on startup
 - [x] Change Folder and Refresh (buttons, F5, menu); custom menu without Reload
-- [ ] More polish (see below) and packaging checks
+- [x] Tabs: one per open file, swapping never prompts, closing a tab with unsaved edits does
+- [x] Remembers folder, open tabs, expanded folders, sidebar width, window size/position and theme
+- [x] Window title and status bar (chapter n of m, word count, saved state, line endings)
+- [x] Dark mode (follows Windows; View > Theme to override)
+- [x] Chapter navigation (Ctrl+PgUp/PgDn), word counts in the tree, Source/Visual toggle per tab
+- [x] Tree: arrow-key navigation, file filter (Ctrl+P), resizable sidebar
+- [x] New file, rename, delete (Recycle Bin), show in Explorer; new/move/delete chapter from the sidebar
+- [x] Autosaved drafts: unsaved edits survive a crash and are offered back on next start
+- [ ] Packaging: app icon, single-instance, open-with, code signing
+
+## Shortcuts
+| Key | Action |
+|---|---|
+| Ctrl+S | Save |
+| Ctrl+O / Ctrl+N | Change folder / New file |
+| Ctrl+W | Close tab |
+| Ctrl+Tab, Ctrl+Shift+Tab | Next / previous tab |
+| Ctrl+PgDn, Ctrl+PgUp | Next / previous chapter |
+| Ctrl+Shift+M | Toggle Source / Visual |
+| Ctrl+P | Filter files |
+| F5 | Refresh |
+| F2 / Del / Alt+Up / Alt+Down | Rename / delete / move chapter (in the tree) |

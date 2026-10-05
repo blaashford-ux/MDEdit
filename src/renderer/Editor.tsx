@@ -1,11 +1,18 @@
 import { Crepe, CrepeFeature } from '@milkdown/crepe';
+import { replaceAll } from '@milkdown/kit/utils';
 import { useEffect, useRef } from 'react';
 import '@milkdown/crepe/theme/common/style.css';
 import '@milkdown/crepe/theme/classic.css';
+import './milkdownDark';
 
 interface Props {
-  /** Markdown to load. Read once on mount: remount (via `key`) to load a different chapter. */
+  /** The chapter as it is on disk. Read once on mount: remount (via `key`) to load another. */
   initial: string;
+  /**
+   * Unsaved text to put back on top of `initial` when the editor mounts (switching from source
+   * mode, crash recovery). Because it is applied after `initial`, it counts as an edit.
+   */
+  restore: string | null;
   /**
    * Called when the user's edits change the Markdown. Receives null when the content is
    * back to the saved state, so merely opening a chapter is never "dirty" even though
@@ -19,18 +26,18 @@ interface Props {
   saved: { version: number; markdown: string } | null;
 }
 
-export function Editor({ initial, onChange, saved }: Props) {
+export function Editor({ initial, restore, onChange, saved }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const crepeRef = useRef<Crepe | null>(null);
   const baseline = useRef<string | null>(null);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
-  const initialRef = useRef(initial);
+  const mountProps = useRef({ initial, restore });
 
   useEffect(() => {
     const crepe = new Crepe({
       root: host.current,
-      defaultValue: initialRef.current,
+      defaultValue: mountProps.current.initial,
       features: {
         [CrepeFeature.AI]: false,
         [CrepeFeature.ImageBlock]: false,
@@ -52,6 +59,8 @@ export function Editor({ initial, onChange, saved }: Props) {
       if (disposed) return;
       crepeRef.current = crepe;
       if (baseline.current === null) baseline.current = crepe.getMarkdown();
+      const { restore: draft } = mountProps.current;
+      if (draft !== null) crepe.editor.action(replaceAll(draft));
     });
 
     return () => {

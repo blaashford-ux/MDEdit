@@ -34,3 +34,37 @@ export async function confirmOverwrite(win: BrowserWindow | null, fileName: stri
   });
   return response === 0;
 }
+
+export async function confirmDelete(
+  win: BrowserWindow | null,
+  name: string,
+  kind: 'file' | 'folder' | 'chapter',
+  hasUnsaved: boolean
+): Promise<boolean> {
+  const where = kind === 'chapter' ? 'This removes the chapter and its text from the file.' : 'It will be moved to the Recycle Bin.';
+  const response = await show(win, {
+    type: 'warning',
+    title: 'MDEdit',
+    message: `Delete the ${kind} "${name}"?`,
+    detail: hasUnsaved ? `${where} Unsaved edits to it will be lost.` : where,
+    buttons: ['Delete', 'Cancel'],
+    defaultId: 1,
+    cancelId: 1,
+    noLink: true
+  });
+  return response === 0;
+}
+
+export async function confirmRecover(win: BrowserWindow | null, fileName: string): Promise<boolean> {
+  const response = await show(win, {
+    type: 'question',
+    title: 'MDEdit',
+    message: `Recover unsaved changes to ${fileName}?`,
+    detail: 'MDEdit closed unexpectedly last time. These edits were autosaved but never written to the file.',
+    buttons: ['Recover', 'Discard'],
+    defaultId: 0,
+    cancelId: 1,
+    noLink: true
+  });
+  return response === 0;
+}

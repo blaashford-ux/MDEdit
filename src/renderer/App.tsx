@@ -1,353 +1,311 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import type { DirNode, FileStamp } from '../shared/api';
-import {
-  chapterBody,
-  joinChapters,
-  splitChapters,
-  updateChapter,
-  type MarkdownDoc
-} from '../shared/chapters';
-import { flattenPaths } from '../shared/tree';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { MenuAction } from '../shared/api';
+import { basename, dirname, validateName } from '../shared/paths';
+import { countWords } from '../shared/words';
+import { ContextMenu, type MenuItem } from './ContextMenu';
 import { Editor } from './Editor';
-import { guardLeave } from './leaveGuard';
-import { chapterLabel, Tree, type Selection } from './Tree';
+import { PromptDialog, type PromptSpec } from './PromptDialog';
+import { SourceEditor } from './SourceEditor';
+import { StatusBar } from './StatusBar';
+import { Tabs } from './Tabs';
+import { Tree } from './Tree';
+import { buildRows, chapterKey, chapterLabel, type Row } from './treeRows';
+import { useWorkspace } from './useWorkspace';
+import { Workspace } from './workspace';
 import './styles.css';
 
-type Conflict =
-  | { kind: 'changed'; file: string; text: string; stamp: FileStamp }
-  | { kind: 'missing'; file: string };
-
 const POLL_MS = 2000;
-const baseName = (p: string) => p.split(/[\\/]/).pop() ?? p;
-const sameStamp = (a: FileStamp, b: FileStamp) => a.mtimeMs === b.mtimeMs && a.size === b.size;
 
 export function App() {
-  const [root, setRoot] = useState<DirNode | null>(null);
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [docs, setDocs] = useState<Map<string, MarkdownDoc>>(new Map());
-  const [selection, setSelection] = useState<Selection | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [conflict, setConflict] = useState<Conflict | null>(null);
-  // Unsaved editor output for the open chapter, or null when it is unchanged.
-  const [draft, setDraft] = useState<string | null>(null);
-  const [saved, setSaved] = useState<{ version: number; markdown: string } | null>(null);
-  // Bumped to remount the editor when the open chapter's content is replaced from outside.
-  const [reloadKey, setReloadKey] = useState(0);
-  const [refreshing, setRefreshing] = useState(false);
+  const [ws] = useState(() => new Workspace(window.mdedit));
+  const s = useWorkspace(ws);
+  const [filter, setFilter] = useState('');
+  const [focusKey, setFocusKey] = useState<string | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number; row: Row } | null>(null);
+  const [prompt, setPrompt] = useState<PromptSpec | null>(null);
+  const filterRef = useRef<HTMLInputElement>(null);
 
-  // What each open file looked like on disk when we last read or wrote it.
-  const stamps = useRef(new Map<string, FileStamp>());
-  const saving = useRef(false);
-  // Async handlers read these instead of stale closures.
-  const latest = useRef({ root, expanded, docs, selection, draft, conflict });
-  latest.current = { root, expanded, docs, selection, draft, conflict };
-  const checking = useRef(false);
+  const activeTab = s.tabs.find((t) => t.id === s.activeId);
+  const activeDoc = activeTab ? s.docs.get(activeTab.file) : undefined;
+  const activeChapter = activeDoc?.chapters[activeTab?.chapter ?? 0];
+  const activeKey = activeTab ? chapterKey(activeTab.file, activeTab.chapter) : null;
 
-  const dirty = draft !== null;
+  const rows = useMemo(
+    () => (s.root ? buildRows(s.root, s.expanded, s.docs, filter) : []),
+    [s.root, s.expanded, s.docs, filter]
+  );
+  const dirtyFiles = useMemo(() => new Set(s.tabs.filter((t) => t.draft !== null).map((t) => t.file)), [s.tabs]);
 
-  const applyDisk = useCallback((file: string, text: string, stamp: FileStamp) => {
-    const doc = splitChapters(text);
-    stamps.current.set(file, stamp);
-    setDocs((prev) => new Map(prev).set(file, doc));
-    setSelection((s) =>
-      s && s.file === file ? { file, chapter: Math.min(s.chapter, doc.chapters.length - 1) } : s
-    );
-    setDraft(null);
-    setConflict(null);
-    setReloadKey((k) => k + 1);
-  }, []);
+  // ---- lifecycle -------------------------------------------------------------------------
 
-  /** Reads a file into the cache; keeps the existing doc object if nothing changed. */
-  const refreshDoc = useCallback(async (file: string) => {
-    const { text, stamp } = await window.mdedit.readFile(file);
-    stamps.current.set(file, stamp);
-    const existing = latest.current.docs.get(file);
-    if (!existing || joinChapters(existing) !== text) {
-      setDocs((prev) => new Map(prev).set(file, splitChapters(text)));
-    }
-  }, []);
-
-  const save = useCallback(async (): Promise<boolean> => {
-    const { selection: sel, draft: text, docs: all } = latest.current;
-    if (!sel || text === null) return true; // nothing to save
-    const doc = all.get(sel.file);
-    if (!doc || saving.current) return false;
-    saving.current = true;
-    try {
-      // Never silently clobber an edit made outside the app.
-      const known = stamps.current.get(sel.file);
-      const now = await window.mdedit.statFile(sel.file);
-      if (known && now && !sameStamp(known, now)) {
-        const onDisk = (await window.mdedit.readFile(sel.file)).text;
-        if (onDisk !== joinChapters(doc) && !(await window.mdedit.confirmOverwrite(baseName(sel.file)))) {
-          return false;
-        }
-      }
-      const updated = updateChapter(doc, sel.chapter, text);
-      const stamp = await window.mdedit.writeFile(sel.file, joinChapters(updated));
-      stamps.current.set(sel.file, stamp);
-      const fresh = splitChapters(joinChapters(updated));
-      setDocs((prev) => new Map(prev).set(sel.file, fresh));
-      setSaved((s) => ({ version: (s?.version ?? 0) + 1, markdown: text }));
-      setConflict(null);
-      setError(null);
-      // If the edit added/removed a Heading 1, the editor no longer matches one chapter: reload it.
-      const idx = Math.min(sel.chapter, fresh.chapters.length - 1);
-      if (chapterBody(fresh.chapters[idx].raw) !== chapterBody(text)) {
-        setSelection({ file: sel.file, chapter: idx });
-        setDraft(null);
-        setReloadKey((k) => k + 1);
-      }
-      return true;
-    } catch (e) {
-      setError(`Could not save: ${e}`);
-      return false;
-    } finally {
-      saving.current = false;
-    }
-  }, []);
-
-  /** Gate for anything that would leave the open chapter. */
-  const confirmLeave = useCallback(() => {
-    const file = latest.current.selection?.file ?? '';
-    return guardLeave(
-      latest.current.draft !== null,
-      () => window.mdedit.confirmUnsaved(baseName(file)),
-      save
-    );
-  }, [save]);
-
-  const openPath = useCallback(async (folder: string) => {
-    setRoot(await window.mdedit.scanFolder(folder));
-    stamps.current.clear();
-    setExpanded(new Set());
-    setDocs(new Map());
-    setSelection(null);
-    setDraft(null);
-    setConflict(null);
-    setNotice(null);
-    setError(null);
-  }, []);
-
-  const openFolder = useCallback(async () => {
-    if (!(await confirmLeave())) return;
-    try {
-      const folder = await window.mdedit.pickFolder();
-      if (folder) await openPath(folder);
-    } catch (e) {
-      setError(String(e));
-    }
-  }, [confirmLeave, openPath]);
-
-  // Reopen the last folder on startup.
   useEffect(() => {
-    void window.mdedit
-      .getLastFolder()
-      .then(async (folder) => {
-        if (folder) await openPath(folder);
-      })
-      .catch(() => undefined);
-  }, [openPath]);
+    void ws.init();
+    const stopClose = window.mdedit.onCloseRequested(() => {
+      void ws.handleCloseRequest().then((ok) => window.mdedit.reportCloseDecision(ok));
+    });
+    return stopClose;
+  }, [ws]);
 
-  const toggle = useCallback(
-    async (path: string, isFile: boolean) => {
-      const wasOpen = expanded.has(path);
-      setExpanded((prev) => {
-        const next = new Set(prev);
-        if (wasOpen) next.delete(path);
-        else next.add(path);
-        return next;
-      });
-      if (isFile && !wasOpen) {
-        try {
-          // Re-read on expand so the chapter list is never stale.
-          if (!(dirty && selection?.file === path)) await refreshDoc(path);
-        } catch (e) {
-          setError(String(e));
-        }
-      }
-    },
-    [expanded, dirty, selection, refreshDoc]
-  );
-
-  const selectChapter = useCallback(
-    async (sel: Selection) => {
-      const cur = latest.current.selection;
-      if (cur && cur.file === sel.file && cur.chapter === sel.chapter) return;
-      if (!(await confirmLeave())) return;
-      try {
-        if (sel.file !== cur?.file) await refreshDoc(sel.file);
-      } catch (e) {
-        setError(String(e));
-        return;
-      }
-      setDraft(null);
-      setConflict(null);
-      setNotice(null);
-      setSelection(sel);
-    },
-    [confirmLeave, refreshDoc]
-  );
-
-  // Let the main process prompt on window close, and save when the user picks "Save".
+  // Notice edits made outside the app (Dropbox sync, another editor, git checkout...).
   useEffect(() => {
-    window.mdedit.setDirty(dirty && selection ? baseName(selection.file) : null);
-  }, [dirty, selection]);
-  useEffect(
-    () =>
-      window.mdedit.onSaveBeforeClose(() => {
-        void save().then((ok) => window.mdedit.reportSaveResult(ok));
-      }),
-    [save]
-  );
-
-  /**
-   * Compares the open file with what is on disk. Edits made outside the app (Dropbox sync,
-   * another editor, git checkout...) reload silently when we have no unsaved edits, and raise
-   * a conflict banner when we do.
-   */
-  const checkOpenFile = useCallback(
-    async (file: string) => {
-      if (checking.current || saving.current) return;
-      checking.current = true;
-      try {
-        const known = stamps.current.get(file);
-        const now = await window.mdedit.statFile(file);
-        if (!now) {
-          if (known) {
-            stamps.current.delete(file);
-            setConflict({ kind: 'missing', file });
-          }
-          return;
-        }
-        if (known && sameStamp(known, now)) return;
-        const pending = latest.current.conflict;
-        if (pending?.kind === 'changed' && pending.file === file && sameStamp(pending.stamp, now)) return;
-
-        const { text, stamp } = await window.mdedit.readFile(file);
-        const doc = latest.current.docs.get(file);
-        if (doc && joinChapters(doc) === text) {
-          stamps.current.set(file, stamp); // touched, content identical
-          setConflict((c) => (c?.file === file && c.kind === 'missing' ? null : c));
-        } else if (latest.current.draft === null) {
-          applyDisk(file, text, stamp);
-          setNotice(`${baseName(file)} changed on disk and was reloaded.`);
-        } else {
-          setConflict({ kind: 'changed', file, text, stamp });
-        }
-      } catch {
-        // transient read error (file mid-write): try again next tick
-      } finally {
-        checking.current = false;
-      }
-    },
-    [applyDisk]
-  );
-
-  const openFile = selection?.file;
-  useEffect(() => {
-    if (!openFile) return;
-    const check = () => void checkOpenFile(openFile);
+    const check = () => void ws.checkAllOpenFiles();
     const timer = setInterval(check, POLL_MS);
     window.addEventListener('focus', check);
     return () => {
       clearInterval(timer);
       window.removeEventListener('focus', check);
     };
-  }, [openFile, checkOpenFile]);
+  }, [ws]);
 
-  /** Rescans the folder and re-reads expanded files, keeping expansion, selection and unsaved edits. */
-  const refresh = useCallback(async () => {
-    const current = latest.current.root;
-    if (!current || refreshing) return;
-    setRefreshing(true);
-    try {
-      const tree = await window.mdedit.scanFolder(current.path);
-      const exists = flattenPaths(tree);
-      setRoot(tree);
-      setExpanded((prev) => new Set([...prev].filter((p) => exists.has(p))));
-      for (const file of [...latest.current.docs.keys()]) {
-        if (!exists.has(file)) {
-          stamps.current.delete(file);
-          setDocs((prev) => {
-            const next = new Map(prev);
-            next.delete(file);
-            return next;
-          });
-        } else if (file === latest.current.selection?.file) {
-          await checkOpenFile(file); // never touches unsaved edits: that raises the conflict banner
-        } else if (latest.current.expanded.has(file)) {
-          await refreshDoc(file).catch(() => undefined);
-        }
+  useEffect(() => {
+    const dirty = activeTab?.draft !== null && activeTab !== undefined;
+    document.title = activeTab
+      ? `${activeChapter ? chapterLabel(activeChapter) + ' — ' : ''}${basename(activeTab.file)}${dirty ? ' ●' : ''} — MDEdit`
+      : 'MDEdit';
+  }, [activeTab, activeChapter]);
+
+  // ---- actions ---------------------------------------------------------------------------
+
+  const takeError = () => {
+    const e = ws.getState().error;
+    ws.setError(null);
+    return e ?? 'That did not work.';
+  };
+
+  /** The folder a "new file" should go into, based on what is focused in the tree. */
+  const dirFor = (row: Row | null): string => {
+    const root = ws.getState().root?.path ?? '';
+    if (row) return row.kind === 'dir' ? row.path : dirname(row.path);
+    const focused = rows.find((r) => r.key === focusKey);
+    if (focused) return focused.kind === 'dir' ? focused.path : dirname(focused.path);
+    return activeTab ? dirname(activeTab.file) : root;
+  };
+
+  const promptNewFile = (dir: string) =>
+    setPrompt({
+      title: 'New file',
+      hint: `In folder “${basename(dir)}”`,
+      label: 'File name',
+      initial: '',
+      confirm: 'Create',
+      validate: validateName,
+      onSubmit: async (name) => ((await ws.createFile(dir, name)) ? null : takeError())
+    });
+
+  const promptRename = (row: Row) =>
+    setPrompt({
+      title: row.kind === 'dir' ? 'Rename folder' : 'Rename file',
+      label: 'New name',
+      initial: row.label,
+      confirm: 'Rename',
+      selectBase: row.kind === 'file',
+      validate: validateName,
+      onSubmit: async (name) => ((await ws.renameNode(row.path, name)) ? null : takeError())
+    });
+
+  const promptNewChapter = (file: string, after: number) =>
+    setPrompt({
+      title: 'New chapter',
+      hint: `After “${s.docs.get(file)?.chapters[after]?.title || 'the preamble'}” in ${basename(file)}`,
+      label: 'Chapter title',
+      initial: '',
+      confirm: 'Add',
+      validate: () => null,
+      onSubmit: async (title) => {
+        if (!(await ws.newChapter(file, after, title))) return takeError();
+        const opened = ws.tabForFile(file);
+        if (opened) setFocusKey(chapterKey(file, opened.chapter));
+        return null;
       }
-      setError(null);
-    } catch (e) {
-      setError(`Could not refresh: ${e}`);
-    } finally {
-      setRefreshing(false);
-    }
-  }, [refreshing, checkOpenFile, refreshDoc]);
+    });
 
-  // Keyboard shortcuts and native menu share the same handlers.
+  /** Moves a chapter and keeps the tree focus on it. */
+  const moveRow = async (row: Row, delta: -1 | 1) => {
+    const idx = await ws.moveChapter(row.path, row.chapter!, delta);
+    if (idx !== null) setFocusKey(chapterKey(row.path, idx));
+  };
+
+  const deleteRow = (row: Row) => {
+    if (row.kind === 'chapter') void ws.deleteChapter(row.path, row.chapter!);
+    else void ws.deleteNode(row.path, row.kind === 'dir' ? 'folder' : 'file');
+  };
+
+  const activateRow = async (row: Row) => {
+    setFocusKey(row.key);
+    if (row.kind === 'chapter') return ws.openChapter(row.path, row.chapter!);
+    if (row.kind === 'dir') return ws.toggleExpanded(row.path, false);
+    // A file row: open it if it has no tab, switch to its tab if it isn't the active one, and only
+    // collapse/expand when you click the file you are already on.
+    const tab = ws.tabForFile(row.path);
+    const isExpanded = () => ws.getState().expanded.has(row.path);
+    if (!tab) {
+      if (!isExpanded()) await ws.toggleExpanded(row.path, true);
+      return ws.openChapter(row.path, 0);
+    }
+    if (ws.getState().activeId !== tab.id) {
+      ws.activateTab(tab.id);
+      if (!isExpanded()) await ws.toggleExpanded(row.path, true);
+      return;
+    }
+    await ws.toggleExpanded(row.path, true);
+  };
+
+  const menuItems = (row: Row): MenuItem[] => {
+    const reveal = { label: 'Show in File Explorer', onClick: () => ws.reveal(row.path) };
+    if (row.kind === 'dir') {
+      return [
+        { label: 'New File Here…', onClick: () => promptNewFile(row.path) },
+        { label: 'Rename…', hint: 'F2', onClick: () => promptRename(row) },
+        reveal,
+        { label: 'Delete Folder…', danger: true, hint: 'Del', onClick: () => deleteRow(row) }
+      ];
+    }
+    if (row.kind === 'file') {
+      return [
+        { label: 'Rename…', hint: 'F2', onClick: () => promptRename(row) },
+        reveal,
+        { label: 'Delete…', danger: true, hint: 'Del', onClick: () => deleteRow(row) }
+      ];
+    }
+    const doc = s.docs.get(row.path);
+    const i = row.chapter!;
+    const first = doc?.chapters[0]?.isPreamble ? 1 : 0;
+    const real = !doc?.chapters[i]?.isPreamble;
+    return [
+      { label: 'New Chapter Below…', onClick: () => promptNewChapter(row.path, i) },
+      { label: 'Move Up', hint: 'Alt+↑', disabled: !real || i <= first, onClick: () => void moveRow(row, -1) },
+      {
+        label: 'Move Down',
+        hint: 'Alt+↓',
+        disabled: !real || !doc || i >= doc.chapters.length - 1,
+        onClick: () => void moveRow(row, 1)
+      },
+      { label: 'Delete Chapter…', danger: true, hint: 'Del', onClick: () => deleteRow(row) }
+    ];
+  };
+
+  // Shortcuts and the native menu share the same actions. The ref keeps listeners stable.
+  const actions: Record<MenuAction | 'toggle-mode' | 'focus-filter', () => void> = {
+    save: () => void ws.save(),
+    'change-folder': () => void ws.openFolder(),
+    refresh: () => void ws.refresh(),
+    'new-file': () => s.root && promptNewFile(dirFor(null)),
+    'close-tab': () => s.activeId && void ws.closeTab(s.activeId),
+    'next-tab': () => ws.cycleTab(1),
+    'prev-tab': () => ws.cycleTab(-1),
+    'next-chapter': () => void ws.gotoChapter(1),
+    'prev-chapter': () => void ws.gotoChapter(-1),
+    'toggle-mode': () => activeTab && ws.setMode(activeTab.id, activeTab.mode === 'visual' ? 'source' : 'visual'),
+    'focus-filter': () => filterRef.current?.focus()
+  };
+  const act = useRef(actions);
+  act.current = actions;
+
+  useEffect(() => window.mdedit.onMenuAction((a) => act.current[a]()), []);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const mod = e.ctrlKey || e.metaKey;
-      if (mod && e.key.toLowerCase() === 's') {
-        e.preventDefault();
-        void save();
-      } else if (mod && e.key.toLowerCase() === 'o') {
-        e.preventDefault();
-        void openFolder();
-      } else if (e.key === 'F5') {
-        e.preventDefault();
-        void refresh();
-      }
+      const k = e.key.toLowerCase();
+      let name: keyof typeof actions | null = null;
+      if (mod && !e.shiftKey && k === 's') name = 'save';
+      else if (mod && k === 'o') name = 'change-folder';
+      else if (mod && k === 'n') name = 'new-file';
+      else if (mod && k === 'w') name = 'close-tab';
+      else if (mod && k === 'p') name = 'focus-filter';
+      else if (mod && e.shiftKey && k === 'm') name = 'toggle-mode';
+      else if (e.ctrlKey && e.key === 'Tab') name = e.shiftKey ? 'prev-tab' : 'next-tab';
+      else if (e.ctrlKey && e.key === 'PageDown') name = 'next-chapter';
+      else if (e.ctrlKey && e.key === 'PageUp') name = 'prev-chapter';
+      else if (e.key === 'F5') name = 'refresh';
+      if (!name) return;
+      e.preventDefault();
+      act.current[name]();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [save, openFolder, refresh]);
+  }, []);
 
-  useEffect(
-    () =>
-      window.mdedit.onMenuAction((action) => {
-        if (action === 'save') void save();
-        else if (action === 'change-folder') void openFolder();
-        else void refresh();
-      }),
-    [save, openFolder, refresh]
+  // ---- sidebar resize --------------------------------------------------------------------
+
+  const startDrag = useCallback(
+    (e: React.PointerEvent) => {
+      e.preventDefault();
+      const move = (ev: PointerEvent) => ws.setSidebarWidth(ev.clientX, false);
+      const up = (ev: PointerEvent) => {
+        ws.setSidebarWidth(ev.clientX, true);
+        window.removeEventListener('pointermove', move);
+        window.removeEventListener('pointerup', up);
+        document.body.classList.remove('resizing');
+      };
+      document.body.classList.add('resizing');
+      window.addEventListener('pointermove', move);
+      window.addEventListener('pointerup', up);
+    },
+    [ws]
   );
 
-  const chapter = selection ? docs.get(selection.file)?.chapters[selection.chapter] : undefined;
+  // ---- render ----------------------------------------------------------------------------
+
+  const toolbarBusy = s.refreshing;
 
   return (
-    <div className="app">
+    <div className="app" style={{ gridTemplateColumns: `${s.sidebarWidth}px 6px minmax(0, 1fr)` }}>
       <aside className="sidebar">
         <div className="toolbar">
-          <button onClick={() => void openFolder()} title="Choose a different folder (Ctrl+O)">
-            {root ? 'Change Folder…' : 'Open Folder…'}
+          <button onClick={() => void ws.openFolder()} title="Choose a different folder (Ctrl+O)">
+            {s.root ? 'Change Folder…' : 'Open Folder…'}
           </button>
           <button
-            onClick={() => void refresh()}
-            disabled={!root || refreshing}
+            onClick={() => void ws.refresh()}
+            disabled={!s.root || toolbarBusy}
             title="Rescan the folder for new, renamed and deleted files (F5)"
           >
-            {refreshing ? 'Refreshing…' : '↻ Refresh'}
+            {toolbarBusy ? 'Refreshing…' : '↻ Refresh'}
+          </button>
+          <button onClick={() => promptNewFile(dirFor(null))} disabled={!s.root} title="New file (Ctrl+N)" aria-label="New file">
+            ＋
           </button>
         </div>
-        {root ? (
+        {s.root ? (
           <>
-            <div className="root-name" title={root.path}>{root.name}</div>
-            {root.children.length === 0 ? (
+            <div className="root-name" title={s.root.path}>
+              {s.root.name}
+            </div>
+            <input
+              ref={filterRef}
+              className="filter"
+              type="search"
+              placeholder="Filter files (Ctrl+P)"
+              aria-label="Filter files"
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') setFilter('');
+                else if (e.key === 'ArrowDown' && rows[0]) {
+                  e.preventDefault();
+                  setFocusKey(rows[0].key);
+                  (e.currentTarget.parentElement?.querySelector('[role=treeitem]') as HTMLElement | null)?.focus();
+                }
+              }}
+            />
+            {s.root.children.length === 0 ? (
               <p className="muted pad">No Markdown files found.</p>
+            ) : rows.length === 0 ? (
+              <p className="muted pad">No files match “{filter}”.</p>
             ) : (
               <Tree
-                root={root}
-                expanded={expanded}
-                docs={docs}
-                selection={selection}
-                onToggle={toggle}
-                onSelect={selectChapter}
+                rows={rows}
+                focusKey={focusKey}
+                activeKey={activeKey}
+                dirtyFiles={dirtyFiles}
+                onFocusKey={setFocusKey}
+                onActivate={(r) => void activateRow(r)}
+                onToggle={(r) => void ws.toggleExpanded(r.path, r.kind === 'file')}
+                onContextMenu={(row, x, y) => setMenu({ row, x, y })}
+                onRename={promptRename}
+                onDelete={deleteRow}
+                onMoveChapter={(r, d) => void moveRow(r, d)}
               />
             )}
           </>
@@ -355,55 +313,122 @@ export function App() {
           <p className="muted pad">Pick a folder to browse its Markdown files.</p>
         )}
       </aside>
+
+      <div
+        className="splitter"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize sidebar"
+        aria-valuenow={s.sidebarWidth}
+        tabIndex={0}
+        onPointerDown={startDrag}
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+            e.preventDefault();
+            ws.setSidebarWidth(s.sidebarWidth + (e.key === 'ArrowLeft' ? -16 : 16), true);
+          }
+        }}
+      />
+
       <main className="content">
-        {error && <div className="banner error" role="alert">{error}</div>}
-        {notice && (
+        {s.error && (
+          <div className="banner error" role="alert">
+            {s.error} <button onClick={() => ws.setError(null)}>Dismiss</button>
+          </div>
+        )}
+        {s.notice && (
           <div className="banner info" role="status">
-            {notice} <button onClick={() => setNotice(null)}>Dismiss</button>
+            {s.notice} <button onClick={() => ws.dismissNotice()}>Dismiss</button>
           </div>
         )}
-        {conflict?.kind === 'changed' && (
-          <div className="banner warn" role="alert">
-            {baseName(conflict.file)} was changed on disk while you have unsaved edits.{' '}
-            <button onClick={() => applyDisk(conflict.file, conflict.text, conflict.stamp)}>
-              Reload from disk (discard my edits)
-            </button>{' '}
-            <button
-              onClick={() => {
-                stamps.current.set(conflict.file, conflict.stamp);
-                setConflict(null);
-              }}
-            >
-              Keep my version
-            </button>
-          </div>
-        )}
-        {conflict?.kind === 'missing' && (
-          <div className="banner warn" role="alert">
-            {baseName(conflict.file)} was deleted or moved. Saving will recreate it.{' '}
-            <button onClick={() => setConflict(null)}>Dismiss</button>
-          </div>
-        )}
-        {chapter && selection ? (
-          <>
-            <div className="editor-head">
-              <h2>
-                {chapterLabel(chapter)}
-                {dirty && <span className="dirty" title="Unsaved changes"> ●</span>}
-              </h2>
-              <button onClick={() => void save()} disabled={!dirty}>Save (Ctrl+S)</button>
-            </div>
-            <Editor
-              key={`${selection.file}#${selection.chapter}@${reloadKey}`}
-              initial={chapter.raw}
-              onChange={setDraft}
-              saved={saved}
-            />
-          </>
-        ) : (
-          <p className="muted">Select a chapter to edit it.</p>
+
+        <Tabs tabs={s.tabs} activeId={s.activeId} onActivate={(id) => ws.activateTab(id)} onClose={(id) => void ws.closeTab(id)} />
+
+        <div className="panes">
+          {s.tabs.length === 0 && (
+            <p className="muted pad">{s.root ? 'Select a chapter to edit it.' : 'Open a folder to get started.'}</p>
+          )}
+          {s.tabs.map((tab) => {
+            const doc = s.docs.get(tab.file);
+            const chapter = doc?.chapters[tab.chapter];
+            if (!doc || !chapter) return null;
+            const active = tab.id === s.activeId;
+            const dirty = tab.draft !== null;
+            return (
+              <section key={tab.id} className="pane" hidden={!active} aria-label={basename(tab.file)}>
+                {tab.conflict?.kind === 'changed' && (
+                  <div className="banner warn" role="alert">
+                    {basename(tab.file)} was changed on disk while you have unsaved edits.{' '}
+                    <button onClick={() => ws.resolveConflict(tab.id, 'reload')}>Reload from disk (discard my edits)</button>{' '}
+                    <button onClick={() => ws.resolveConflict(tab.id, 'keep')}>Keep my version</button>
+                  </div>
+                )}
+                {tab.conflict?.kind === 'missing' && (
+                  <div className="banner warn" role="alert">
+                    {basename(tab.file)} was deleted or moved. Saving will recreate it.{' '}
+                    <button onClick={() => ws.resolveConflict(tab.id, 'dismiss')}>Dismiss</button>
+                  </div>
+                )}
+                <div className="editor-head">
+                  <h2>
+                    {chapterLabel(chapter)}
+                    {dirty && <span className="dirty" title="Unsaved changes"> ●</span>}
+                  </h2>
+                  <div className="head-actions">
+                    <button aria-label="Previous chapter" title="Previous chapter (Ctrl+PgUp)" disabled={tab.chapter === 0} onClick={() => void ws.gotoChapter(-1)}>
+                      ‹
+                    </button>
+                    <button aria-label="Next chapter" title="Next chapter (Ctrl+PgDn)" disabled={tab.chapter >= doc.chapters.length - 1} onClick={() => void ws.gotoChapter(1)}>
+                      ›
+                    </button>
+                    <button
+                      onClick={() => ws.setMode(tab.id, tab.mode === 'visual' ? 'source' : 'visual')}
+                      title="Switch between formatted and raw Markdown (Ctrl+Shift+M)"
+                    >
+                      {tab.mode === 'visual' ? 'Source' : 'Visual'}
+                    </button>
+                    <button onClick={() => void ws.save(tab.id)} disabled={!dirty}>
+                      Save (Ctrl+S)
+                    </button>
+                  </div>
+                </div>
+                {tab.mode === 'visual' ? (
+                  <Editor
+                    key={`${tab.id}@${tab.reloadKey}@v`}
+                    initial={chapter.raw}
+                    restore={tab.draft}
+                    onChange={(md) => ws.setDraft(tab.id, md)}
+                    saved={tab.saved}
+                  />
+                ) : (
+                  <SourceEditor
+                    key={`${tab.id}@${tab.reloadKey}@s`}
+                    raw={chapter.raw}
+                    draft={tab.draft}
+                    onChange={(md) => ws.setDraft(tab.id, md)}
+                    savedVersion={tab.saved?.version ?? 0}
+                  />
+                )}
+              </section>
+            );
+          })}
+        </div>
+
+        {activeTab && activeDoc && activeChapter && (
+          <StatusBar
+            chapterIndex={activeTab.chapter}
+            chapterCount={activeDoc.chapters.length}
+            words={countWords(activeTab.draft ?? activeChapter.raw)}
+            dirty={activeTab.draft !== null}
+            autosaved={activeTab.autosavedAt !== null}
+            eol={activeDoc.eol}
+            mode={activeTab.mode}
+          />
         )}
       </main>
+
+      {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItems(menu.row)} onClose={() => setMenu(null)} />}
+      {prompt && <PromptDialog spec={prompt} onClose={() => setPrompt(null)} />}
     </div>
   );
 }

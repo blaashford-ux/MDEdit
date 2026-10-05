@@ -157,3 +157,71 @@ export function updateChapter(doc: MarkdownDoc, index: number, newRaw: string): 
 export function chapterBody(raw: string): string {
   return raw.replace(/\r\n|\r/g, '\n').replace(/\n+$/, '');
 }
+
+// ---------------------------------------------------------------------------
+// Structural edits: add / move / delete a chapter. All return a fresh, re-split document so
+// callers always see the real chapter boundaries of the text that will be written.
+// ---------------------------------------------------------------------------
+
+const endsWithNewline = (s: string) => /[\r\n]$/.test(s);
+
+/** Every chapter except the last must end in a newline, or the next heading would be glued to it. */
+function withSeparators(doc: MarkdownDoc, raws: string[]): string[] {
+  return raws.map((r, i) => (i < raws.length - 1 && r !== '' && !endsWithNewline(r) ? r + doc.eol : r));
+}
+
+/** Rebuilds a document from chapter texts, keeping the file's original "no final newline" habit. */
+function rebuild(doc: MarkdownDoc, raws: string[], keepFinalNewline: boolean): MarkdownDoc {
+  const fixed = withSeparators(doc, raws);
+  if (!keepFinalNewline && fixed.length > 0) {
+    fixed[fixed.length - 1] = fixed[fixed.length - 1].replace(/(?:\r\n|\r|\n)+$/, '');
+  }
+  return { ...splitChapters(doc.bom + fixed.join('')), bom: doc.bom };
+}
+
+/** Index of the chapter that starts at character `offset` (chapters partition the text). */
+function indexAtOffset(doc: MarkdownDoc, offset: number): number {
+  let pos = 0;
+  for (let i = 0; i < doc.chapters.length; i++) {
+    if (pos === offset) return i;
+    pos += doc.chapters[i].raw.length;
+  }
+  return Math.max(0, doc.chapters.length - 1);
+}
+
+const hadFinalNewline = (doc: MarkdownDoc) => {
+  const last = doc.chapters[doc.chapters.length - 1];
+  return !last || last.raw === '' || endsWithNewline(last.raw);
+};
+
+/** Where chapter `index` starts once `raws` are joined with proper separators. */
+const startOf = (doc: MarkdownDoc, raws: string[], index: number) =>
+  withSeparators(doc, raws).slice(0, index).join('').length;
+
+/** Inserts `# title` as a new chapter right after chapter `afterIndex`. */
+export function insertChapter(doc: MarkdownDoc, afterIndex: number, title: string): { doc: MarkdownDoc; index: number } {
+  const raws = doc.chapters.map((c) => c.raw);
+  const at = Math.min(Math.max(afterIndex + 1, 0), raws.length);
+  raws.splice(at, 0, `# ${title.trim()}${doc.eol}${doc.eol}`);
+  const next = rebuild(doc, raws, hadFinalNewline(doc));
+  return { doc: next, index: indexAtOffset(next, startOf(doc, raws, at)) };
+}
+
+/** Moves a real chapter up (-1) or down (+1). Returns null when that move isn't possible. */
+export function moveChapter(doc: MarkdownDoc, index: number, delta: -1 | 1): { doc: MarkdownDoc; index: number } | null {
+  const target = index + delta;
+  const first = doc.chapters[0]?.isPreamble ? 1 : 0;
+  if (index < first || index >= doc.chapters.length || target < first || target >= doc.chapters.length) return null;
+  const raws = doc.chapters.map((c) => c.raw);
+  [raws[index], raws[target]] = [raws[target], raws[index]];
+  const next = rebuild(doc, raws, hadFinalNewline(doc));
+  return { doc: next, index: indexAtOffset(next, startOf(doc, raws, target)) };
+}
+
+/** Removes a chapter (including its heading and everything under it). */
+export function deleteChapter(doc: MarkdownDoc, index: number): MarkdownDoc | null {
+  if (index < 0 || index >= doc.chapters.length) return null;
+  const raws = doc.chapters.map((c) => c.raw);
+  raws.splice(index, 1);
+  return rebuild(doc, raws, hadFinalNewline(doc));
+}
