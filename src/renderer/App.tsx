@@ -33,6 +33,8 @@ import './styles.css';
 
 const POLL_MS = 2000;
 
+const cleanError = (e: unknown) => String(e instanceof Error ? e.message : e).replace(/^Error invoking remote method '[^']*': (\w*Error: )?/, '');
+
 export function App() {
   const [ws] = useState(() => new Workspace(window.mdedit));
   const s = useWorkspace(ws);
@@ -130,7 +132,7 @@ export function App() {
       setPConfig(cfg);
       setListing(l);
     } catch (e) {
-      ws.setError(String(e instanceof Error ? e.message : e));
+      ws.setError(cleanError(e));
     } finally {
       setListingLoading(false);
     }
@@ -328,14 +330,14 @@ export function App() {
       setPConfig(await window.mdedit.setProjectsConfig({ rootFolder: folder }));
       await reloadListing();
     } catch (e) {
-      ws.setError(String(e instanceof Error ? e.message : e));
+      ws.setError(cleanError(e));
     }
   };
   const projectCall = async (fn: () => Promise<unknown>) => {
     try {
       await fn();
     } catch (e) {
-      ws.setError(String(e instanceof Error ? e.message : e));
+      ws.setError(cleanError(e));
     }
     await reloadListing();
   };
@@ -353,7 +355,7 @@ export function App() {
           await reloadListing();
           return null;
         } catch (e) {
-          return String(e instanceof Error ? e.message : e).replace(/^Error invoking remote method '[^']*': (Error: )?/, '');
+          return cleanError(e);
         }
       }
     });
@@ -363,6 +365,7 @@ export function App() {
     loading: listing_loading,
     onOpen: (p: string) => void openProject(p),
     onNew: () => setShowNewProject(true),
+    onOpenFolder: () => void ws.openFolder(),
     onChangeRoot: () => void changeRoot(),
     onRetry: () => void reloadListing(),
     onConvert: (p: string) => void projectCall(() => window.mdedit.convertFolder(p)),
@@ -383,7 +386,7 @@ export function App() {
             await reloadListing();
             return null;
           } catch (e) {
-            return String(e instanceof Error ? e.message : e);
+            return cleanError(e);
           }
         }
       }),
@@ -589,6 +592,7 @@ export function App() {
             onOpen={(p) => void openProject(p)}
             onHome={() => void goHome()}
             onNew={() => setShowNewProject(true)}
+            onOpenFolder={() => void ws.openFolder()}
             onSettings={() => s.project && setProjectSettings(s.project.path)}
             onProgress={() => setShowProgress(true)}
           />
@@ -815,18 +819,6 @@ export function App() {
       </main>
 
       {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItems(menu.row)} onClose={() => setMenu(null)} />}
-      {showSettings && <SettingsDialog
-          onSave={async (d) => {
-            const ok = await ws.applyAppDefaults(d);
-            void reloadListing();
-            return ok;
-          }}
-          beforeMove={() => ws.closeProject()}
-          onClose={() => {
-            setShowSettings(false);
-            void reloadListing();
-          }}
-        />}
       {prompt && <PromptDialog spec={prompt} onClose={() => setPrompt(null)} />}
       {relink && (
         <RelinkDialog sidecar={relink} candidates={relinkCandidates} onLink={(md) => ws.relinkSidecar(relink, md)} onClose={() => setRelink(null)} />
@@ -858,6 +850,18 @@ export function App() {
       )}
     </div>
     )}
+    {showSettings && <SettingsDialog
+        onSave={async (d) => {
+          const ok = await ws.applyAppDefaults(d);
+          void reloadListing();
+          return ok;
+        }}
+        beforeMove={() => ws.closeProject()}
+        onClose={() => {
+          setShowSettings(false);
+          void reloadListing();
+        }}
+      />}
     {showNewProject && pConfig && (
       <NewProjectDialog
         config={pConfig}
@@ -870,7 +874,7 @@ export function App() {
             await ws.openProject(made.path);
             return null;
           } catch (e) {
-            return String(e instanceof Error ? e.message : e).replace(/^Error invoking remote method '[^']*': (Error: )?/, '');
+            return cleanError(e);
           }
         }}
       />

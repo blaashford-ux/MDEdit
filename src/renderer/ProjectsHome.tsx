@@ -10,6 +10,7 @@ interface Props {
   onOpen(path: string): void;
   onNew(): void;
   onChangeRoot(): void;
+  onOpenFolder(): void;
   onRetry(): void;
   onConvert(path: string): void;
   onRename(p: ProjectSummary): void;
@@ -88,9 +89,14 @@ export function ProjectsHome(p: Props) {
               )}
             </div>
           </div>
-          <button type="button" className="primary big" onClick={p.onNew}>
-            <Icon name="plus" /> New Project
-          </button>
+          <div className="home-head-actions">
+            <button type="button" onClick={p.onOpenFolder} title="Open any folder of Markdown files, even outside the Root Folder (Ctrl+O)">
+              Open Folder…
+            </button>
+            <button type="button" className="primary big" onClick={p.onNew}>
+              <Icon name="plus" /> New Project
+            </button>
+          </div>
         </header>
 
         {missingRoot && (

@@ -11,12 +11,13 @@ interface Props {
   onOpen(path: string): void;
   onHome(): void;
   onNew(): void;
+  onOpenFolder(): void;
   onSettings(): void;
   onProgress(): void;
 }
 
 /** The sidebar header: the open project's name, with a menu to jump to another project or back to the Projects home. */
-export function ProjectSwitcher({ name, isProject, projects, currentPath, onOpen, onHome, onNew, onSettings, onProgress }: Props) {
+export function ProjectSwitcher({ name, isProject, projects, currentPath, onOpen, onHome, onNew, onOpenFolder, onSettings, onProgress }: Props) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
 
@@ -68,6 +69,9 @@ export function ProjectSwitcher({ name, isProject, projects, currentPath, onOpen
           </button>
           <button type="button" role="menuitem" onClick={() => (setOpen(false), onNew())}>
             New project…
+          </button>
+          <button type="button" role="menuitem" onClick={() => (setOpen(false), onOpenFolder())}>
+            Open folder…
           </button>
         </div>
       )}

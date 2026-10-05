@@ -191,7 +191,7 @@ export function ProjectSettingsDialog({ path, config, onClose, onChanged }: Prop
               <Toggle label="Set a word-count goal" checked={goalOn} onChange={(v) => (setGoalOn(v), v && !goal && setGoal({}))} />
               {goalOn && goal && (
                 <>
-                  <NumberField label="Target" value={goal.targetWords} min={1} max={10_000_000} step={1000} unit="words" onChange={(v) => setGoal({ targetWords: Math.round(v) })} />
+                  <NumberField label="Target" value={goal.targetWords} min={1} max={10_000_000} step={1} unit="words" onChange={(v) => setGoal({ targetWords: Math.round(v) })} />
                   <Field label="Start date" type="date" value={goal.startDate} onChange={(v) => v && setGoal({ startDate: v })} hint="Words already written before this day don’t count as progress." />
                   <Field label="Finish by (optional)" type="date" value={goal.targetDate ?? ''} onChange={(v) => setGoal({ targetDate: v || null })} hint="With a deadline you’ll see the words per day you need." />
                 </>
