@@ -10,7 +10,7 @@
     "build": "npm run build:electron && npm run build:renderer",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.electron.json",
     "test": "vitest run",
-    "dist": "npm run build && electron-builder --win nsis",
+    "dist": "npm run build && electron-builder --win nsis --publish never",
     "build:assets": "node -e \"const fs=require('fs');fs.mkdirSync('assets/vendor',{recursive:true});fs.copyFileSync('node_modules/pagedjs/dist/paged.polyfill.js','assets/vendor/paged.polyfill.js')\""
   },
   "build": {
