@@ -12,6 +12,9 @@ interface Props {
   redoLabel: string | null;
   onUndo(): void;
   onRedo(): void;
+  /** The open project's totals, shown as a button that opens the Progress window. */
+  project?: { total: number; goal: number | null; today: number } | null;
+  onProgress?(): void;
 }
 
 export function StatusBar(p: Props) {
@@ -25,6 +28,13 @@ export function StatusBar(p: Props) {
         {p.dirty ? (p.autosaved ? 'Unsaved changes · draft autosaved' : 'Unsaved changes') : 'All changes saved'}
       </span>
       <span className="spacer" />
+      {p.project && (
+        <button type="button" className="sb-undo sb-project" onClick={p.onProgress} title="Project progress">
+          {p.project.total.toLocaleString()}
+          {p.project.goal ? ` / ${p.project.goal.toLocaleString()} (${Math.min(100, Math.round((p.project.total / p.project.goal) * 100))}%)` : ''} words
+          {p.project.today > 0 ? ` · +${p.project.today.toLocaleString()} today` : ''}
+        </button>
+      )}
       {p.undoLabel && (
         <button type="button" className="sb-undo" onClick={p.onUndo} title={`Undo: ${p.undoLabel} (Ctrl+Alt+Z)${p.undoCount > 1 ? ` — ${p.undoCount} steps available` : ''}`}>
           Undo{p.undoCount > 1 ? ` (${p.undoCount})` : ''}: {p.undoLabel}

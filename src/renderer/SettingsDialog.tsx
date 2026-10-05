@@ -4,13 +4,17 @@ import type { BookDetails } from '../shared/export/model';
 import { BackMatterForm, FrontMatterForm, TitleCopyrightForm } from './bookForms';
 import { OutputsForm, TextForm } from './exportForms';
 import { Field, Select } from './formParts';
+import { TemplateEditor, type ProjectsDraft } from './TemplateEditor';
+import { templateErrors, type ProjectsConfig } from '../shared/projects';
 import { useEscape } from './useEscape';
 
-type Tab = 'chapters' | 'title' | 'front' | 'back' | 'export';
+type Tab = 'chapters' | 'title' | 'front' | 'back' | 'export' | 'projects';
 
 interface Props {
   /** Saves the settings; resolves false if that was cancelled or failed (the dialog then stays open). */
   onSave(defaults: AppDefaults): Promise<boolean>;
+  /** Called before projects are moved to a new Root Folder (the open project must be closed first). False cancels. */
+  beforeMove?(): Promise<boolean>;
   onClose(): void;
 }
 
@@ -20,9 +24,13 @@ const LEVELS = [1, 2, 3, 4, 5, 6].map((n) => ({
 }));
 
 /** File → Settings: how chapters are split, and what new books start with. */
-export function SettingsDialog({ onSave, onClose }: Props) {
+export function SettingsDialog({ onSave, beforeMove, onClose }: Props) {
   const [defaults, setDefaults] = useState<AppDefaults | null>(null);
   const [initial, setInitial] = useState('');
+  const [config, setConfig] = useState<ProjectsConfig | null>(null);
+  const [pdraft, setPdraft] = useState<ProjectsDraft | null>(null);
+  const [pInitial, setPinitial] = useState('');
+  const [projectCount, setProjectCount] = useState(0);
   const [tab, setTab] = useState<Tab>('chapters');
   const [error, setError] = useState<string | null>(null);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
@@ -38,12 +46,24 @@ export function SettingsDialog({ onSave, onClose }: Props) {
         setInitial(JSON.stringify(d));
       })
       .catch((e) => live && setError(String(e)));
+    void Promise.all([window.mdedit.getProjectsConfig(), window.mdedit.listProjects()])
+      .then(([c, l]) => {
+        if (!live) return;
+        const draft: ProjectsDraft = { rootFolder: c.rootFolder, templates: c.templates, defaultTemplateId: c.defaultTemplateId, reopenLast: c.reopenLast, moveProjects: false };
+        setConfig(c);
+        setPdraft(draft);
+        setPinitial(JSON.stringify(draft));
+        setProjectCount(l.projects.length);
+      })
+      .catch(() => undefined);
     return () => {
       live = false;
     };
   }, []);
 
-  const dirty = defaults !== null && JSON.stringify(defaults) !== initial;
+  const projectsDirty = pdraft !== null && JSON.stringify(pdraft) !== pInitial;
+  const projectErrors = pdraft ? pdraft.templates.flatMap((t) => templateErrors(t).map((e) => `${t.name || '(unnamed)'}: ${e}`)) : [];
+  const dirty = (defaults !== null && JSON.stringify(defaults) !== initial) || projectsDirty;
   const requestClose = () => (dirty ? setConfirmDiscard(true) : onClose());
   useEscape(() => (confirmDiscard ? setConfirmDiscard(false) : requestClose()));
 
@@ -51,6 +71,28 @@ export function SettingsDialog({ onSave, onClose }: Props) {
     if (!defaults || saving) return;
     setSaving(true);
     setError(null);
+    if (projectErrors.length) {
+      setError('Fix the template problems first (Projects tab).');
+      setTab('projects');
+      setSaving(false);
+      return;
+    }
+    if (projectsDirty && pdraft && config) {
+      const newRoot = pdraft.rootFolder ?? config.defaultRoot;
+      try {
+        if (pdraft.moveProjects && newRoot !== config.root) {
+          if (beforeMove && !(await beforeMove())) return setSaving(false);
+          await window.mdedit.setProjectsConfig({ rootFolder: pdraft.rootFolder }); // creates the folder
+          const r = await window.mdedit.moveProjects(newRoot);
+          if (r.failed.length) setError(`Some projects couldn’t be moved: ${r.failed.map((f) => `${f.name} (${f.error})`).join('; ')}`);
+        }
+        await window.mdedit.setProjectsConfig({ rootFolder: pdraft.rootFolder, templates: pdraft.templates, defaultTemplateId: pdraft.defaultTemplateId, reopenLast: pdraft.reopenLast });
+      } catch (e) {
+        setError(`Could not save the project settings: ${e instanceof Error ? e.message : e}`);
+        setSaving(false);
+        return;
+      }
+    }
     const ok = await onSave(defaults);
     if (ok) onClose();
     else setSaving(false);
@@ -101,7 +143,8 @@ export function SettingsDialog({ onSave, onClose }: Props) {
               ['title', 'Title & copyright'],
               ['front', 'Front matter'],
               ['back', 'Back matter'],
-              ['export', 'Export']
+              ['export', 'Export'],
+              ['projects', 'Projects']
             ] as const
           ).map(([k, label]) => (
             <button key={k} type="button" role="tab" aria-selected={tab === k} className={tab === k ? 'active' : ''} onClick={() => setTab(k)}>
@@ -144,6 +187,13 @@ export function SettingsDialog({ onSave, onClose }: Props) {
           {tab === 'title' && <TitleCopyrightForm template details={book} set={setBook} />}
           {tab === 'front' && <FrontMatterForm template details={book} set={setBook} />}
           {tab === 'back' && <BackMatterForm template details={book} set={setBook} />}
+
+          {tab === 'projects' &&
+            (config && pdraft ? (
+              <TemplateEditor config={config} draft={pdraft} setDraft={setPdraft} app={defaults} projectCount={projectCount} />
+            ) : (
+              <p className="muted">Loading…</p>
+            ))}
 
           {tab === 'export' && (
             <>

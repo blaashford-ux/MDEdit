@@ -1,5 +1,7 @@
 import type { AppDefaults } from './appDefaults';
 import type { BookDetails } from './export/model';
+import type { Progress } from './progress';
+import type { ProjectMeta, ProjectsConfig, ProjectsSettings, ProjectSummary, RootListing } from './projects';
 
 export interface FileNode {
   kind: 'file';
@@ -37,6 +39,11 @@ export type MenuAction =
   | 'new-folder'
   | 'export'
   | 'settings'
+  | 'new-project'
+  | 'projects-home'
+  | 'switch-project'
+  | 'project-settings'
+  | 'project-progress'
   | 'undo-action'
   | 'redo-action'
   | 'find'
@@ -131,6 +138,13 @@ export interface DraftRecord {
   updatedAt: number;
 }
 
+/** Fields of a project's metadata that can be changed after it is created. */
+export type ProjectPatch = Partial<Pick<ProjectMeta, 'status' | 'notes' | 'archived' | 'goal' | 'activeManuscript' | 'manuscriptGoals' | 'excludedFolders'>> & {
+  overrides?: Partial<ProjectMeta['overrides']>;
+};
+
+export type { ProjectSummary };
+
 export interface MdeditApi {
   /** Shows the OS folder picker. Resolves to the chosen folder or null if cancelled. */
   pickFolder(): Promise<string | null>;
@@ -188,6 +202,31 @@ export interface MdeditApi {
   getAppDefaults(): Promise<AppDefaults>;
   /** Saves them (sanitised) and returns what was stored. */
   setAppDefaults(defaults: AppDefaults): Promise<AppDefaults>;
+
+  // ---- projects ----
+  getProjectsConfig(): Promise<ProjectsConfig>;
+  /** Saves part of the project settings (Root Folder, templates, …) and returns the result. */
+  setProjectsConfig(patch: Partial<ProjectsSettings>): Promise<ProjectsConfig>;
+  /** Projects and other folders directly inside the Root Folder. */
+  listProjects(): Promise<RootListing>;
+  /** Creates a project from a template in the Root Folder (all-or-nothing). */
+  createProject(name: string, templateId: string): Promise<{ path: string; meta: ProjectMeta }>;
+  getProjectMeta(path: string): Promise<ProjectMeta | null>;
+  updateProject(path: string, patch: ProjectPatch): Promise<ProjectMeta>;
+  renameProject(path: string, name: string): Promise<string>;
+  duplicateProject(path: string, name: string): Promise<{ path: string; meta: ProjectMeta }>;
+  /** Moves a project to the Recycle Bin. */
+  deleteProject(path: string): Promise<void>;
+  /** Marks an ordinary folder in the Root as a project. */
+  convertFolder(path: string): Promise<ProjectMeta>;
+  /** Adds template folders / starter files the project is missing; returns what was added. */
+  addMissingTemplateParts(path: string, templateId: string): Promise<string[]>;
+  /** Counts the project's words now, notes them in its history, and returns the history. */
+  recordProgress(path: string): Promise<{ progress: Progress; total: number; manuscript: string | null }>;
+  /** Moves every project in the Root to a new Root Folder (best effort; reports what failed). */
+  moveProjects(newRoot: string): Promise<{ moved: string[]; failed: { name: string; error: string }[] }>;
+  /** Remembers which project is open (so it can be reopened at startup). */
+  setLastProject(path: string | null): void;
 
   getPrefs(): Promise<Prefs>;
   setPrefs(patch: Partial<Prefs>): void;

@@ -10,6 +10,16 @@ import { Icon } from './Icon';
 import { ExportDialog } from './ExportDialog';
 import { FindBar, initialFindForm, type FindForm } from './FindBar';
 import { PromptDialog, type PromptSpec } from './PromptDialog';
+import { NewProjectDialog } from './NewProjectDialog';
+import { ProjectsHome } from './ProjectsHome';
+import { ProjectSwitcher } from './ProjectSwitcher';
+import { ProjectSettingsDialog } from './ProjectSettingsDialog';
+import { ProgressDialog } from './ProgressDialog';
+import { QuickSwitcher } from './QuickSwitcher';
+import { WelcomeDialog } from './WelcomeDialog';
+import { localDate, writtenOn } from '../shared/progress';
+import { goalFor, relativeTo } from '../shared/projects';
+import { projectNameError, uniqueName, type ProjectStatus, type ProjectSummary, type ProjectsConfig, type RootListing } from '../shared/projects';
 import { RelinkDialog } from './RelinkDialog';
 import { SettingsDialog } from './SettingsDialog';
 import type { SceneNav } from './sceneNav';
@@ -24,6 +34,8 @@ import { Workspace } from './workspace';
 import './styles.css';
 
 const POLL_MS = 2000;
+
+const cleanError = (e: unknown) => String(e instanceof Error ? e.message : e).replace(/^Error invoking remote method '[^']*': (\w*Error: )?/, '');
 
 export function App() {
   const [ws] = useState(() => new Workspace(window.mdedit));
@@ -45,6 +57,15 @@ export function App() {
   const [detailsVersion, setDetailsVersion] = useState(0);
   const [ignoredOrphans, setIgnoredOrphans] = useState<Set<string>>(new Set());
   const filterRef = useRef<HTMLInputElement>(null);
+  const [pConfig, setPConfig] = useState<ProjectsConfig | null>(null);
+  const [listing, setListing] = useState<RootListing | null>(null);
+  const [listing_loading, setListingLoading] = useState(false);
+  const [showNewProject, setShowNewProject] = useState(false);
+  const [showQuick, setShowQuick] = useState(false);
+  const [projectSettings, setProjectSettings] = useState<string | null>(null);
+  const [showProgress, setShowProgress] = useState(false);
+  const [welcome, setWelcome] = useState<{ lastFolder: string | null } | null>(null);
+  const [started, setStarted] = useState(false);
 
   const activeTab = s.tabs.find((t) => t.id === s.activeId);
   const activeDoc = activeTab ? s.docs.get(activeTab.file) : undefined;
@@ -72,8 +93,18 @@ export function App() {
   // ---- lifecycle -------------------------------------------------------------------------
 
   useEffect(() => {
-    // Restore the last folder, then open any file the app was launched with.
-    void ws.init().then(() => ws.openLaunchFiles());
+    // Restore the last project (or folder), then open any file the app was launched with.
+    void (async () => {
+      await ws.init({ restoreFolder: false });
+      const cfg = await window.mdedit.getProjectsConfig().catch(() => null);
+      if (cfg) setPConfig(cfg);
+      const lastFolder = await window.mdedit.getLastFolder().catch(() => null);
+      if (cfg && !cfg.setupDone) setWelcome({ lastFolder });
+      else if (cfg?.reopenLast && cfg.lastProject) await ws.openProject(cfg.lastProject);
+      else if (lastFolder && !cfg?.lastProject) await ws.openPath(lastFolder, true);
+      setStarted(true);
+      await ws.openLaunchFiles();
+    })();
     // Files handed over later by another launch (double-clicking a second .md).
     const stopLaunch = window.mdedit.onLaunchFiles(() => void ws.openLaunchFiles());
     const stopClose = window.mdedit.onCloseRequested(() => {
@@ -96,8 +127,38 @@ export function App() {
     };
   }, [ws]);
 
+  const reloadListing = useCallback(async () => {
+    setListingLoading(true);
+    try {
+      const [cfg, l] = await Promise.all([window.mdedit.getProjectsConfig(), window.mdedit.listProjects()]);
+      setPConfig(cfg);
+      setListing(l);
+    } catch (e) {
+      ws.setError(cleanError(e));
+    } finally {
+      setListingLoading(false);
+    }
+  }, [ws]);
+  const atHome = started && !s.root;
+  // The Projects home keeps itself fresh: loaded when shown, and again when the window regains focus.
+  useEffect(() => {
+    if (!atHome && !showQuick && !showNewProject) return;
+    void reloadListing();
+    const onFocus = () => void reloadListing();
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [atHome, showQuick, showNewProject, reloadListing]);
+  // The switcher in the sidebar needs the list too.
+  useEffect(() => {
+    if (s.project) void reloadListing();
+  }, [s.project?.path, reloadListing]);
+
   const activeDirty = activeTab !== undefined && activeTab.draft !== null;
-  const titleText = activeTab ? `${activeChapter ? chapterLabel(activeChapter) + ' — ' : ''}${basename(activeTab.file)}` : 'MDEdit';
+  const titleText = activeTab
+    ? `${activeChapter ? chapterLabel(activeChapter) + ' — ' : ''}${basename(activeTab.file)}${s.project ? ' · ' + s.project.meta.name : ''}`
+    : s.project
+      ? s.project.meta.name
+      : 'MDEdit';
   useEffect(() => {
     document.title = activeTab ? `${titleText}${activeDirty ? ' ●' : ''} — MDEdit` : 'MDEdit';
   }, [activeTab, titleText, activeDirty]);
@@ -230,7 +291,16 @@ export function App() {
               { label: 'Unmark for Export', onClick: () => void ws.setMarked(row.path, false) }
             ]
           : [{ label: 'Mark for Export', onClick: () => void markAndEdit(row.path) }];
+      const active = !!s.project && s.project.meta.activeManuscript === relativeTo(s.project.path, row.path);
+      const manuscriptItems: MenuItem[] = s.project
+        ? [
+            active
+              ? { label: 'Clear Active Manuscript', onClick: () => void ws.setActiveManuscript(null) }
+              : { label: 'Active Manuscript', onClick: () => void ws.setActiveManuscript(row.path) }
+          ]
+        : [];
       return [
+        ...manuscriptItems,
         ...exportItems,
         { label: 'Rename…', hint: 'F2', onClick: () => promptRename(row) },
         reveal,
@@ -252,6 +322,89 @@ export function App() {
       },
       { label: 'Delete Chapter…', danger: true, hint: 'Del', onClick: () => deleteRow(row) }
     ];
+  };
+
+  // ---- projects --------------------------------------------------------------------------
+
+  const openProject = async (path: string) => {
+    setShowQuick(false);
+    await ws.openProject(path);
+  };
+  const goHome = async () => {
+    setShowQuick(false);
+    if (await ws.closeProject()) void reloadListing();
+  };
+  const changeRoot = async () => {
+    const folder = await window.mdedit.pickFolder();
+    if (!folder) return;
+    try {
+      setPConfig(await window.mdedit.setProjectsConfig({ rootFolder: folder }));
+      await reloadListing();
+    } catch (e) {
+      ws.setError(cleanError(e));
+    }
+  };
+  const projectCall = async (fn: () => Promise<unknown>) => {
+    try {
+      await fn();
+    } catch (e) {
+      ws.setError(cleanError(e));
+    }
+    await reloadListing();
+  };
+  const existingNames = [...(listing?.projects.map((p) => p.name) ?? []), ...(listing?.folders.map((f) => f.name) ?? [])];
+  const promptProjectName = (title: string, initial: string, confirm: string, run: (name: string) => Promise<unknown>) =>
+    setPrompt({
+      title,
+      label: 'Project name',
+      initial,
+      confirm,
+      validate: (v) => projectNameError(v, existingNames.filter((n) => n !== initial)),
+      onSubmit: async (name) => {
+        try {
+          await run(name.trim());
+          await reloadListing();
+          return null;
+        } catch (e) {
+          return cleanError(e);
+        }
+      }
+    });
+  const homeProps = {
+    config: pConfig,
+    listing,
+    loading: listing_loading,
+    onOpen: (p: string) => void openProject(p),
+    onNew: () => setShowNewProject(true),
+    onOpenFolder: () => void ws.openFolder(),
+    onChangeRoot: () => void changeRoot(),
+    onRetry: () => void reloadListing(),
+    onConvert: (p: string) => void projectCall(() => window.mdedit.convertFolder(p)),
+    onRename: (p: ProjectSummary) => promptProjectName('Rename project', p.name, 'Rename', (n) => window.mdedit.renameProject(p.path, n)),
+    onDuplicate: (p: ProjectSummary) =>
+      promptProjectName('Duplicate project', uniqueName(`${p.name} copy`, existingNames), 'Duplicate', (n) => window.mdedit.duplicateProject(p.path, n)),
+    onDelete: (p: ProjectSummary) =>
+      setPrompt({
+        title: `Delete “${p.name}”?`,
+        hint: `Its folder and everything in it (${p.files} file${p.files === 1 ? '' : 's'}, ${p.words.toLocaleString()} words) goes to the Recycle Bin.`,
+        label: 'Type the project name to confirm',
+        initial: '',
+        confirm: 'Delete project',
+        validate: (v) => (v.trim() === p.name ? null : 'Type the name exactly as shown.'),
+        onSubmit: async () => {
+          try {
+            await window.mdedit.deleteProject(p.path);
+            await reloadListing();
+            return null;
+          } catch (e) {
+            return cleanError(e);
+          }
+        }
+      }),
+    onArchive: (p: ProjectSummary, archived: boolean) => void projectCall(() => window.mdedit.updateProject(p.path, { archived })),
+    onStatus: (p: ProjectSummary, status: ProjectStatus) => void projectCall(() => window.mdedit.updateProject(p.path, { status })),
+    onProperties: (p: ProjectSummary) => setProjectSettings(p.path),
+    onReveal: (p: string) => ws.reveal(p)
   };
 
   /** Jumps the active editor to the next/previous scene break and says so when there are no more. */
@@ -300,6 +453,11 @@ export function App() {
 
   // Shortcuts and the native menu share the same actions. The ref keeps listeners stable.
   const actions: Record<MenuAction | 'toggle-mode' | 'focus-filter', () => void> = {
+    'new-project': () => setShowNewProject(true),
+    'projects-home': () => void goHome(),
+    'switch-project': () => setShowQuick(true),
+    'project-settings': () => s.project && setProjectSettings(s.project.path),
+    'project-progress': () => s.project && setShowProgress(true),
     save: () => void ws.save(),
     'change-folder': () => void ws.openFolder(),
     refresh: () => void ws.refresh(),
@@ -337,7 +495,9 @@ export function App() {
       const mod = e.ctrlKey || e.metaKey;
       const k = e.key.toLowerCase();
       let name: keyof typeof actions | null = null;
-      if (mod && !e.shiftKey && k === 's') name = 'save';
+      if (mod && e.altKey && !e.shiftKey && k === 'n') name = 'new-project';
+      else if (mod && !e.shiftKey && !e.altKey && k === 'k') name = 'switch-project';
+      else if (mod && !e.shiftKey && k === 's') name = 'save';
       else if (mod && k === 'o') name = 'change-folder';
       else if (mod && e.shiftKey && k === 'n') name = 'new-folder';
       else if (mod && k === 'n') name = 'new-file';
@@ -422,12 +582,31 @@ export function App() {
   return (
     <div className="frame">
     <TitleBar title={titleText} dirty={activeDirty} />
+    {!s.root ? (
+      <div className="app-home">
+        {s.error && (
+          <div className="banner error" role="alert">
+            {s.error} <button onClick={() => ws.setError(null)}>Dismiss</button>
+          </div>
+        )}
+        {started && !welcome && <ProjectsHome {...homeProps} />}
+      </div>
+    ) : (
     <div className="app" style={{ gridTemplateColumns: `${s.sidebarWidth}px 6px minmax(0, 1fr)` }}>
       <aside className="sidebar">
         <div className="toolbar">
-          <button onClick={() => void ws.openFolder()} title="Choose a different folder (Ctrl+O)">
-            {s.root ? 'Change Folder…' : 'Open Folder…'}
-          </button>
+          <ProjectSwitcher
+            name={s.project ? s.project.meta.name : s.root?.name ?? ''}
+            isProject={s.project !== null}
+            projects={listing?.projects ?? []}
+            currentPath={s.project?.path ?? null}
+            onOpen={(p) => void openProject(p)}
+            onHome={() => void goHome()}
+            onNew={() => setShowNewProject(true)}
+            onOpenFolder={() => void ws.openFolder()}
+            onSettings={() => s.project && setProjectSettings(s.project.path)}
+            onProgress={() => setShowProgress(true)}
+          />
           <button
             onClick={() => void ws.refresh()}
             disabled={!s.root || toolbarBusy}
@@ -452,9 +631,6 @@ export function App() {
         </div>
         {s.root ? (
           <>
-            <div className="root-name" title={s.root.path}>
-              {s.root.name}
-            </div>
             <input
               ref={filterRef}
               className="filter"
@@ -489,6 +665,7 @@ export function App() {
                 onRename={promptRename}
                 onDelete={deleteRow}
                 onMoveChapter={(r, d) => void moveRow(r, d)}
+                isManuscript={(r) => r.kind === 'file' && !!s.project?.meta.activeManuscript && relativeTo(s.project.path, r.path) === s.project.meta.activeManuscript}
               />
             )}
           </>
@@ -649,12 +826,21 @@ export function App() {
             redoLabel={s.redoLabels[s.redoLabels.length - 1] ?? null}
             onUndo={() => void ws.undoAction()}
             onRedo={() => void ws.redoAction()}
+            project={
+              s.project && s.progress
+                ? {
+                    total: s.progress.total,
+                    goal: goalFor(s.project.meta)?.targetWords ?? null,
+                    today: writtenOn(s.progress.progress, localDate(new Date()))
+                  }
+                : null
+            }
+            onProgress={() => setShowProgress(true)}
           />
         )}
       </main>
 
       {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItems(menu.row)} onClose={() => setMenu(null)} />}
-      {showSettings && <SettingsDialog onSave={(d) => ws.applyAppDefaults(d)} onClose={() => setShowSettings(false)} />}
       {prompt && <PromptDialog spec={prompt} onClose={() => setPrompt(null)} />}
       {relink && (
         <RelinkDialog sidecar={relink} candidates={relinkCandidates} onLink={(md) => ws.relinkSidecar(relink, md)} onClose={() => setRelink(null)} />
@@ -685,6 +871,77 @@ export function App() {
         />
       )}
     </div>
+    )}
+    {showSettings && <SettingsDialog
+        onSave={async (d) => {
+          const ok = await ws.applyAppDefaults(d);
+          void reloadListing();
+          return ok;
+        }}
+        beforeMove={() => ws.closeProject()}
+        onClose={() => {
+          setShowSettings(false);
+          void reloadListing();
+        }}
+      />}
+    {showNewProject && pConfig && (
+      <NewProjectDialog
+        config={pConfig}
+        existingNames={existingNames}
+        onClose={() => setShowNewProject(false)}
+        onCreate={async (name, templateId) => {
+          try {
+            const made = await window.mdedit.createProject(name, templateId);
+            setShowNewProject(false);
+            await ws.openProject(made.path);
+            return null;
+          } catch (e) {
+            return cleanError(e);
+          }
+        }}
+      />
+    )}
+    {showQuick && (
+      <QuickSwitcher
+        projects={listing?.projects ?? []}
+        currentPath={s.project?.path ?? null}
+        onOpen={(p) => void openProject(p)}
+        onHome={() => void goHome()}
+        onNew={() => (setShowQuick(false), setShowNewProject(true))}
+        onClose={() => setShowQuick(false)}
+      />
+    )}
+    {projectSettings && (
+      <ProjectSettingsDialog
+        path={projectSettings}
+        config={pConfig}
+        onClose={() => setProjectSettings(null)}
+        onChanged={(meta) => {
+          if (s.project?.path === projectSettings) void ws.updateProjectMeta(meta).then(() => ws.refreshProgress());
+          void reloadListing();
+        }}
+      />
+    )}
+    {showProgress && s.project && (
+      <ProgressDialog
+        project={s.project}
+        progress={s.progress}
+        onClose={() => setShowProgress(false)}
+        onSetGoal={() => (setShowProgress(false), setProjectSettings(s.project!.path))}
+      />
+    )}
+    {welcome && (
+      <WelcomeDialog
+        config={pConfig}
+        lastFolder={welcome.lastFolder}
+        onDone={async (opened) => {
+          setWelcome(null);
+          await reloadListing();
+          if (opened) await ws.openProject(opened);
+        }}
+      />
+    )}
+    {prompt && !s.root && <PromptDialog spec={prompt} onClose={() => setPrompt(null)} />}
     </div>
   );
 }

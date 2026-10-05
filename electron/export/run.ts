@@ -25,7 +25,7 @@ export interface ExportDeps {
   /** Families installed on this computer; empty or absent when that can't be known. */
   installedFonts?(): Promise<string[]>;
   /** The heading level that starts a chapter (default 1). */
-  chapterLevel?(): number;
+  chapterLevel?(file: string): number | Promise<number>;
   now?(): Date;
   uuid?(): string;
 }
@@ -73,7 +73,7 @@ export async function runExport(
     result.errors.push('Choose at least one output to build.');
     return result;
   }
-  const assembled = assembleBook(await deps.readText(file), details, { now: deps.now?.(), uuid: deps.uuid, chapterLevel: deps.chapterLevel?.() });
+  const assembled = assembleBook(await deps.readText(file), details, { now: deps.now?.(), uuid: deps.uuid, chapterLevel: await deps.chapterLevel?.(file) });
   if (!assembled.build) {
     result.errors.push(...assembled.errors);
     return result;

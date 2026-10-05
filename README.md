@@ -1,6 +1,6 @@
 # MDEdit
 
-Windows desktop Markdown editor: pick a folder, browse its `.md` files, and edit them one chapter (Heading 1 by default) at a time.
+Windows desktop Markdown editor for book projects: keep each book in a **project** (a folder with the subfolders you choose), browse its `.md` files, and edit them one chapter (Heading 1 by default) at a time.
 
 ## Develop
 ```
@@ -11,6 +11,9 @@ npm run dist      # Windows installer (run on Windows / CI)
 ```
 
 ## Status
+- [x] **Projects** (0.3): a project is a folder with a hidden `.mdedit` marker, living in your **Root Folder** (default `%USERPROFILE%\MDEdit`, chosen on first run and changeable in Settings). The Projects home shows every project as a card (status, words, goal progress); **New Project** (Ctrl+Alt+N) makes one from a **template** — folders, starter files and export defaults, all editable in Settings → Projects. Ctrl+K switches project; rename, duplicate, archive, delete (to the Recycle Bin) and status (planning → published) are on each card. Folders outside the Root still open with File → Open Folder, and can be converted to projects
+- [x] **Project settings and defaults**: each project can override the chapter-heading level and the export defaults (author, copyright page, fonts, trim size…); everything inside a project uses them. Order of precedence: built-in → app Settings → template → project → the book's own export settings
+- [x] **Goals and progress**: set a word-count goal (and deadline) per project, choose which folders count; the Progress window (status bar or switcher) shows a day-by-day bar chart with a burn-down line, the words per day needed to finish on time, and the estimated finish date at your 3-day and 5-day averages
 - [x] Scaffold (Electron, Vite, React, TypeScript, Vitest, CI Windows build)
 - [x] Chapter engine (`src/shared/chapters.ts`): lossless split/join by heading (H1 by default; the level is a setting)
 - [x] Folder picker, recursive file tree, chapters listed under each file (read-only preview)
@@ -42,7 +45,8 @@ npm run dist      # Windows installer (run on Windows / CI)
 | Key | Action |
 |---|---|
 | Ctrl+S | Save |
-| Ctrl+O / Ctrl+N / Ctrl+Shift+N | Change folder / New file / New folder |
+| Ctrl+Alt+N / Ctrl+K | New project / Switch project |
+| Ctrl+O / Ctrl+N / Ctrl+Shift+N | Open a folder / New file / New folder |
 | Ctrl+W | Close tab |
 | Ctrl+Tab, Ctrl+Shift+Tab | Next / previous tab |
 | Ctrl+PgDn, Ctrl+PgUp | Next / previous chapter |
@@ -109,10 +113,28 @@ npm run dist          # → release/MDEdit-Setup-<version>.exe  (run on Windows 
 
 Download the latest Windows installer from
 [Releases](https://github.com/blaashford-ux/MDEdit/releases/latest). Pushing a version tag
-(`npm version 0.2.0 && git push origin HEAD --follow-tags`) builds, tests and publishes a release
+(`npm version 0.3.0 && git push origin HEAD --follow-tags`) builds, tests and publishes a release
 automatically. See [docs/RELEASING.md](docs/RELEASING.md).
 
 ## Changelog
+
+### 0.3.0
+**New**
+- **Projects**: a project is a folder (with subfolders) marked by a small hidden `.mdedit` folder. MDEdit works out of a **Root Folder** (default `%USERPROFILE%\MDEdit`; chosen on first run, changeable in Settings, with an offer to move your projects). A welcome screen sets this up the first time, and offers the folder you last used as a project.
+- **Projects home** with a card per project (status, word count, goal progress, last edited), search, sort, archive, and a context menu to open, rename, duplicate, change status or delete (to the Recycle Bin, after typing the name).
+- **New Project** dialog (Ctrl+Alt+N): name + template with a live preview of the folders it will create. Built-in templates: Novel, Series book, Short story, Blank.
+- **Project templates** (Settings → Projects): edit the folder tree, which folders count toward word goals, starter files and the export defaults each template carries.
+- **Project switcher** in the sidebar and **Ctrl+K quick switcher**; File → Open Folder still opens any folder, and other folders in the Root can be converted to projects.
+- **Per-project overrides**: chapter-heading level and export defaults can be set per project; the template's values are copied in when the project is made.
+- **Project status** (Planning, Drafting, Revising, Editing, Published, On hold) and notes.
+- **Word-count goals and progress**: target and optional deadline; Progress window with a day-by-day bar chart, burn-down against a steady-pace line, words per day needed, and estimated completion at the 3-day and 5-day averages; running total in the status bar.
+
+- **Series template** (replaces Series Book): a Manuscripts folder for several books (no book files created) plus a series bible.
+- **Active Manuscript**: right-click a file → *Active Manuscript* to make word-count goals and progress follow that single file (one at a time; choosing another swaps without asking). A target marker shows on the file in the browser, the Progress chart and tiles are labelled with its filename, and each manuscript keeps its own goal and writing history.
+
+**Changed**
+- The sidebar's folder button became the project switcher; File → Change Folder is now **Open Folder**.
+
 
 ### 0.2.0 — 2026-10-05
 **New**

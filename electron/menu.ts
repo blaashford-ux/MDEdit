@@ -28,11 +28,17 @@ export function installMenu(theme: ThemeHooks): void {
     {
       label: '&File',
       submenu: [
+        { label: 'New Project…\tCtrl+Alt+N', click: send('new-project') },
+        { label: 'Projects Home', click: send('projects-home') },
+        { label: 'Switch Project…\tCtrl+K', click: send('switch-project') },
+        { type: 'separator' },
         { label: 'New File…\tCtrl+N', click: send('new-file') },
         { label: 'New Folder…\tCtrl+Shift+N', click: send('new-folder') },
-        { label: 'Change Folder…\tCtrl+O', click: send('change-folder') },
+        { label: 'Open Folder…\tCtrl+O', click: send('change-folder') },
         { label: 'Refresh\tF5', click: send('refresh') },
         { type: 'separator' },
+        { label: 'Project Settings…', click: send('project-settings') },
+        { label: 'Project Progress…', click: send('project-progress') },
         { label: 'Export…\tCtrl+E', click: send('export') },
         { label: 'Settings…\tCtrl+,', click: send('settings') },
         { type: 'separator' },

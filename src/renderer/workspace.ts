@@ -13,6 +13,8 @@ import {
 } from '../shared/chapters';
 import type { AppDefaults } from '../shared/appDefaults';
 import { compileFind, replaceAllInText, type FindOptions } from '../shared/find';
+import type { Progress } from '../shared/progress';
+import { relativeTo, type ProjectMeta } from '../shared/projects';
 import { basename, dirname, isInside, remapPath } from '../shared/paths';
 import { collectFiles, collectOrphans, flattenPaths } from '../shared/tree';
 
@@ -48,6 +50,10 @@ export interface WorkspaceState {
   chapterLevel: number;
   /** Labels of the actions Undo Last Action would reverse, oldest first (at most UNDO_DEPTH). */
   undoLabels: string[];
+  /** The open folder is a project (it carries `.mdedit/project.json`). */
+  project: { path: string; meta: ProjectMeta } | null;
+  /** The open project's word total and day-by-day history (null until counted). */
+  progress: { progress: Progress; total: number; manuscript: string | null } | null;
   /** Labels of undone actions Redo would re-apply, oldest first. */
   redoLabels: string[];
 }
@@ -97,8 +103,12 @@ export class Workspace {
     sidebarWidth: SIDEBAR_DEFAULT,
     chapterLevel: 1,
     undoLabels: [],
-    redoLabels: []
+    redoLabels: [],
+    project: null,
+    progress: null
   };
+  private appLevel = 1;
+  private progressTimer: ReturnType<typeof setTimeout> | undefined;
   private undoStack: UndoEntry[] = [];
   private redoStack: UndoEntry[] = [];
   private listeners = new Set<() => void>();
@@ -200,7 +210,8 @@ export class Workspace {
    */
   async applyAppDefaults(next: AppDefaults): Promise<boolean> {
     const level = clampLevel(next.chapterLevel);
-    const changed = level !== this.state.chapterLevel;
+    const effective = this.effectiveLevel(level);
+    const changed = effective !== this.state.chapterLevel;
     if (changed && !(await this.resolveDirtyTabs())) return false;
     try {
       await this.api.setAppDefaults({ ...next, chapterLevel: level });
@@ -208,7 +219,18 @@ export class Workspace {
       this.set({ error: `Could not save settings: ${e instanceof Error ? e.message : e}` });
       return false;
     }
-    if (!changed) return true;
+    this.appLevel = level;
+    if (changed) this.resplitAll(effective);
+    return true;
+  }
+
+  /** The chapter heading level in force: the open project's own, if it has one, else the app's. */
+  private effectiveLevel(appLevel = this.appLevel, project: { meta: ProjectMeta } | null = this.state.project): number {
+    return clampLevel(project?.meta.overrides.chapterLevel ?? appLevel);
+  }
+
+  /** Re-splits every open file at `level` and keeps each tab on the same text. */
+  private resplitAll(level: number): void {
     const old = this.state.docs;
     this.state = { ...this.state, chapterLevel: level };
     const docs = new Map<string, MarkdownDoc>();
@@ -235,19 +257,100 @@ export class Workspace {
         moved.has(t.id) ? { ...t, chapter: moved.get(t.id)!, draft: null, saved: null, conflict: null, reloadKey: t.reloadKey + 1 } : t
       )
     });
+  }
+
+  // ---- projects ---------------------------------------------------------------------------
+
+  /** Opens a project: its folder becomes the workspace, using the project's own chapter level. */
+  async openProject(path: string): Promise<boolean> {
+    if (!(await this.resolveDirtyTabs())) return false;
+    try {
+      const meta = await this.api.getProjectMeta(path);
+      if (!meta) {
+        this.set({ error: 'That folder is not a project.' });
+        return false;
+      }
+      await this.openPath(path, true);
+      return true;
+    } catch (e) {
+      this.set({ error: String(e instanceof Error ? e.message : e) });
+      return false;
+    }
+  }
+
+  /** Back to the Projects home: closes the open project or folder (unsaved edits are resolved first). */
+  async closeProject(): Promise<boolean> {
+    if (!(await this.resolveDirtyTabs())) return false;
+    this.clearAllTimers();
+    clearTimeout(this.progressTimer);
+    this.stamps.clear();
+    this.lastSession = '';
+    this.undoStack = [];
+    this.redoStack = [];
+    this.state = { ...this.state, chapterLevel: this.effectiveLevel(this.appLevel, null) };
+    this.set({ root: null, expanded: new Set(), docs: new Map(), tabs: [], activeId: null, error: null, notice: null, undoLabels: [], redoLabels: [], project: null, progress: null });
+    this.api.setLastProject(null);
     return true;
+  }
+
+  /** The open project's metadata changed (status, goal, overrides…). A new chapter level re-splits the open files. */
+  async updateProjectMeta(meta: ProjectMeta): Promise<boolean> {
+    const project = this.state.project;
+    if (!project) return false;
+    const level = this.effectiveLevel(this.appLevel, { meta });
+    const changed = level !== this.state.chapterLevel;
+    if (changed && !(await this.resolveDirtyTabs())) return false;
+    this.set({ project: { ...project, meta } });
+    if (changed) this.resplitAll(level);
+    return true;
+  }
+
+  /** Makes `file` (or nothing, with null) the active manuscript: goals and progress follow it. Swaps without prompting. */
+  async setActiveManuscript(file: string | null): Promise<boolean> {
+    const project = this.state.project;
+    if (!project) return false;
+    try {
+      const meta = await this.api.updateProject(project.path, { activeManuscript: file === null ? null : relativeTo(project.path, file) });
+      this.set({ project: { ...project, meta }, progress: null });
+      await this.refreshProgress();
+      return true;
+    } catch (e) {
+      this.set({ error: String(e instanceof Error ? e.message : e) });
+      return false;
+    }
+  }
+
+  /** Counts the project's words and notes them in its history (soon, and not more than once in a while). */
+  scheduleProgress(delay = 1500): void {
+    if (!this.state.project) return;
+    clearTimeout(this.progressTimer);
+    this.progressTimer = setTimeout(() => void this.refreshProgress(), delay);
+  }
+
+  async refreshProgress(): Promise<void> {
+    const project = this.state.project;
+    if (!project) return;
+    try {
+      const r = await this.api.recordProgress(project.path);
+      if (this.state.project?.path === project.path) this.set({ progress: r });
+    } catch {
+      // progress is a nicety: never interrupt writing for it
+    }
   }
 
   // ---- startup, folders -----------------------------------------------------------------
 
-  async init(): Promise<void> {
+  async init(opts: { restoreFolder?: boolean } = {}): Promise<void> {
     try {
       const defaults = await this.api.getAppDefaults();
-      if (defaults.chapterLevel !== this.state.chapterLevel) this.set({ chapterLevel: defaults.chapterLevel });
+      this.appLevel = clampLevel(defaults.chapterLevel);
+      if (this.appLevel !== this.state.chapterLevel) this.set({ chapterLevel: this.appLevel });
       const prefs = await this.api.getPrefs();
       if (typeof prefs.sidebarWidth === 'number') this.setSidebarWidth(prefs.sidebarWidth, false);
-      const folder = await this.api.getLastFolder();
-      if (folder) await this.openPath(folder, true);
+      if (opts.restoreFolder !== false) {
+        const folder = await this.api.getLastFolder();
+        if (folder) await this.openPath(folder, true);
+      }
     } catch (e) {
       this.set({ error: String(e) });
     }
@@ -255,13 +358,21 @@ export class Workspace {
 
   /** Scans `folder` and resets the workspace to it, optionally restoring its saved tabs. */
   async openPath(folder: string, restore = false): Promise<void> {
+    // A folder with a project marker is a project: it brings its own chapter level and remembers its progress.
+    const meta = await this.api.getProjectMeta(folder).catch(() => null);
+    const project = meta ? { path: folder, meta } : null;
+    this.state = { ...this.state, chapterLevel: this.effectiveLevel(this.appLevel, project) };
     const root = await this.api.scanFolder(folder);
     this.clearAllTimers();
     this.stamps.clear();
     this.lastSession = '';
     this.undoStack = [];
     this.redoStack = [];
-    this.set({ root, expanded: new Set(), docs: new Map(), tabs: [], activeId: null, error: null, notice: null, undoLabels: [], redoLabels: [] });
+    this.set({ root, expanded: new Set(), docs: new Map(), tabs: [], activeId: null, error: null, notice: null, undoLabels: [], redoLabels: [], project, progress: null });
+    if (project) {
+      this.api.setLastProject(folder);
+      void this.refreshProgress();
+    }
     if (restore) await this.applySession(await this.api.getSession(folder), root);
     await this.recoverDrafts();
   }
@@ -600,6 +711,7 @@ export class Workspace {
       }));
       this.dropDraft(tab.file);
       this.set({ error: null });
+      this.scheduleProgress();
       return true;
     } catch (e) {
       this.set({ error: `Could not save: ${e}` });
@@ -780,11 +892,28 @@ export class Workspace {
     try {
       const to = await this.api.renameNode(path, newName);
       this.remap(path, to);
+      await this.followActiveManuscript(path, to);
       await this.refresh();
       return true;
     } catch (e) {
       this.set({ error: String(e instanceof Error ? e.message : e) });
       return false;
+    }
+  }
+
+  /** A renamed file (or folder) that holds the active manuscript: point the project at its new path. */
+  private async followActiveManuscript(from: string, to: string): Promise<void> {
+    const project = this.state.project;
+    const active = project?.meta.activeManuscript;
+    if (!project || !active) return;
+    const moved = remapPath(active, relativeTo(project.path, from), relativeTo(project.path, to));
+    if (moved === active) return;
+    try {
+      const meta = await this.api.updateProject(project.path, { activeManuscript: moved });
+      this.set({ project: { ...project, meta } });
+      void this.refreshProgress();
+    } catch {
+      // the next progress count clears a manuscript that can't be found
     }
   }
 
@@ -878,6 +1007,7 @@ export class Workspace {
         this.redoStack = [];
         this.publishUndo();
       }
+      this.scheduleProgress();
       return { index: result.index };
     } catch (e) {
       this.set({ error: `Could not edit chapters: ${e instanceof Error ? e.message : e}` });
@@ -987,6 +1117,7 @@ export class Workspace {
       from.pop();
       (dir === 'undo' ? this.redoStack : this.undoStack).push(entry);
       this.publishUndo();
+      this.scheduleProgress();
       this.set({ notice: `${dir === 'undo' ? 'Undid' : 'Redid'}: ${entry.label}` });
       return true;
     } catch (e) {

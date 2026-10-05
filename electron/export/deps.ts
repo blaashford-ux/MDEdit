@@ -18,9 +18,12 @@ export function pdfResources(): PdfResources {
 }
 
 /** The real-file-system implementation of everything the export orchestrator needs. */
-export function makeExportDeps(resources: PdfResources = pdfResources(), getDefaults: () => AppDefaults = defaultAppDefaults): ExportDeps {
+export function makeExportDeps(
+  resources: PdfResources = pdfResources(),
+  getDefaults: (file: string) => AppDefaults | Promise<AppDefaults> = () => defaultAppDefaults()
+): ExportDeps {
   return {
-    chapterLevel: () => getDefaults().chapterLevel,
+    chapterLevel: async (file) => (await getDefaults(file)).chapterLevel,
     readText: (p) => fsp.readFile(p, 'utf8'),
     readBytes: async (p, max) => {
       const st = await fsp.stat(p);
@@ -38,7 +41,7 @@ export function makeExportDeps(resources: PdfResources = pdfResources(), getDefa
     installedFonts: listInstalledFonts,
     mkdirp: (d) => fsp.mkdir(d, { recursive: true }).then(() => undefined),
     exists: (p) => fsp.lstat(p).then(() => true, () => false),
-    loadDetails: async (p) => (await loadDetails(p, getDefaults())).details,
+    loadDetails: async (p) => (await loadDetails(p, await getDefaults(p))).details,
     buildPdf: (book, say, signal) =>
       buildPrintPdf(
         book,

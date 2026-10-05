@@ -1,3 +1,5 @@
+import { defaultProjectsSettings, defaultTemplates, newProjectMeta, type ProjectMeta, type ProjectsConfig, type ProjectsSettings } from '../../shared/projects';
+import { emptyProgress, recordSnapshot, type Progress } from '../../shared/progress';
 import { bookFromDefaults, defaultAppDefaults, type AppDefaults } from '../../shared/appDefaults';
 import type { BookDetails } from '../../shared/export/model';
 import { defaultBookDetails } from '../../shared/export/model';
@@ -105,6 +107,49 @@ export class FakeApi implements MdeditApi {
   windowInfo = async () => ({ platform: 'win32', overlay: true, maximized: false, fullscreen: false });
   onWindowState = () => () => undefined;
   windowControl = () => undefined;
+  // ---- projects ----
+  projectMetas = new Map<string, ProjectMeta>();
+  projectsSettings: ProjectsSettings = defaultProjectsSettings();
+  progressByProject = new Map<string, Progress>();
+  lastProject: string | null = null;
+  addProject(path: string, patch: Partial<ProjectMeta> = {}): ProjectMeta {
+    const meta = { ...newProjectMeta({ id: path, name: basename(path), template: defaultTemplates()[3], now: new Date('2026-10-05T10:00:00Z') }), ...patch };
+    this.projectMetas.set(path, meta);
+    return meta;
+  }
+  getProjectMeta = async (p: string) => this.projectMetas.get(p) ?? null;
+  setLastProject = (p: string | null) => void (this.lastProject = p);
+  recordProgress = async (p: string) => {
+    const manuscript = this.projectMetas.get(p)?.activeManuscript ?? null;
+    let total = 0;
+    for (const [f, v] of this.files) {
+      if (!f.startsWith(p + '/') || (manuscript && f !== `${p}/${manuscript}`)) continue;
+      total += v.text.split(/\s+/).filter(Boolean).length;
+    }
+    const key = manuscript ? `${p}::${manuscript}` : p;
+    const prev = this.progressByProject.get(key) ?? emptyProgress();
+    const next = recordSnapshot(prev, '2026-10-05', total);
+    this.progressByProject.set(key, next);
+    return { progress: next, total, manuscript };
+  };
+  getProjectsConfig = async (): Promise<ProjectsConfig> => ({ ...this.projectsSettings, root: '/root', defaultRoot: '/home/MDEdit', rootExists: true });
+  setProjectsConfig = async (patch: Partial<ProjectsSettings>) => {
+    this.projectsSettings = { ...this.projectsSettings, ...patch };
+    return this.getProjectsConfig();
+  };
+  listProjects = async () => ({ root: '/root', exists: true, projects: [], folders: [] });
+  createProject = async (name: string) => ({ path: `/root/${name}`, meta: this.addProject(`/root/${name}`, { name }) });
+  updateProject = async (p: string, patch: Record<string, unknown>) => {
+    const meta = { ...(this.projectMetas.get(p) ?? this.addProject(p)), ...patch } as ProjectMeta;
+    this.projectMetas.set(p, meta);
+    return meta;
+  };
+  renameProject = async (p: string, name: string) => `${dirname(p)}/${name}`;
+  duplicateProject = async (p: string, name: string) => ({ path: `${dirname(p)}/${name}`, meta: this.addProject(`${dirname(p)}/${name}`) });
+  deleteProject = async () => undefined;
+  convertFolder = async (p: string) => this.addProject(p);
+  addMissingTemplateParts = async () => [] as string[];
+  moveProjects = async () => ({ moved: [] as string[], failed: [] as { name: string; error: string }[] });
   installedFonts: string[] = ['Georgia', 'Times New Roman'];
   listInstalledFonts = async () => this.installedFonts;
   bundledFontPreview = async () => null;

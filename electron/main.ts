@@ -18,7 +18,9 @@ import { confirmDelete, confirmOverwrite, confirmRecover, confirmUnsaved } from 
 import { scanFolder } from './scan';
 import { bundledFont } from '../src/shared/export/fonts';
 import { listInstalledFonts } from './fonts';
-import { sanitizeAppDefaults } from '../src/shared/appDefaults';
+import { sanitizeAppDefaults, type AppDefaults } from '../src/shared/appDefaults';
+import { defaultRootFolder, effectiveDefaults, sanitizeProjectsSettings, type ProjectsConfig } from '../src/shared/projects';
+import * as projects from './projects';
 import { existingFolder, SettingsStore, type WindowState } from './settings';
 
 const settings = new SettingsStore(path.join(app.getPath('userData'), 'settings.json'));
@@ -47,6 +49,39 @@ function inRoot(p: string, opts: { allowRoot?: boolean } = {}): string {
   if (rel.startsWith('..') || path.isAbsolute(rel)) throw new Error('Path is outside the opened folder');
   if (rel === '' && !opts.allowRoot) throw new Error('Refusing to operate on the root folder itself');
   return full;
+}
+
+const projectsRoot = () => settings.projects().rootFolder ?? defaultRootFolder(app.getPath('home'));
+const dirExists = (p: string) => fsp.stat(p).then((st) => st.isDirectory(), () => false);
+
+/** A path that is a direct child of the Root Folder (a project), or the folder currently open. */
+function projectPath(p: string): string {
+  const full = path.resolve(p);
+  const root = path.resolve(projectsRoot());
+  const rel = path.relative(root, full);
+  const direct = rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel) && !rel.includes(path.sep);
+  if (!direct && !(openRoot && full === openRoot)) throw new Error('That is not a project in the Root Folder');
+  return full;
+}
+
+/** The nearest folder at or above `file` that is a project (looks up to 10 levels), or null. */
+async function projectDirOf(file: string): Promise<string | null> {
+  let dir = path.dirname(path.resolve(file));
+  for (let i = 0; i < 10; i++) {
+    if (await projects.isProject(dir)) return dir;
+    const up = path.dirname(dir);
+    if (up === dir) break;
+    dir = up;
+  }
+  return null;
+}
+
+/** App defaults, with the enclosing project's own settings laid over them (the cascade: app < template < project). */
+async function defaultsFor(file: string): Promise<AppDefaults> {
+  const app = settings.appDefaults();
+  const dir = await projectDirOf(file);
+  const meta = dir ? await projects.readMeta(dir) : null;
+  return effectiveDefaults(app, meta);
 }
 
 const isMarkdown = (p: string) => /\.(md|markdown)$/i.test(p);
@@ -113,9 +148,9 @@ function registerIpc(): void {
     if (!isMarkdown(full)) throw new Error('Only Markdown files can be exported');
     return full;
   };
-  ipcMain.handle('export:getDetails', (_e, p: string) => loadDetails(mdPath(p), settings.appDefaults()));
+  ipcMain.handle('export:getDetails', async (_e, p: string) => loadDetails(mdPath(p), await defaultsFor(mdPath(p))));
   ipcMain.handle('export:saveDetails', (_e, p: string, details: unknown) => saveDetails(mdPath(p), details as never));
-  ipcMain.handle('export:setMarked', (_e, p: string, marked: boolean) => setMarked(mdPath(p), marked === true, settings.appDefaults()));
+  ipcMain.handle('export:setMarked', async (_e, p: string, marked: boolean) => setMarked(mdPath(p), marked === true, await defaultsFor(mdPath(p))));
   ipcMain.handle('export:relink', async (_e, sidecar: string, md: string) => {
     const from = inRoot(sidecar);
     const target = sidecarPathFor(mdPath(md));
@@ -129,7 +164,7 @@ function registerIpc(): void {
     await fsp.rename(from, target);
   });
   // --- export ---
-  const exportDeps = () => makeExportDeps(undefined, () => settings.appDefaults());
+  const exportDeps = () => makeExportDeps(undefined, (file) => defaultsFor(file));
   let exportAbort: AbortController | null = null;
   const exportedFiles = new Set<string>(); // only files produced by an export may be revealed/opened
   ipcMain.handle('export:plan', (_e, p: string, unsaved?: unknown) =>
@@ -173,6 +208,53 @@ function registerIpc(): void {
     } catch {
       // ignore bad paths
     }
+  });
+
+  // --- projects ---
+  const config = async (): Promise<ProjectsConfig> => ({ ...settings.projects(), root: projectsRoot(), defaultRoot: defaultRootFolder(app.getPath('home')), rootExists: await dirExists(projectsRoot()) });
+  ipcMain.handle('projects:config', config);
+  ipcMain.handle('projects:setConfig', async (_e, patch: Record<string, unknown>) => {
+    const next = sanitizeProjectsSettings({ ...settings.projects(), ...(patch && typeof patch === 'object' ? patch : {}) });
+    if (next.rootFolder) {
+      if (!path.isAbsolute(next.rootFolder)) throw new Error('The Root Folder must be a full path.');
+      await fsp.mkdir(next.rootFolder, { recursive: true });
+    }
+    settings.update((s) => {
+      s.projects = next;
+    });
+    return config();
+  });
+  ipcMain.handle('projects:list', () => projects.listProjects(projectsRoot()));
+  ipcMain.handle('projects:create', async (_e, name: string, templateId: string) => {
+    const template = settings.projects().templates.find((t) => t.id === templateId);
+    if (!template) throw new Error('That template no longer exists.');
+    return projects.createProject(projectsRoot(), String(name), template);
+  });
+  ipcMain.handle('projects:meta', (_e, p: string) => (path.isAbsolute(p) ? projects.readMeta(path.resolve(p)) : null)); // read-only, any folder
+  ipcMain.handle('projects:update', (_e, p: string, patch: Record<string, unknown>) => projects.updateMeta(projectPath(p), patch as never));
+  ipcMain.handle('projects:rename', async (_e, p: string, name: string) => {
+    const from = projectPath(p);
+    const to = await projects.renameProject(from, String(name));
+    if (openRoot && (openRoot === from || openRoot.startsWith(from + path.sep))) openRoot = to + openRoot.slice(from.length);
+    return to;
+  });
+  ipcMain.handle('projects:duplicate', (_e, p: string, name: string) => projects.duplicateProject(projectPath(p), String(name)));
+  ipcMain.handle('projects:delete', (_e, p: string) => projects.deleteProject(projectPath(p), (x) => shell.trashItem(x)));
+  ipcMain.handle('projects:convert', (_e, p: string) => projects.convertToProject(projectPath(p)));
+  ipcMain.handle('projects:addMissing', (_e, p: string, templateId: string) => {
+    const t = settings.projects().templates.find((x) => x.id === templateId);
+    if (!t) throw new Error('That template no longer exists.');
+    return projects.addMissingTemplateParts(projectPath(p), t);
+  });
+  ipcMain.handle('projects:progress', (_e, p: string) => projects.recordProgress(projectPath(p)));
+  ipcMain.handle('projects:move', async (_e, newRoot: string) => {
+    if (typeof newRoot !== 'string' || !path.isAbsolute(newRoot)) throw new Error('Choose a full folder path.');
+    return projects.moveProjects(projectsRoot(), path.resolve(newRoot));
+  });
+  ipcMain.on('projects:setLast', (_e, p: string | null) => {
+    settings.update((s) => {
+      s.projects = { ...settings.projects(), lastProject: typeof p === 'string' ? p : null };
+    });
   });
 
   ipcMain.handle('app:getDefaults', () => settings.appDefaults());
