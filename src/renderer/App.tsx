@@ -17,6 +17,7 @@ import { ProjectSettingsDialog } from './ProjectSettingsDialog';
 import { ProgressDialog } from './ProgressDialog';
 import { QuickSwitcher } from './QuickSwitcher';
 import { WelcomeDialog } from './WelcomeDialog';
+import { localDate, writtenOn } from '../shared/progress';
 import { projectNameError, uniqueName, type ProjectStatus, type ProjectSummary, type ProjectsConfig, type RootListing } from '../shared/projects';
 import { RelinkDialog } from './RelinkDialog';
 import { SettingsDialog } from './SettingsDialog';
@@ -814,6 +815,16 @@ export function App() {
             redoLabel={s.redoLabels[s.redoLabels.length - 1] ?? null}
             onUndo={() => void ws.undoAction()}
             onRedo={() => void ws.redoAction()}
+            project={
+              s.project && s.progress
+                ? {
+                    total: s.progress.total,
+                    goal: s.project.meta.goal?.targetWords ?? null,
+                    today: writtenOn(s.progress.progress, localDate(new Date()))
+                  }
+                : null
+            }
+            onProgress={() => setShowProgress(true)}
           />
         )}
       </main>
