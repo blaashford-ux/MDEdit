@@ -81,9 +81,10 @@ button:disabled { opacity: 0.5; cursor: default; }
 .tab-close:hover { background: var(--hover); color: var(--fg); }
 
 .panes { flex: 1; min-height: 0; position: relative; }
-.pane { position: absolute; inset: 0; overflow: auto; padding: 8px 24px 24px; }
-.editor-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.editor-head h2 { margin: 8px 0; font-size: 18px; }
+.pane { position: absolute; inset: 0; overflow: auto; padding: 0 24px 24px; }
+/* stays visible while the chapter scrolls underneath */
+.editor-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; position: sticky; top: 0; z-index: 30; padding: 8px 0; background: var(--bg); border-bottom: 1px solid var(--border); }
+.editor-head h2 { margin: 0; font-size: 18px; }
 .head-actions { display: flex; gap: 6px; }
 .scene-msg { margin-right: auto; margin-left: 12px; font-size: 12px; color: var(--muted, #888); }
 .editor { margin-top: 8px; }
