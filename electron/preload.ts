@@ -28,6 +28,12 @@ const api: MdeditApi = {
   },
   revealOutput: (p) => ipcRenderer.send('export:reveal', p),
   openOutput: (p) => ipcRenderer.invoke('export:open', p),
+  takeLaunchFiles: () => ipcRenderer.invoke('app:takeLaunchFiles'),
+  onLaunchFiles: (cb) => {
+    const handler = () => cb();
+    ipcRenderer.on('app:launchFiles', handler);
+    return () => ipcRenderer.removeListener('app:launchFiles', handler);
+  },
   getPrefs: () => ipcRenderer.invoke('prefs:get'),
   setPrefs: (patch) => ipcRenderer.send('prefs:set', patch),
   getSession: (folder) => ipcRenderer.invoke('session:get', folder),

@@ -141,6 +141,11 @@ export interface MdeditApi {
   revealOutput(path: string): void;
   openOutput(path: string): Promise<string>;
 
+  /** Markdown files given on the command line (double-click / "Open with"); each is returned once. */
+  takeLaunchFiles(): Promise<string[]>;
+  /** Fires when another launch hands a file to this running instance. */
+  onLaunchFiles(cb: () => void): () => void;
+
   getPrefs(): Promise<Prefs>;
   setPrefs(patch: Partial<Prefs>): void;
   getSession(folder: string): Promise<Session | null>;

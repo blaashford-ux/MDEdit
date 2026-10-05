@@ -193,6 +193,43 @@ export class Workspace {
     this.set({ tabs, activeId: active?.id ?? null });
   }
 
+  /**
+   * Opens a file handed to the app from outside (double-click, "Open with", a second launch).
+   * Inside the current folder it simply opens as a tab. Otherwise the file's folder becomes the open
+   * folder, after the usual Save / Don't Save / Cancel check for unsaved tabs.
+   */
+  async openExternalFile(file: string): Promise<boolean> {
+    const root = this.state.root;
+    if (!root || !isInside(file, root.path)) {
+      if (!(await this.resolveDirtyTabs())) return false;
+      try {
+        await this.openPath(dirname(file), true);
+      } catch (e) {
+        this.set({ error: `Could not open ${basename(file)}: ${e instanceof Error ? e.message : e}` });
+        return false;
+      }
+    }
+    this.expandPath(file);
+    const existing = this.tabForFile(file);
+    if (existing) {
+      this.activateTab(existing.id);
+      return true;
+    }
+    await this.openChapter(file, 0);
+    return this.tabForFile(file) !== undefined;
+  }
+
+  /** Opens the files queued by the main process (command line / second instance). */
+  async openLaunchFiles(): Promise<void> {
+    let files: string[];
+    try {
+      files = await this.api.takeLaunchFiles();
+    } catch {
+      return;
+    }
+    for (const f of files) await this.openExternalFile(f);
+  }
+
   async openFolder(): Promise<void> {
     if (!(await this.resolveDirtyTabs())) return;
     try {

@@ -29,7 +29,8 @@ npm run dist      # Windows installer (run on Windows / CI)
 - [x] New file, rename, delete (Recycle Bin), show in Explorer; new/move/delete chapter from the sidebar
 - [x] Autosaved drafts: unsaved edits survive a crash and are offered back on next start
 - [x] **Export for KDP** (milestone 6.5): mark a file for export, fill in Book Details (title page, copyright page, dedication, epigraph, back matter), then Export to **EPUB**, **print-interior PDF** and **DOCX** from one dialog
-- [ ] Packaging: app icon, single-instance, open-with, code signing
+- [x] Packaging (milestone 7): app icon, installer, single instance, open-with / double-click `.md`, CI build with a smoke test of the packaged app
+- [ ] Code signing (needs a certificate — see Packaging)
 
 ## Shortcuts
 | Key | Action |
@@ -68,3 +69,26 @@ Trim sizes offered: 5 × 8 up to 8.5 × 11 in (nothing below 5 × 8). Not includ
 - PDF integration (real Electron + Paged.js): needs `xvfb-run` and the Electron binary (`node node_modules/electron/install.js`).
 - epubcheck: needs Java and `pip install epubcheck`.
 - DOCX → LibreOffice round trip: needs `libreoffice-writer` (a bare `soffice` install can't open documents).
+
+## Packaging and installing (Windows 10)
+
+```
+npm ci
+npm run dist          # → release/MDEdit-Setup-<version>.exe  (run on Windows or in CI)
+```
+
+- **Installer:** NSIS, per-user (no admin rights needed), lets you choose the folder, creates Desktop and Start-menu shortcuts. Uninstalling
+  leaves your settings and drafts in `%APPDATA%\MDEdit`.
+- **Icon:** `assets/branding/app-icon-source.jpg` is the master. `python scripts/make_icons.py` (needs `pip install pillow`) regenerates
+  `build/icon.ico`, `build/icon.png` and `assets/icon.png` with rounded corners.
+- **Open with / double-click:** the installer registers MDEdit as an editor for `.md` and `.markdown` (it appears in *Open with*; Windows
+  decides the default). Opening a file starts MDEdit on that file's folder; if MDEdit is already running, the file opens as a tab in the
+  existing window instead (**one window per user**). If it is in another folder and you have unsaved edits, you get the usual
+  Save / Don't Save / Cancel prompt first.
+- **Smoke test:** `MDEdit.exe --smoke-test=result.json` exports a small book to EPUB, PDF and DOCX with the bundled fonts and layout engine
+  and exits 0 on success. CI runs it against the freshly built Windows package, which is the only way to prove the installed app can export.
+- **Code signing:** the installer is **unsigned** until you provide a certificate, so Windows SmartScreen will say "unknown publisher" the first
+  time. To sign, add the repository secrets `WIN_CSC_LINK` (a base64 `.pfx`, or a URL) and `WIN_CSC_KEY_PASSWORD`; the workflow signs automatically
+  when they exist. A standard code-signing certificate removes the "unknown publisher" name; SmartScreen reputation still builds up over time
+  unless you use an EV certificate.
+- **Not included:** auto-update, a portable build, other platforms.

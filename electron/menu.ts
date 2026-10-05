@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, type MenuItemConstructorOptions } from 'electron';
+import { app, BrowserWindow, dialog, Menu, type MenuItemConstructorOptions } from 'electron';
 import type { MenuAction, ThemeSource } from '../src/shared/api';
 
 interface ThemeHooks {
@@ -77,6 +77,32 @@ export function installMenu(theme: ThemeHooks): void {
         { type: 'separator' },
         { role: 'togglefullscreen' },
         ...(app.isPackaged ? [] : ([{ type: 'separator' }, { role: 'toggleDevTools' }] as MenuItemConstructorOptions[]))
+      ]
+    },
+    {
+      label: '&Help',
+      submenu: [
+        {
+          label: 'About MDEdit',
+          click: () => {
+            const opts = {
+              type: 'info' as const,
+              title: 'About MDEdit',
+              message: `MDEdit ${app.getVersion()}`,
+              detail: [
+                'A folder-based Markdown editor with KDP export.',
+                '',
+                `Electron ${process.versions.electron} · Chromium ${process.versions.chrome} · Node ${process.versions.node}`,
+                '',
+                'Bundled font: EB Garamond (SIL Open Font License 1.1).',
+                'Print layout: Paged.js (MIT).'
+              ].join('\n'),
+              buttons: ['OK']
+            };
+            const win = BrowserWindow.getFocusedWindow();
+            void (win ? dialog.showMessageBox(win, opts) : dialog.showMessageBox(opts));
+          }
+        }
       ]
     }
   ];

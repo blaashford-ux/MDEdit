@@ -4,8 +4,10 @@ import type { DraftRecord, Prefs, Session, ThemeSource } from '../src/shared/api
 import { DraftStore } from './drafts';
 import { readWithStamp, statStamp, writeBytesAtomic, writeFileAtomic } from './files';
 import { sanitizeBookDetails } from '../src/shared/export/model';
-import { buildPrintPdf } from './export/pdf';
-import { planExport, runExport, type ExportDeps } from './export/run';
+import { makeExportDeps } from './export/deps';
+import { planExport, runExport } from './export/run';
+import { fileFromArgv } from './launch';
+import { runSmokeTest } from './smokeTest';
 import { loadDetails, renameSidecar, saveDetails, setMarked, existingSidecar } from './export/sidecar';
 import { createFile, createFolder, renameNode } from './fsops';
 import { sidecarPathFor } from '../src/shared/export/sidecar';
@@ -15,8 +17,21 @@ import { confirmDelete, confirmOverwrite, confirmRecover, confirmUnsaved } from 
 import { scanFolder } from './scan';
 import { existingFolder, SettingsStore, type WindowState } from './settings';
 
-let settings: SettingsStore;
+const settings = new SettingsStore(path.join(app.getPath('userData'), 'settings.json'));
 let drafts: DraftStore;
+let mainWindow: BrowserWindow | null = null;
+let smokeMode = false;
+const pendingFiles: string[] = [];
+
+function queueFile(file: string): void {
+  if (!pendingFiles.includes(file)) pendingFiles.push(file);
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
+    mainWindow.webContents.send('app:launchFiles');
+  }
+}
 
 // Paths the renderer may read/write: only inside the folder the user picked.
 let openRoot: string | null = null;
@@ -110,23 +125,7 @@ function registerIpc(): void {
     await fsp.rename(from, target);
   });
   // --- export ---
-  const resources = () => ({
-    fontsDir: path.join(app.getAppPath(), 'assets', 'fonts'),
-    pagedJsPath: path.join(app.getAppPath(), 'assets', 'vendor', 'paged.polyfill.js')
-  });
-  const exportDeps = (): ExportDeps => ({
-    readText: (p) => fsp.readFile(p, 'utf8'),
-    readBytes: async (p, max) => {
-      const st = await fsp.stat(p);
-      if (st.size > max) throw new Error('file too large');
-      return new Uint8Array(await fsp.readFile(p));
-    },
-    writeBytes: writeBytesAtomic,
-    mkdirp: (d) => fsp.mkdir(d, { recursive: true }).then(() => undefined),
-    exists: (p) => fsp.lstat(p).then(() => true, () => false),
-    loadDetails: async (p) => (await loadDetails(p)).details,
-    buildPdf: (book, say, signal) => buildPrintPdf(book, resources(), (p) => say(p.stage === 'laying-out' ? `Laying out pages… ${p.page ?? ''}` : p.stage === 'printing' ? 'Writing the PDF…' : 'Preparing fonts and layout…'), signal)
-  });
+  const exportDeps = () => makeExportDeps();
   let exportAbort: AbortController | null = null;
   const exportedFiles = new Set<string>(); // only files produced by an export may be revealed/opened
   ipcMain.handle('export:plan', (_e, p: string, unsaved?: unknown) =>
@@ -176,6 +175,15 @@ function registerIpc(): void {
   ipcMain.handle('session:get', (_e, folder: string) => settings.get().sessions?.[folder] ?? null);
   ipcMain.on('session:save', (_e, folder: string, session: Session) => {
     if (typeof folder === 'string' && session && Array.isArray(session.tabs)) settings.setSession(folder, session);
+  });
+
+  // Markdown files named on the command line (double-click / "Open with") are queued here until the
+  // renderer collects them, so none are lost if they arrive before the UI is ready.
+  ipcMain.handle('app:takeLaunchFiles', async () => {
+    const files = pendingFiles.splice(0);
+    const ok: string[] = [];
+    for (const f of files) if (await fsp.stat(f).then((st) => st.isFile(), () => false)) ok.push(f);
+    return ok;
   });
 
   ipcMain.handle('drafts:save', (_e, d: DraftRecord) => drafts.save(d));
@@ -241,6 +249,7 @@ function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
     ...restoredBounds(),
     title: 'MDEdit',
+    icon: path.join(app.getAppPath(), 'assets', 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -249,6 +258,10 @@ function createWindow(): BrowserWindow {
     }
   });
   if (settings.get().window?.maximized) win.maximize();
+  mainWindow = win;
+  win.on('closed', () => {
+    if (mainWindow === win) mainWindow = null;
+  });
   guardClose(win);
 
   let timer: NodeJS.Timeout | undefined;
@@ -267,25 +280,59 @@ function createWindow(): BrowserWindow {
   return win;
 }
 
-app.whenReady().then(async () => {
-  settings = new SettingsStore(path.join(app.getPath('userData'), 'settings.json'));
-  await settings.load();
-  drafts = new DraftStore(path.join(app.getPath('userData'), 'drafts'));
-  nativeTheme.themeSource = settings.get().theme ?? 'system';
+// ---- startup ---------------------------------------------------------------------------
 
-  registerIpc();
-  installMenu({ get: () => settings.get().theme ?? 'system', set: setTheme });
-  createWindow();
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+const smokeArg = process.argv.find((a) => a.startsWith('--smoke-test='));
+smokeMode = !!smokeArg;
+if (process.platform === 'win32') app.setAppUserModelId('com.blaashford.mdedit');
+
+// One window per user: a second launch (e.g. double-clicking another .md) hands its file to the first.
+const firstInstance = smokeMode || app.requestSingleInstanceLock();
+if (!firstInstance) {
+  app.quit();
+} else {
+  app.on('second-instance', (_e, argv, cwd) => {
+    const file = fileFromArgv(argv.slice(1), cwd);
+    if (file) queueFile(file);
+    else if (mainWindow && !mainWindow.isDestroyed()) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
   });
-});
+  // macOS: Finder / "Open With" delivers files through this event, possibly before ready.
+  app.on('open-file', (e, file) => {
+    e.preventDefault();
+    if (/\.(md|markdown)$/i.test(file)) queueFile(file);
+  });
+
+  const launchFile = smokeMode ? null : fileFromArgv(process.argv.slice(1), process.cwd());
+  if (launchFile) pendingFiles.push(launchFile);
+
+  app.whenReady().then(async () => {
+    if (smokeArg) {
+      const code = await runSmokeTest(smokeArg.slice('--smoke-test='.length));
+      app.exit(code);
+      return;
+    }
+    await settings.load();
+    drafts = new DraftStore(path.join(app.getPath('userData'), 'drafts'));
+    nativeTheme.themeSource = settings.get().theme ?? 'system';
+
+    registerIpc();
+    installMenu({ get: () => settings.get().theme ?? 'system', set: setTheme });
+    createWindow();
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    });
+  });
+}
 
 app.on('before-quit', () => {
-  void settings?.flush();
+  if (!smokeMode) void settings.flush();
 });
 
 app.on('window-all-closed', () => {
+  if (smokeMode) return; // the hidden render windows used for the PDF are closed one by one
   void settings.flush().finally(() => {
     if (process.platform !== 'darwin') app.quit();
   });

@@ -1,0 +1,38 @@
+import { app } from 'electron';
+import { promises as fsp } from 'node:fs';
+import path from 'node:path';
+import { writeBytesAtomic } from '../files';
+import { buildPrintPdf, type PdfResources } from './pdf';
+import type { ExportDeps } from './run';
+import { loadDetails } from './sidecar';
+
+/** Bundled files the print pipeline needs (inside the asar when packaged). */
+export function pdfResources(): PdfResources {
+  return {
+    fontsDir: path.join(app.getAppPath(), 'assets', 'fonts'),
+    pagedJsPath: path.join(app.getAppPath(), 'assets', 'vendor', 'paged.polyfill.js')
+  };
+}
+
+/** The real-file-system implementation of everything the export orchestrator needs. */
+export function makeExportDeps(resources: PdfResources = pdfResources()): ExportDeps {
+  return {
+    readText: (p) => fsp.readFile(p, 'utf8'),
+    readBytes: async (p, max) => {
+      const st = await fsp.stat(p);
+      if (st.size > max) throw new Error('file too large');
+      return new Uint8Array(await fsp.readFile(p));
+    },
+    writeBytes: writeBytesAtomic,
+    mkdirp: (d) => fsp.mkdir(d, { recursive: true }).then(() => undefined),
+    exists: (p) => fsp.lstat(p).then(() => true, () => false),
+    loadDetails: async (p) => (await loadDetails(p)).details,
+    buildPdf: (book, say, signal) =>
+      buildPrintPdf(
+        book,
+        resources,
+        (p) => say(p.stage === 'laying-out' ? `Laying out pages… ${p.page ?? ''}` : p.stage === 'printing' ? 'Writing the PDF…' : 'Preparing fonts and layout…'),
+        signal
+      )
+  };
+}

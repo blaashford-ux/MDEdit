@@ -600,3 +600,74 @@ describe('mark for export', () => {
     expect(api.books.has(A)).toBe(true);
   });
 });
+
+describe('files opened from outside (double-click / Open with / second launch)', () => {
+  it('a file inside the open folder opens as a tab and its folder is expanded', async () => {
+    expect(await ws.openExternalFile(B)).toBe(true);
+    expect(state().tabs.map((t) => t.file)).toEqual([B]);
+    expect(state().activeId).toBe(tabOf(B).id);
+    expect(state().expanded.has(`${ROOT}/sub`)).toBe(true);
+    expect(state().root?.path).toBe(ROOT);
+  });
+
+  it('a file that is already open is activated, not duplicated', async () => {
+    await ws.openChapter(A, 2);
+    await ws.openChapter(B, 0);
+    expect(await ws.openExternalFile(A)).toBe(true);
+    expect(state().tabs).toHaveLength(2);
+    expect(state().activeId).toBe(tabOf(A).id);
+    expect(tabOf(A).chapter).toBe(2); // keeps the chapter you were on
+  });
+
+  it('a file in another folder switches the open folder to its folder', async () => {
+    api.files.set('/other/x.md', { text: '# X\nbody\n', mtime: 1 });
+    expect(await ws.openExternalFile('/other/x.md')).toBe(true);
+    expect(state().root?.path).toBe('/other');
+    expect(state().tabs.map((t) => t.file)).toEqual(['/other/x.md']);
+  });
+
+  it('asks about unsaved edits before leaving the current folder; Cancel keeps everything', async () => {
+    api.files.set('/other/x.md', { text: '# X\n', mtime: 1 });
+    await ws.openChapter(A, 0);
+    ws.setDraft(tabOf(A).id, '# One\nUNSAVED');
+    expect(await ws.openExternalFile('/other/x.md')).toBe(false); // default answer: cancel
+    expect(state().root?.path).toBe(ROOT);
+    expect(tabOf(A).draft).toBe('# One\nUNSAVED');
+    api.unsavedAnswers = ['discard'];
+    expect(await ws.openExternalFile('/other/x.md')).toBe(true);
+    expect(state().root?.path).toBe('/other');
+  });
+
+  it('opening within the current folder never prompts, even with unsaved edits', async () => {
+    await ws.openChapter(A, 0);
+    ws.setDraft(tabOf(A).id, '# One\nUNSAVED');
+    await ws.openExternalFile(B);
+    expect(api.unsavedAsked).toEqual([]);
+    expect(tabOf(A).draft).toBe('# One\nUNSAVED');
+  });
+
+  it('a missing file reports an error and opens nothing', async () => {
+    expect(await ws.openExternalFile(`${ROOT}/nope.md`)).toBe(false);
+    expect(state().error).toBeTruthy();
+    expect(state().tabs).toEqual([]);
+  });
+
+  it('takes the queued launch files in order and opens each', async () => {
+    api.launchFiles = [A, B];
+    await ws.openLaunchFiles();
+    expect(state().tabs.map((t) => t.file)).toEqual([A, B]);
+    expect(state().activeId).toBe(tabOf(B).id);
+    expect(api.launchFiles).toEqual([]); // each file is handed out once
+    await ws.openLaunchFiles(); // nothing left: no change
+    expect(state().tabs).toHaveLength(2);
+  });
+
+  it('restores the other folder’s saved tabs when its file is opened', async () => {
+    api.files.set('/other/x.md', { text: '# X\n', mtime: 1 });
+    api.files.set('/other/y.md', { text: '# Y\n', mtime: 2 });
+    api.sessions.set('/other', { tabs: [{ file: '/other/y.md', chapter: 0, mode: 'visual' }], active: '/other/y.md', expanded: [] });
+    await ws.openExternalFile('/other/x.md');
+    expect(state().tabs.map((t) => t.file)).toEqual(['/other/y.md', '/other/x.md']);
+    expect(state().activeId).toBe(tabOf('/other/x.md').id);
+  });
+});

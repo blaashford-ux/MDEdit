@@ -60,11 +60,17 @@ export function App() {
   // ---- lifecycle -------------------------------------------------------------------------
 
   useEffect(() => {
-    void ws.init();
+    // Restore the last folder, then open any file the app was launched with.
+    void ws.init().then(() => ws.openLaunchFiles());
+    // Files handed over later by another launch (double-clicking a second .md).
+    const stopLaunch = window.mdedit.onLaunchFiles(() => void ws.openLaunchFiles());
     const stopClose = window.mdedit.onCloseRequested(() => {
       void ws.handleCloseRequest().then((ok) => window.mdedit.reportCloseDecision(ok));
     });
-    return stopClose;
+    return () => {
+      stopLaunch();
+      stopClose();
+    };
   }, [ws]);
 
   // Notice edits made outside the app (Dropbox sync, another editor, git checkout...).
