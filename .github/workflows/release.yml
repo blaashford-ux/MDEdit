@@ -1,0 +1,105 @@
+name: release
+
+# Publishes a GitHub Release (with the Windows installer attached) when a version tag is pushed:
+#   npm version 0.2.0 && git push origin HEAD --follow-tags
+# See docs/RELEASING.md.
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+*']
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Check the tag matches package.json
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      prerelease: ${{ steps.v.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        shell: bash
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          ver="${tag#v}"
+          pkg="$(node -p "require('./package.json').version")"
+          if [ "$ver" != "$pkg" ]; then
+            echo "::error::The tag $tag does not match the version in package.json ($pkg). Bump it with 'npm version <new version>' and tag that commit."
+            exit 1
+          fi
+          echo "version=$ver" >> "$GITHUB_OUTPUT"
+          case "$ver" in
+            *-*) echo "prerelease=true" >> "$GITHUB_OUTPUT" ;;
+            *)   echo "prerelease=false" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+  build:
+    name: Test, build and smoke-test
+    needs: verify
+    uses: ./.github/workflows/build.yml
+    secrets: inherit
+
+  publish:
+    name: Publish the release
+    needs: [verify, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the release and upload the installer
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: MDEdit-windows-installer
+          path: artifacts
+      - name: Checksums and release notes
+        shell: bash
+        run: |
+          cd artifacts
+          sha256sum *.exe > SHA256SUMS.txt
+          installer="$(ls *.exe | head -n1)"
+          cat > ../notes.md <<NOTES
+          ## Install (Windows 10 / 11)
+
+          1. Download **${installer}** below and run it.
+          2. Windows SmartScreen may say *"Windows protected your PC"* because this installer is not code-signed yet.
+             Click **More info → Run anyway**.
+          3. Choose an install folder (no administrator rights needed) and finish the wizard.
+
+          Your settings and recovery drafts live in \`%APPDATA%\\MDEdit\` and are kept if you uninstall.
+
+          **Verify the download (optional):** in PowerShell, \`Get-FileHash .\\${installer} -Algorithm SHA256\` should match \`SHA256SUMS.txt\`:
+
+          \`\`\`
+          $(cat SHA256SUMS.txt)
+          \`\`\`
+
+          ## What's changed
+          NOTES
+          # drop the heredoc's indentation
+          sed -i 's/^          //' ../notes.md
+      - name: Create (or update) the GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+          PRERELEASE: ${{ needs.verify.outputs.prerelease }}
+        run: |
+          flags=()
+          if [ "$PRERELEASE" = "true" ]; then flags+=(--prerelease); fi
+          if gh release view "$TAG" --repo "$REPO" > /dev/null 2>&1; then
+            echo "Release $TAG already exists: replacing its files."
+            gh release upload "$TAG" artifacts/*.exe artifacts/SHA256SUMS.txt --clobber --repo "$REPO"
+          else
+            gh release create "$TAG" artifacts/*.exe artifacts/SHA256SUMS.txt \
+              --repo "$REPO" --verify-tag --title "MDEdit ${TAG#v}" \
+              --notes-file notes.md --generate-notes "${flags[@]}"
+          fi

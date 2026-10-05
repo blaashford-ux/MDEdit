@@ -92,3 +92,10 @@ npm run dist          # → release/MDEdit-Setup-<version>.exe  (run on Windows 
   when they exist. A standard code-signing certificate removes the "unknown publisher" name; SmartScreen reputation still builds up over time
   unless you use an EV certificate.
 - **Not included:** auto-update, a portable build, other platforms.
+
+## Releases
+
+Download the latest Windows installer from
+[Releases](https://github.com/blaashford-ux/MDEdit/releases/latest). Pushing a version tag
+(`npm version 0.2.0 && git push origin HEAD --follow-tags`) builds, tests and publishes a release
+automatically. See [docs/RELEASING.md](docs/RELEASING.md).

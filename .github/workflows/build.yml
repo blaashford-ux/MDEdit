@@ -2,8 +2,10 @@ name: build
 
 on:
   push:
+    branches: ['**'] # tags are handled by release.yml, which calls this workflow
   pull_request:
   workflow_dispatch:
+  workflow_call: # reused by release.yml so a release runs the same tests, build and smoke test
 
 env:
   # GitHub is retiring the Node 20 runtime for actions; run them on Node 24 now.
@@ -63,3 +65,4 @@ jobs:
           name: MDEdit-windows-installer
           path: release/MDEdit-Setup-*.exe
           if-no-files-found: error
+          retention-days: 30
