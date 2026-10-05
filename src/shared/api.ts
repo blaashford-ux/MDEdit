@@ -1,7 +1,13 @@
+import type { BookDetails } from './export/model';
+
 export interface FileNode {
   kind: 'file';
   name: string;
   path: string;
+  /** Marked for export (its `<name>.export.json` says so). */
+  marked?: boolean;
+  /** Another file with the same name already owns this export-settings file. */
+  exportBlocked?: boolean;
 }
 
 export interface DirNode {
@@ -9,6 +15,8 @@ export interface DirNode {
   name: string;
   path: string;
   children: TreeNode[];
+  /** Export-settings files in this folder whose manuscript no longer exists. */
+  orphanSidecars?: string[];
 }
 
 export type TreeNode = FileNode | DirNode;
@@ -79,6 +87,16 @@ export interface MdeditApi {
   trashNode(path: string): Promise<void>;
   /** Shows the item in File Explorer. */
   reveal(path: string): void;
+
+  /** The book's saved details, or fresh defaults if none exist yet. */
+  getBookDetails(file: string): Promise<{ details: BookDetails; exists: boolean; damaged: boolean }>;
+  saveBookDetails(file: string, details: BookDetails): Promise<void>;
+  /** Marks/unmarks a file for export (creates or updates its export-settings file). */
+  setMarked(file: string, marked: boolean): Promise<{ backedUp: boolean }>;
+  /** Attaches an orphaned export-settings file to a manuscript in the same folder. */
+  relinkSidecar(sidecar: string, markdownFile: string): Promise<void>;
+  /** Native image picker for the EPUB cover. */
+  pickCoverImage(): Promise<string | null>;
 
   getPrefs(): Promise<Prefs>;
   setPrefs(patch: Partial<Prefs>): void;

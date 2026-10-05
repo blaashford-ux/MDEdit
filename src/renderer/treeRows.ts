@@ -15,6 +15,10 @@ export interface Row {
   parentKey: string | null;
   /** Word count, for chapters of files that have been read. */
   words?: number;
+  /** File marked for export. */
+  marked?: boolean;
+  /** File that can't be marked because another file with the same name owns the export settings. */
+  exportBlocked?: boolean;
 }
 
 /**
@@ -63,7 +67,9 @@ export function buildRows(
         label: n.name,
         expandable,
         expanded: open,
-        parentKey
+        parentKey,
+        ...(n.kind === 'file' && n.marked ? { marked: true } : {}),
+        ...(n.kind === 'file' && n.exportBlocked ? { exportBlocked: true } : {})
       });
       if (!open) continue;
       if (n.kind === 'dir') {

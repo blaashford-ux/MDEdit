@@ -19,6 +19,55 @@ const touch = async (rel: string) => {
 };
 const names = (n: { children: { name: string }[] }) => n.children.map((c) => c.name);
 
+const writeSidecar = (rel: string, marked: unknown) => writeFile(path.join(root, rel), JSON.stringify({ marked }));
+
+describe('export sidecars in the scan', () => {
+  it('flags files whose sidecar says marked, and never lists the sidecar itself', async () => {
+    await touch('a.md');
+    await touch('b.md');
+    await touch('c.md');
+    await writeSidecar('a.export.json', true);
+    await writeSidecar('b.export.json', false);
+    const tree = await scanFolder(root);
+    expect(names(tree)).toEqual(['a.md', 'b.md', 'c.md']);
+    const byName = Object.fromEntries(tree.children.map((c) => [c.name, c]));
+    expect(byName['a.md']).toMatchObject({ marked: true });
+    expect(byName['b.md']).toMatchObject({ marked: false });
+    expect('marked' in byName['c.md']).toBe(false);
+  });
+
+  it('a corrupt sidecar means "not marked", not a crash', async () => {
+    await touch('a.md');
+    await writeFile(path.join(root, 'a.export.json'), '{oops');
+    const a = (await scanFolder(root)).children[0];
+    expect(a).toMatchObject({ name: 'a.md', marked: false });
+  });
+
+  it('when book.md and book.markdown both exist, .md owns the sidecar and the other is blocked', async () => {
+    await touch('book.md');
+    await touch('book.markdown');
+    await writeSidecar('book.export.json', true);
+    const tree = await scanFolder(root);
+    const by = Object.fromEntries(tree.children.map((c) => [c.name, c]));
+    expect(by['book.md']).toMatchObject({ marked: true });
+    expect(by['book.markdown']).toMatchObject({ exportBlocked: true });
+    expect('marked' in by['book.markdown']).toBe(false);
+  });
+
+  it('reports sidecars with no manuscript as orphans, per folder', async () => {
+    await touch('keep.md');
+    await writeSidecar('keep.export.json', true);
+    await writeSidecar('gone.export.json', true);
+    await mkdir(path.join(root, 'sub'));
+    await writeFile(path.join(root, 'sub/lost.export.json'), '{}');
+    await touch('sub/x.md');
+    const tree = await scanFolder(root);
+    expect(tree.orphanSidecars).toEqual([path.join(root, 'gone.export.json')]);
+    const sub = tree.children.find((c) => c.name === 'sub') as { orphanSidecars?: string[] };
+    expect(sub.orphanSidecars).toEqual([path.join(root, 'sub/lost.export.json')]);
+  });
+});
+
 describe('scanFolder', () => {
   it('lists folders first, then files, naturally sorted, md/markdown only', async () => {
     await touch('b.md');

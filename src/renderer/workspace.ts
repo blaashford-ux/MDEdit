@@ -10,7 +10,7 @@ import {
   type MarkdownDoc
 } from '../shared/chapters';
 import { basename, dirname, isInside, remapPath } from '../shared/paths';
-import { flattenPaths } from '../shared/tree';
+import { collectFiles, collectOrphans, flattenPaths } from '../shared/tree';
 
 export type Conflict = { kind: 'changed'; text: string; stamp: FileStamp } | { kind: 'missing' };
 
@@ -610,6 +610,40 @@ export class Workspace {
     } catch (e) {
       this.set({ error: String(e instanceof Error ? e.message : e) });
       return null;
+    }
+  }
+
+  /** Marks/unmarks a file for export. The tree is refreshed so its badge appears. */
+  async setMarked(file: string, marked: boolean): Promise<boolean> {
+    try {
+      const { backedUp } = await this.api.setMarked(file, marked);
+      await this.refresh();
+      if (backedUp) {
+        this.set({ notice: `The old export settings for ${basename(file)} couldn’t be read and were replaced. A copy was kept as a .bak file next to it.` });
+      }
+      return true;
+    } catch (e) {
+      this.set({ error: `Could not ${marked ? 'mark' : 'unmark'} the file: ${e instanceof Error ? e.message : e}` });
+      return false;
+    }
+  }
+
+  markedFiles(): string[] {
+    return this.state.root ? collectFiles(this.state.root, (f) => f.marked === true).map((f) => f.path) : [];
+  }
+
+  orphanSidecars(): string[] {
+    return this.state.root ? collectOrphans(this.state.root) : [];
+  }
+
+  async relinkSidecar(sidecar: string, markdownFile: string): Promise<boolean> {
+    try {
+      await this.api.relinkSidecar(sidecar, markdownFile);
+      await this.refresh();
+      return true;
+    } catch (e) {
+      this.set({ error: String(e instanceof Error ? e.message : e) });
+      return false;
     }
   }
 

@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { MenuAction } from '../shared/api';
 import { basename, dirname, validateName } from '../shared/paths';
+import { collectOrphans, findNode } from '../shared/tree';
 import { countWords } from '../shared/words';
+import { BookDetailsDialog } from './BookDetailsDialog';
 import { ContextMenu, type MenuItem } from './ContextMenu';
 import { Editor } from './Editor';
 import { PromptDialog, type PromptSpec } from './PromptDialog';
+import { RelinkDialog } from './RelinkDialog';
 import { SourceEditor } from './SourceEditor';
 import { StatusBar } from './StatusBar';
 import { Tabs } from './Tabs';
@@ -23,6 +26,9 @@ export function App() {
   const [focusKey, setFocusKey] = useState<string | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; row: Row } | null>(null);
   const [prompt, setPrompt] = useState<PromptSpec | null>(null);
+  const [bookFile, setBookFile] = useState<string | null>(null);
+  const [relink, setRelink] = useState<string | null>(null);
+  const [ignoredOrphans, setIgnoredOrphans] = useState<Set<string>>(new Set());
   const filterRef = useRef<HTMLInputElement>(null);
 
   const activeTab = s.tabs.find((t) => t.id === s.activeId);
@@ -34,6 +40,17 @@ export function App() {
     () => (s.root ? buildRows(s.root, s.expanded, s.docs, filter) : []),
     [s.root, s.expanded, s.docs, filter]
   );
+  const orphan = useMemo(
+    () => (s.root ? collectOrphans(s.root).find((o) => !ignoredOrphans.has(o)) : undefined),
+    [s.root, ignoredOrphans]
+  );
+  const relinkCandidates = useMemo(() => {
+    if (!relink || !s.root) return [];
+    const dir = findNode(s.root, dirname(relink));
+    return dir && dir.kind === 'dir'
+      ? dir.children.filter((c) => c.kind === 'file' && c.marked === undefined && !c.exportBlocked).map((c) => ({ name: c.name, path: c.path }))
+      : [];
+  }, [relink, s.root]);
   const dirtyFiles = useMemo(() => new Set(s.tabs.filter((t) => t.draft !== null).map((t) => t.file)), [s.tabs]);
 
   // ---- lifecycle -------------------------------------------------------------------------
@@ -141,6 +158,11 @@ export function App() {
     if (idx !== null) setFocusKey(chapterKey(row.path, idx));
   };
 
+  /** Marks a file for export and opens its Book Details so the title and author can be filled in. */
+  const markAndEdit = async (file: string) => {
+    if (await ws.setMarked(file, true)) setBookFile(file);
+  };
+
   const deleteRow = (row: Row) => {
     if (row.kind === 'chapter') void ws.deleteChapter(row.path, row.chapter!);
     else void ws.deleteNode(row.path, row.kind === 'dir' ? 'folder' : 'file');
@@ -178,7 +200,16 @@ export function App() {
       ];
     }
     if (row.kind === 'file') {
+      const exportItems: MenuItem[] = row.exportBlocked
+        ? [{ label: 'Can’t mark: another file with this name owns the export settings', disabled: true, onClick: () => undefined }]
+        : row.marked
+          ? [
+              { label: 'Book Details…', onClick: () => setBookFile(row.path) },
+              { label: 'Unmark for Export', onClick: () => void ws.setMarked(row.path, false) }
+            ]
+          : [{ label: 'Mark for Export', onClick: () => void markAndEdit(row.path) }];
       return [
+        ...exportItems,
         { label: 'Rename…', hint: 'F2', onClick: () => promptRename(row) },
         reveal,
         { label: 'Delete…', danger: true, hint: 'Del', onClick: () => deleteRow(row) }
@@ -363,6 +394,13 @@ export function App() {
             {s.error} <button onClick={() => ws.setError(null)}>Dismiss</button>
           </div>
         )}
+        {orphan && (
+          <div className="banner warn" role="alert">
+            Export settings for “{basename(orphan).replace(/\.export\.json$/i, '')}” no longer match a file (renamed outside MDEdit?).{' '}
+            <button onClick={() => setRelink(orphan)}>Link to a file…</button>{' '}
+            <button onClick={() => setIgnoredOrphans(new Set([...ignoredOrphans, orphan]))}>Ignore</button>
+          </div>
+        )}
         {s.notice && (
           <div className="banner info" role="status">
             {s.notice} <button onClick={() => ws.dismissNotice()}>Dismiss</button>
@@ -456,6 +494,10 @@ export function App() {
 
       {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItems(menu.row)} onClose={() => setMenu(null)} />}
       {prompt && <PromptDialog spec={prompt} onClose={() => setPrompt(null)} />}
+      {relink && (
+        <RelinkDialog sidecar={relink} candidates={relinkCandidates} onLink={(md) => ws.relinkSidecar(relink, md)} onClose={() => setRelink(null)} />
+      )}
+      {bookFile && <BookDetailsDialog file={bookFile} onClose={() => setBookFile(null)} onSaved={() => void ws.refresh()} />}
     </div>
   );
 }

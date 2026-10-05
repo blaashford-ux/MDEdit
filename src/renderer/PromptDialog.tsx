@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useEscape } from './useEscape';
 
 export interface PromptSpec {
   title: string;
@@ -20,6 +21,7 @@ export function PromptDialog({ spec, onClose }: { spec: PromptSpec; onClose(): v
   const [serverError, setServerError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const input = useRef<HTMLInputElement>(null);
+  useEscape(onClose);
 
   useEffect(() => {
     const el = input.current;
@@ -51,9 +53,6 @@ export function PromptDialog({ spec, onClose }: { spec: PromptSpec; onClose(): v
         onSubmit={(e) => {
           e.preventDefault();
           void submit();
-        }}
-        onKeyDown={(e) => {
-          if (e.key === 'Escape') onClose();
         }}
       >
         <h3>{spec.title}</h3>

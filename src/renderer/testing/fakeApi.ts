@@ -1,3 +1,5 @@
+import type { BookDetails } from '../../shared/export/model';
+import { defaultBookDetails } from '../../shared/export/model';
 import type {
   DirNode,
   DraftRecord,
@@ -69,9 +71,32 @@ export class FakeApi implements MdeditApi {
     const fileNodes: TreeNode[] = [...this.files.keys()]
       .filter((p) => dirname(p) === dir)
       .sort()
-      .map((p) => ({ kind: 'file' as const, name: basename(p), path: p }));
-    return { kind: 'dir', name: basename(dir), path: dir, children: [...dirNodes, ...fileNodes] };
+      .map((p) => ({ kind: 'file' as const, name: basename(p), path: p, ...(this.books.has(p) ? { marked: this.books.get(p)!.marked } : {}) }));
+    const orphanSidecars = this.orphans.filter((o) => dirname(o) === dir);
+    return { kind: 'dir', name: basename(dir), path: dir, children: [...dirNodes, ...fileNodes], ...(orphanSidecars.length ? { orphanSidecars } : {}) };
   }
+
+  /** Saved Book Details by manuscript path (present = marked/has a sidecar). */
+  books = new Map<string, BookDetails>();
+  orphans: string[] = [];
+  damagedOnMark = false;
+  coverPick: string | null = null;
+  getBookDetails = async (file: string) => {
+    const d = this.books.get(file);
+    return { details: d ?? defaultBookDetails({ title: basename(file).replace(/\.md$/, ''), author: '' }), exists: !!d, damaged: false };
+  };
+  saveBookDetails = async (file: string, d: BookDetails) => void this.books.set(file, d);
+  setMarked = async (file: string, marked: boolean) => {
+    const cur = this.books.get(file) ?? defaultBookDetails({ title: basename(file).replace(/\.md$/, ''), author: '' });
+    if (!marked && !this.books.has(file)) return { backedUp: false };
+    this.books.set(file, { ...cur, marked });
+    return { backedUp: this.damagedOnMark };
+  };
+  relinkSidecar = async (sidecar: string, md: string) => {
+    this.orphans = this.orphans.filter((o) => o !== sidecar);
+    this.books.set(md, defaultBookDetails({ title: 'relinked', author: 'x' }));
+  };
+  pickCoverImage = async () => this.coverPick;
 
   pickFolder = async () => this.pickResult;
   getLastFolder = async () => this.lastFolder;

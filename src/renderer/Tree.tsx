@@ -106,6 +106,11 @@ export function Tree(p: Props) {
               {r.kind === 'dir' ? '📁 ' : r.kind === 'file' ? '📄 ' : ''}
               {r.label}
             </span>
+            {r.marked && (
+              <span className="book-badge" title="Marked for export" aria-label="marked for export">
+                📕
+              </span>
+            )}
             {dirty && (
               <span className="dirty" aria-label="unsaved changes">
                 ●

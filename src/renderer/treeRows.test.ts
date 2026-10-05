@@ -48,6 +48,22 @@ describe('buildRows', () => {
     expect(buildRows(tree, new Set(), docs, 'book').map((r) => r.label)).toEqual(['Book', 'story.md', 'notes.md']);
   });
 
+  it('carries the export mark onto file rows only', () => {
+    const t: DirNode = {
+      kind: 'dir', name: 'r', path: '/r',
+      children: [
+        { kind: 'file', name: 'a.md', path: '/r/a.md', marked: true },
+        { kind: 'file', name: 'b.md', path: '/r/b.md', marked: false },
+        { kind: 'file', name: 'c.md', path: '/r/c.markdown', exportBlocked: true },
+        { kind: 'file', name: 'd.md', path: '/r/d.md' }
+      ]
+    };
+    const rows = buildRows(t, new Set(), new Map(), '');
+    expect(rows.map((r) => [r.label, r.marked ?? false, r.exportBlocked ?? false])).toEqual([
+      ['a.md', true, false], ['b.md', false, false], ['c.md', false, true], ['d.md', false, false]
+    ]);
+  });
+
   it('filterTree leaves the tree alone for an empty query', () => {
     expect(filterTree(tree, '  ')).toBe(tree);
   });

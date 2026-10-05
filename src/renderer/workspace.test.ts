@@ -560,3 +560,43 @@ describe('chapter structure from the sidebar', () => {
     expect(state().docs.get(A)!.chapters.map((c) => c.title)).toEqual(['One', 'Three', 'Two']);
   });
 });
+
+describe('mark for export', () => {
+  it('marks a file, shows it as marked in the tree, and lists it', async () => {
+    expect(ws.markedFiles()).toEqual([]);
+    expect(await ws.setMarked(A, true)).toBe(true);
+    expect(ws.markedFiles()).toEqual([A]);
+    const node = state().root!.children.find((c) => c.name === 'a.md');
+    expect(node).toMatchObject({ marked: true });
+  });
+
+  it('unmarking keeps the saved details but clears the badge', async () => {
+    await ws.setMarked(A, true);
+    await ws.setMarked(A, false);
+    expect(ws.markedFiles()).toEqual([]);
+    expect(api.books.get(A)).toMatchObject({ marked: false });
+  });
+
+  it('tells you when unreadable export settings were replaced (and backed up)', async () => {
+    api.damagedOnMark = true;
+    await ws.setMarked(A, true);
+    expect(state().notice).toMatch(/couldn’t be read and were replaced.*\.bak/);
+  });
+
+  it('reports a failure and leaves the tree alone', async () => {
+    api.setMarked = async () => {
+      throw new Error('read-only folder');
+    };
+    expect(await ws.setMarked(A, true)).toBe(false);
+    expect(state().error).toMatch(/Could not mark the file: read-only folder/);
+  });
+
+  it('lists orphaned export settings and can re-link them to a file', async () => {
+    api.orphans = [`${ROOT}/old.export.json`];
+    await ws.refresh();
+    expect(ws.orphanSidecars()).toEqual([`${ROOT}/old.export.json`]);
+    expect(await ws.relinkSidecar(`${ROOT}/old.export.json`, A)).toBe(true);
+    expect(ws.orphanSidecars()).toEqual([]);
+    expect(api.books.has(A)).toBe(true);
+  });
+});

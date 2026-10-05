@@ -3,7 +3,10 @@ import path from 'node:path';
 import type { DraftRecord, Prefs, Session, ThemeSource } from '../src/shared/api';
 import { DraftStore } from './drafts';
 import { readWithStamp, statStamp, writeFileAtomic } from './files';
+import { loadDetails, renameSidecar, saveDetails, setMarked, existingSidecar } from './export/sidecar';
 import { createFile, createFolder, renameNode } from './fsops';
+import { sidecarPathFor } from '../src/shared/export/sidecar';
+import { promises as fsp } from 'node:fs';
 import { installMenu } from './menu';
 import { confirmDelete, confirmOverwrite, confirmRecover, confirmUnsaved } from './prompts';
 import { scanFolder } from './scan';
@@ -67,8 +70,48 @@ function registerIpc(): void {
   ipcMain.handle('fs:createFolder', (_e, dir: string, name: string) =>
     createFolder(inRoot(dir, { allowRoot: true }), name)
   );
-  ipcMain.handle('fs:renameNode', (_e, p: string, newName: string) => renameNode(inRoot(p), newName));
-  ipcMain.handle('fs:trashNode', (_e, p: string) => shell.trashItem(inRoot(p)));
+  ipcMain.handle('fs:renameNode', async (_e, p: string, newName: string) => {
+    const from = inRoot(p);
+    const to = await renameNode(from, newName);
+    if (isMarkdown(from)) await renameSidecar(from, to).catch(() => undefined); // export settings follow the file
+    return to;
+  });
+  ipcMain.handle('fs:trashNode', async (_e, p: string) => {
+    const full = inRoot(p);
+    await shell.trashItem(full);
+    if (isMarkdown(full)) {
+      const sidecar = await existingSidecar(full);
+      if (sidecar) await shell.trashItem(sidecar).catch(() => undefined);
+    }
+  });
+
+  // --- export: book details ---
+  const mdPath = (p: string) => {
+    const full = inRoot(p);
+    if (!isMarkdown(full)) throw new Error('Only Markdown files can be exported');
+    return full;
+  };
+  ipcMain.handle('export:getDetails', (_e, p: string) => loadDetails(mdPath(p)));
+  ipcMain.handle('export:saveDetails', (_e, p: string, details: unknown) => saveDetails(mdPath(p), details as never));
+  ipcMain.handle('export:setMarked', (_e, p: string, marked: boolean) => setMarked(mdPath(p), marked === true));
+  ipcMain.handle('export:relink', async (_e, sidecar: string, md: string) => {
+    const from = inRoot(sidecar);
+    const target = sidecarPathFor(mdPath(md));
+    if (!from.toLowerCase().endsWith('.export.json')) throw new Error('Not an export-settings file');
+    try {
+      await fsp.lstat(target);
+      throw new Error('That file already has export settings.');
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e;
+    }
+    await fsp.rename(from, target);
+  });
+  ipcMain.handle('export:pickCover', async (e) => {
+    const win = winOf(e);
+    const opts = { properties: ['openFile' as const], filters: [{ name: 'Images', extensions: ['jpg', 'jpeg', 'png'] }] };
+    const res = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
+    return res.canceled || res.filePaths.length === 0 ? null : res.filePaths[0];
+  });
   ipcMain.on('shell:reveal', (_e, p: string) => {
     try {
       shell.showItemInFolder(inRoot(p, { allowRoot: true }));
