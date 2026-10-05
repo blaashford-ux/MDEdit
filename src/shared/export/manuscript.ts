@@ -54,7 +54,11 @@ export function inlinesToPlain(inlines: Inline[]): string {
 
 class Ctx {
   warnings: string[] = [];
-  constructor(public chapter: string) {}
+  constructor(
+    public chapter: string,
+    /** The heading level that starts a chapter; deeper headings become sub-headings relative to it. */
+    public chapterLevel = 1
+  ) {}
   warn(msg: string) {
     this.warnings.push(`${this.chapter ? `“${this.chapter}”: ` : ''}${msg}`);
   }
@@ -106,7 +110,7 @@ function toBlocks(nodes: Content[], ctx: Ctx): Block[] {
         break;
       }
       case 'heading':
-        out.push({ t: 'sub', level: Math.min(6, Math.max(2, n.depth)) as 2 | 3 | 4 | 5 | 6, inlines: toInlines(n.children, ctx) });
+        out.push({ t: 'sub', level: Math.min(6, Math.max(2, n.depth - ctx.chapterLevel + 1)) as 2 | 3 | 4 | 5 | 6, inlines: toInlines(n.children, ctx) });
         break;
       case 'thematicBreak':
         out.push({ t: 'scene' });
@@ -150,23 +154,24 @@ function tidyScenes(blocks: Block[], ctx: Ctx): Block[] {
 
 const YAML_FRONT = /^---[ \t]*\r?\n[\s\S]*?\r?\n(?:---|\.\.\.)[ \t]*(?:\r?\n|$)/;
 
-/** Parses a manuscript file into chapters (one per Heading 1), ready for any output format. */
-export function parseManuscript(source: string): Manuscript {
-  const doc = splitChapters(source);
+/** Parses a manuscript file into chapters (one per heading of `chapterLevel`, default Heading 1), ready for any output format. */
+export function parseManuscript(source: string, chapterLevel = 1): Manuscript {
+  const doc = splitChapters(source, chapterLevel);
+  const level = doc.level;
   const chapters: ManuscriptChapter[] = [];
   const warnings: string[] = [];
 
   for (const c of doc.chapters) {
     if (c.isPreamble) {
       const text = c.raw.replace(YAML_FRONT, '').trim();
-      if (text) warnings.push(`Text before the first Heading 1 was left out (${countWords(text).toLocaleString()} words).`);
+      if (text) warnings.push(`Text before the first Heading ${level} was left out (${countWords(text).toLocaleString()} words).`);
       continue;
     }
     const tree = parser.parse(c.raw) as Root;
-    const headIdx = tree.children.findIndex((n) => n.type === 'heading' && n.depth === 1);
+    const headIdx = tree.children.findIndex((n) => n.type === 'heading' && n.depth === level);
     const head = tree.children[headIdx];
     const title = head && head.type === 'heading' ? inlinesToPlain(toInlines(head.children, new Ctx(''))) : c.title;
-    const ctx = new Ctx(title || '(untitled)');
+    const ctx = new Ctx(title || '(untitled)', level);
     const body = tree.children.filter((_, i) => i !== headIdx);
     const blocks = tidyScenes(toBlocks(body, ctx), ctx);
     if (blocks.length === 0) ctx.warn('this chapter is empty');

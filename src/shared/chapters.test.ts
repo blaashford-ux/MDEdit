@@ -187,3 +187,52 @@ describe('chapter structure edits', () => {
     expect(joinChapters(r.doc)).toBe('# B\nb\n# A\n```\n# x\n```\n');
   });
 });
+
+describe('chapter heading level', () => {
+  const src = '# Book\n\nintro\n\n## One\na\n\n### detail\nx\n\n## Two\nb\n';
+
+  it('splits at the chosen level and keeps everything else inside the chapters', () => {
+    const d = splitChapters(src, 2);
+    expect(d.level).toBe(2);
+    expect(d.chapters.map((c) => (c.isPreamble ? '(pre)' : c.title))).toEqual(['(pre)', 'One', 'Two']);
+    expect(d.chapters[0].raw).toBe('# Book\n\nintro\n\n');
+    expect(d.chapters[1].raw).toBe('## One\na\n\n### detail\nx\n\n');
+  });
+
+  it('is lossless at every level', () => {
+    for (const level of [1, 2, 3, 4, 5, 6]) expect(joinChapters(splitChapters(src + '#### four\n##### five\n###### six\n', level))).toBe(src + '#### four\n##### five\n###### six\n');
+  });
+
+  it('only matches the exact level (## is not a level-1 heading and # is not level 2)', () => {
+    expect(splitChapters('## a\n# b\n', 1).chapters.map((c) => c.title)).toEqual(['', 'b']);
+    expect(splitChapters('## a\n# b\n', 2).chapters.map((c) => c.title)).toEqual(['a']);
+    expect(splitChapters('#hashtag\n', 1).chapters).toHaveLength(1);
+  });
+
+  it('supports Setext underlines for levels 1 and 2 only', () => {
+    expect(splitChapters('Title\n---\nbody\n', 2).chapters.map((c) => c.title)).toEqual(['Title']);
+    expect(splitChapters('Title\n---\nbody\n', 1).chapters).toHaveLength(1);
+    expect(splitChapters('Title\n===\nbody\n', 3).chapters).toHaveLength(1);
+  });
+
+  it('does not take a scene break --- for a level-2 heading', () => {
+    expect(splitChapters('## A\ntext\n\n---\n\nmore\n', 2).chapters.map((c) => c.title)).toEqual(['A']);
+  });
+
+  it('clamps nonsense levels', () => {
+    expect(splitChapters('# a\n', 0).level).toBe(1);
+    expect(splitChapters('# a\n', 99).level).toBe(6);
+    expect(splitChapters('# a\n', NaN).level).toBe(1);
+  });
+
+  it('structural edits keep the level: new chapters use that many #', () => {
+    const doc = splitChapters('## One\na\n\n## Two\nb\n', 2);
+    const ins = insertChapter(doc, 0, 'Middle');
+    expect(joinChapters(ins.doc)).toBe('## One\na\n\n## Middle\n\n## Two\nb\n');
+    expect(ins.doc.chapters.map((c) => c.title)).toEqual(['One', 'Middle', 'Two']);
+    expect(ins.doc.level).toBe(2);
+    expect(moveChapter(doc, 0, 1)!.doc.chapters.map((c) => c.title)).toEqual(['Two', 'One']);
+    expect(deleteChapter(doc, 0)!.chapters.map((c) => c.title)).toEqual(['Two']);
+    expect(updateChapter(doc, 0, '## Uno\nz').chapters[0].title).toBe('Uno');
+  });
+});

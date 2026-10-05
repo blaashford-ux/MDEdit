@@ -1,8 +1,8 @@
 /**
  * Lossless chapter splitting for Markdown files.
  *
- * A chapter starts at each Heading 1 (ATX `# Title` or Setext `Title` + `===`).
- * Text before the first H1 is a "preamble" chapter. Each chapter keeps its exact
+ * A chapter starts at each heading of the chosen level (default 1: ATX `# Title` or Setext `Title` + `===`;
+ * level 2 also accepts Setext `---`). Text before the first such heading is a "preamble" chapter. Each chapter keeps its exact
  * original text (`raw`, including line endings), so joinChapters(splitChapters(x)) === x
  * and editing one chapter never alters the others.
  */
@@ -22,11 +22,23 @@ export interface MarkdownDoc {
   bom: string;
   /** Dominant line ending, used for newly written text. */
   eol: '\n' | '\r\n';
+  /** Which heading level starts a chapter (1–6). */
+  level: number;
 }
 
-const ATX_H1 = /^ {0,3}#(?:[ \t]+(.*?))?[ \t]*$/;
+export const MIN_CHAPTER_LEVEL = 1;
+export const MAX_CHAPTER_LEVEL = 6;
+
+export function clampLevel(level: unknown): number {
+  return typeof level === 'number' && Number.isFinite(level)
+    ? Math.min(MAX_CHAPTER_LEVEL, Math.max(MIN_CHAPTER_LEVEL, Math.round(level)))
+    : 1;
+}
+
+const atxHeading = (level: number) => new RegExp(`^ {0,3}#{${level}}(?:[ \\t]+(.*?))?[ \\t]*$`);
+const ANY_ATX = /^ {0,3}#{1,6}(?:\s|$)/;
 const FENCE_OPEN = /^ {0,3}(`{3,}|~{3,})(.*)$/;
-const SETEXT_H1_UNDERLINE = /^ {0,3}=+[ \t]*$/;
+const SETEXT_UNDERLINE: Record<number, RegExp> = { 1: /^ {0,3}=+[ \t]*$/, 2: /^ {0,3}-+[ \t]*$/ };
 const BLOCK_STARTER = /^(?: {4,}|\t|>|[-*+](?:\s|$)|\d{1,9}[.)](?:\s|$)|#|`{3,}|~{3,}|<)/;
 
 function stripClosingHashes(s: string): string {
@@ -59,7 +71,10 @@ function toLines(text: string): Line[] {
   return lines;
 }
 
-export function splitChapters(source: string): MarkdownDoc {
+export function splitChapters(source: string, levelIn = 1): MarkdownDoc {
+  const level = clampLevel(levelIn);
+  const ATX = atxHeading(level);
+  const setext = SETEXT_UNDERLINE[level];
   const bom = source.startsWith('﻿') ? '﻿' : '';
   const text = bom ? source.slice(1) : source;
   const lines = toLines(text);
@@ -94,7 +109,7 @@ export function splitChapters(source: string): MarkdownDoc {
       continue;
     }
 
-    const atx = ATX_H1.exec(line);
+    const atx = ATX.exec(line);
     if (atx) {
       starts.push({ offset: lines[i].start, title: stripClosingHashes(atx[1] ?? '') });
       continue;
@@ -102,13 +117,14 @@ export function splitChapters(source: string): MarkdownDoc {
 
     // Setext: a one-line paragraph followed by ===
     const prev = i > 0 ? lines[i - 1].text : '';
-    const startsParagraph = i === 0 || prev.trim() === '' || ATX_H1.test(prev) || /^ {0,3}#{1,6}(\s|$)/.test(prev);
+    const startsParagraph = i === 0 || prev.trim() === '' || ANY_ATX.test(prev);
     if (
+      setext &&
       startsParagraph &&
       line.trim() !== '' &&
       !BLOCK_STARTER.test(line) &&
       i + 1 < lines.length &&
-      SETEXT_H1_UNDERLINE.test(lines[i + 1].text)
+      setext.test(lines[i + 1].text)
     ) {
       starts.push({ offset: lines[i].start, title: line.trim() });
       i++; // skip the underline
@@ -125,7 +141,7 @@ export function splitChapters(source: string): MarkdownDoc {
     chapters.push({ title: s.title, isPreamble: false, raw: text.slice(s.offset, end) });
   });
 
-  return { chapters, bom, eol };
+  return { chapters, bom, eol, level };
 }
 
 export function joinChapters(doc: MarkdownDoc): string {
@@ -147,7 +163,7 @@ export function updateChapter(doc: MarkdownDoc, index: number, newRaw: string): 
   // A non-last chapter must end in a newline so the next heading starts its own line.
   const raw = body === '' ? trailing : body + (trailing || (isLast ? '' : doc.eol));
   const old = doc.chapters[index];
-  const title = old.isPreamble ? '' : (splitChapters(raw).chapters.find((c) => !c.isPreamble)?.title ?? old.title);
+  const title = old.isPreamble ? '' : (splitChapters(raw, doc.level).chapters.find((c) => !c.isPreamble)?.title ?? old.title);
   const chapters = doc.chapters.slice();
   chapters[index] = { ...old, title, raw };
   return { ...doc, chapters };
@@ -176,7 +192,7 @@ function rebuild(doc: MarkdownDoc, raws: string[], keepFinalNewline: boolean): M
   if (!keepFinalNewline && fixed.length > 0) {
     fixed[fixed.length - 1] = fixed[fixed.length - 1].replace(/(?:\r\n|\r|\n)+$/, '');
   }
-  return { ...splitChapters(doc.bom + fixed.join('')), bom: doc.bom };
+  return { ...splitChapters(doc.bom + fixed.join(''), doc.level), bom: doc.bom };
 }
 
 /** Index of the chapter that starts at character `offset` (chapters partition the text). */
@@ -202,7 +218,7 @@ const startOf = (doc: MarkdownDoc, raws: string[], index: number) =>
 export function insertChapter(doc: MarkdownDoc, afterIndex: number, title: string): { doc: MarkdownDoc; index: number } {
   const raws = doc.chapters.map((c) => c.raw);
   const at = Math.min(Math.max(afterIndex + 1, 0), raws.length);
-  raws.splice(at, 0, `# ${title.trim()}${doc.eol}${doc.eol}`);
+  raws.splice(at, 0, `${'#'.repeat(doc.level)} ${title.trim()}${doc.eol}${doc.eol}`);
   const next = rebuild(doc, raws, hadFinalNewline(doc));
   return { doc: next, index: indexAtOffset(next, startOf(doc, raws, at)) };
 }

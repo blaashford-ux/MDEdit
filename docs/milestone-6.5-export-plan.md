@@ -149,3 +149,13 @@ Defaults I'm assuming unless you say otherwise (each is a one-line change):
 - Chapter headings in the print PDF are sunk 1.25 in from the top and have no drop cap (the drop cap is EPUB-only, as in the skill).
 - A bad cover image or an unsafe link is a **warning**, never a failure; one failing output doesn't stop the others.
 - Not done: a re-link flow exists for orphaned `*.export.json`, but there is no UI to create a *second* book from one file.
+
+## 11. Later additions
+
+- **Chapter heading level.** File → Settings → Chapters picks which heading level (H1–H6) starts a chapter. It is one global setting used by the
+  editor, the tree and every export. Exports treat the level just below the chapter level as sub-headings; text above the first chapter heading
+  is left out with a warning that names the level. Changing it re-splits open files (unsaved edits are resolved first; each tab stays on the text
+  it was on). Files are never rewritten by the setting.
+- **Settings template for new books.** File → Settings → Title & copyright / Front matter / Back matter / Export use the same forms as Book Details
+  and Export. A file marked for export for the first time starts from that template (title from the file name; a blank copyright year means the
+  current year). Existing books keep their own details. Stored in the app's `settings.json` (`appDefaults`), not beside your manuscripts.

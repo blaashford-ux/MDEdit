@@ -190,3 +190,28 @@ describe('planExport', () => {
     ]);
   });
 });
+
+describe('runExport with a chapter heading level setting', () => {
+  const SRC2 = '# Book Title\n\n## Part One\n\nHello.\n\n## Part Two\n\nBye.\n';
+
+  it('splits chapters at the configured level', async () => {
+    const { deps, pdfCalls } = setup((d) => void (d.export.outputs = { epub: false, pdf: true, docx: false }), SRC2);
+    let titles: string[] = [];
+    deps.buildPdf = async (book) => {
+      titles = book.chapters.map((c) => c.title);
+      pdfCalls.push('x');
+      return { bytes: new Uint8Array([37]), pages: 30, gutter: 0.375, warnings: [] };
+    };
+    deps.chapterLevel = () => 2;
+    const r = await runExport(MD, deps);
+    expect(r.errors).toEqual([]);
+    expect(titles).toEqual(['Part One', 'Part Two']);
+  });
+
+  it('defaults to level 1 when the dependency is absent', async () => {
+    const { deps } = setup((d) => void (d.export.outputs = { epub: true, pdf: false, docx: false }), SRC2);
+    const r = await runExport(MD, deps);
+    expect(r.errors).toEqual([]);
+    expect(r.warnings.join(' ')).not.toMatch(/Heading 2/);
+  });
+});

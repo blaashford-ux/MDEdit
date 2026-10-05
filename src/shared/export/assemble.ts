@@ -51,13 +51,13 @@ export interface AssembleResult {
 export function assembleBook(
   source: string,
   details: BookDetails,
-  env: { now?: Date; uuid?: () => string } = {}
+  env: { now?: Date; uuid?: () => string; chapterLevel?: number } = {}
 ): AssembleResult {
   const errors: string[] = [];
   if (!details.title.trim()) errors.push('The book needs a title (Book Details → Title page).');
   if (!details.author.trim()) errors.push('The book needs an author or pen name (Book Details → Title page).');
 
-  const parsed = parseManuscript(source);
+  const parsed = parseManuscript(source, env.chapterLevel);
   const warnings = [...parsed.warnings];
   const s = details.export;
 
@@ -67,7 +67,10 @@ export function assembleBook(
     const left = parsed.chapters.length - kept.length;
     if (left > 0) warnings.push(`${left} chapter${left === 1 ? ' was' : 's were'} excluded from this export.`);
   }
-  if (kept.length === 0) errors.push('There are no chapters to export. Every chapter needs a Heading 1 (a line starting with “# ”).');
+  if (kept.length === 0) {
+    const lv = env.chapterLevel ?? 1;
+    errors.push(`There are no chapters to export. Every chapter needs a Heading ${lv} (a line starting with “${'#'.repeat(lv)} ”).`);
+  }
   if (errors.length) return { errors };
 
   const { manuscript, applied } = applySmartQuotes({ chapters: kept, warnings: [] }, s.smartQuotes);

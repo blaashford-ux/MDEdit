@@ -19,6 +19,8 @@ export interface ExportDeps {
     onProgress: (message: string) => void,
     signal?: AbortSignal
   ): Promise<{ bytes: Uint8Array; pages: number; gutter: number; warnings: string[] }>;
+  /** The heading level that starts a chapter (default 1). */
+  chapterLevel?(): number;
   now?(): Date;
   uuid?(): string;
 }
@@ -66,7 +68,7 @@ export async function runExport(
     result.errors.push('Choose at least one output to build.');
     return result;
   }
-  const assembled = assembleBook(await deps.readText(file), details, { now: deps.now?.(), uuid: deps.uuid });
+  const assembled = assembleBook(await deps.readText(file), details, { now: deps.now?.(), uuid: deps.uuid, chapterLevel: deps.chapterLevel?.() });
   if (!assembled.build) {
     result.errors.push(...assembled.errors);
     return result;

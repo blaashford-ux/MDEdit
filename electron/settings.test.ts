@@ -84,3 +84,22 @@ describe('existingFolder', () => {
     expect(await existingFolder(undefined)).toBeNull();
   });
 });
+
+describe('appDefaults in settings', () => {
+  it('are sanitised on load and survive a save/load round trip', async () => {
+    const s = new SettingsStore(file);
+    expect(s.appDefaults().chapterLevel).toBe(1);
+    s.update((x) => {
+      x.appDefaults = sanitizeSettings({ appDefaults: { chapterLevel: 3, book: { author: 'A' } } }).appDefaults;
+    });
+    await s.flush();
+    const again = new SettingsStore(file);
+    await again.load();
+    expect(again.appDefaults()).toMatchObject({ chapterLevel: 3, book: { author: 'A' } });
+  });
+
+  it('garbage falls back to defaults', () => {
+    expect(sanitizeSettings({ appDefaults: 'nope' }).appDefaults).toBeUndefined();
+    expect(sanitizeSettings({ appDefaults: { chapterLevel: -4 } }).appDefaults!.chapterLevel).toBe(1);
+  });
+});

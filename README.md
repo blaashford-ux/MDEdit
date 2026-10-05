@@ -12,7 +12,7 @@ npm run dist      # Windows installer (run on Windows / CI)
 
 ## Status
 - [x] Scaffold (Electron, Vite, React, TypeScript, Vitest, CI Windows build)
-- [x] Chapter engine (`src/shared/chapters.ts`): lossless split/join by H1
+- [x] Chapter engine (`src/shared/chapters.ts`): lossless split/join by heading (H1 by default; the level is a setting)
 - [x] Folder picker, recursive file tree, chapters listed under each file (read-only preview)
 - [x] WYSIWYG chapter editor (Milkdown Crepe), dirty tracking, Ctrl+S atomic save
 - [x] Save / Don't Save / Cancel on chapter/file/folder switch and on window close
@@ -29,6 +29,8 @@ npm run dist      # Windows installer (run on Windows / CI)
 - [x] New file, rename, delete (Recycle Bin), show in Explorer; new/move/delete chapter from the sidebar
 - [x] Autosaved drafts: unsaved edits survive a crash and are offered back on next start
 - [x] **Export for KDP** (milestone 6.5): mark a file for export, fill in Book Details (title page, copyright page, dedication, epigraph, back matter), then Export to **EPUB**, **print-interior PDF** and **DOCX** from one dialog
+- [x] **Settings** (File → Settings, Ctrl+,): choose which heading level starts a chapter (H1–H6), and set the template new books start from — author, copyright page, dedication/epigraph, back matter — plus default export choices (outputs, trim size, margins, fonts, quotes, scene-break symbol, output folder)
+- [x] Scene-break navigation: Ctrl+↑ / Ctrl+↓ (or the ↑ Scene / ↓ Scene buttons) jump between `* * *` / `---` breaks in Visual and Source mode
 - [x] Packaging (milestone 7): app icon, installer, single instance, open-with / double-click `.md`, CI build with a smoke test of the packaged app
 - [ ] Code signing (needs a certificate — see Packaging)
 
@@ -40,6 +42,8 @@ npm run dist      # Windows installer (run on Windows / CI)
 | Ctrl+W | Close tab |
 | Ctrl+Tab, Ctrl+Shift+Tab | Next / previous tab |
 | Ctrl+PgDn, Ctrl+PgUp | Next / previous chapter |
+| Ctrl+↓, Ctrl+↑ | Next / previous scene break (in the editor) |
+| Ctrl+, | Settings |
 | Ctrl+Shift+M | Toggle Source / Visual |
 | Ctrl+P | Filter files |
 | F5 | Refresh |

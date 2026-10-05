@@ -2,6 +2,7 @@ import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { sanitizeAppDefaults } from '../../src/shared/appDefaults';
 import { defaultBookDetails } from '../../src/shared/export/model';
 import { existingSidecar, loadDetails, renameSidecar, saveDetails, setMarked } from './sidecar';
 
@@ -94,5 +95,29 @@ describe('renameSidecar / existingSidecar', () => {
     await renameSidecar(md, path.join(dir, 'x.md'));
     expect(await readFile(path.join(dir, 'x.export.json'), 'utf8')).toBe('precious');
     expect(await existingSidecar(md)).toBe(sidecar());
+  });
+});
+
+describe('new books start from the Settings template', () => {
+  it('a file with no sidecar is seeded from the defaults (and the template is not saved until the book is)', async () => {
+    const defaults = sanitizeAppDefaults({ book: { author: 'Template Author', about: undefined, back: { about: { enabled: true, text: 'Bio' } } } });
+    const l = await loadDetails(md, defaults);
+    expect(l.exists).toBe(false);
+    expect(l.details).toMatchObject({ title: 'my-book', author: 'Template Author' });
+    expect(l.details.back.about).toMatchObject({ enabled: true, text: 'Bio' });
+    expect(await readdir(dir)).toEqual(['my-book.md']);
+  });
+
+  it('marking a file for the first time saves the template-based details', async () => {
+    const defaults = sanitizeAppDefaults({ book: { author: 'Template Author' } });
+    await setMarked(md, true, defaults);
+    const saved = JSON.parse(await readFile(sidecar(), 'utf8'));
+    expect(saved).toMatchObject({ marked: true, author: 'Template Author', title: 'my-book' });
+  });
+
+  it('an existing sidecar is never changed by the template', async () => {
+    await saveDetails(md, { ...defaultBookDetails({ title: 'Mine', author: 'Old Author' }) });
+    const l = await loadDetails(md, sanitizeAppDefaults({ book: { author: 'Template Author' } }));
+    expect(l.details.author).toBe('Old Author');
   });
 });

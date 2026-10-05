@@ -9,6 +9,8 @@ import { Editor } from './Editor';
 import { ExportDialog } from './ExportDialog';
 import { PromptDialog, type PromptSpec } from './PromptDialog';
 import { RelinkDialog } from './RelinkDialog';
+import { SettingsDialog } from './SettingsDialog';
+import type { SceneNav } from './sceneNav';
 import { SourceEditor } from './SourceEditor';
 import { StatusBar } from './StatusBar';
 import { Tabs } from './Tabs';
@@ -30,6 +32,10 @@ export function App() {
   const [bookFile, setBookFile] = useState<string | null>(null);
   const [relink, setRelink] = useState<string | null>(null);
   const [exportFile, setExportFile] = useState<string | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
+  const [sceneMsg, setSceneMsg] = useState<string | null>(null);
+  const navs = useRef(new Map<string, SceneNav>());
+  const sceneTimer = useRef<ReturnType<typeof setTimeout>>();
   const [detailsVersion, setDetailsVersion] = useState(0);
   const [ignoredOrphans, setIgnoredOrphans] = useState<Set<string>>(new Set());
   const filterRef = useRef<HTMLInputElement>(null);
@@ -243,6 +249,16 @@ export function App() {
     ];
   };
 
+  /** Jumps the active editor to the next/previous scene break and says so when there are no more. */
+  const gotoScene = (dir: 1 | -1) => {
+    const nav = s.activeId ? navs.current.get(s.activeId) : undefined;
+    if (!nav) return;
+    const moved = nav.go(dir);
+    clearTimeout(sceneTimer.current);
+    setSceneMsg(moved ? null : dir === 1 ? 'No more scene breaks below' : 'No scene break above');
+    if (!moved) sceneTimer.current = setTimeout(() => setSceneMsg(null), 2500);
+  };
+
   // Shortcuts and the native menu share the same actions. The ref keeps listeners stable.
   const actions: Record<MenuAction | 'toggle-mode' | 'focus-filter', () => void> = {
     save: () => void ws.save(),
@@ -255,6 +271,9 @@ export function App() {
     'prev-tab': () => ws.cycleTab(-1),
     'next-chapter': () => void ws.gotoChapter(1),
     'prev-chapter': () => void ws.gotoChapter(-1),
+    'next-scene': () => gotoScene(1),
+    'prev-scene': () => gotoScene(-1),
+    settings: () => setShowSettings(true),
     'toggle-mode': () => activeTab && ws.setMode(activeTab.id, activeTab.mode === 'visual' ? 'source' : 'visual'),
     export: () => {
       const target = activeTab && markedFiles.includes(activeTab.file) ? activeTab.file : markedFiles[0];
@@ -280,6 +299,7 @@ export function App() {
       else if (mod && k === 'w') name = 'close-tab';
       else if (mod && k === 'p') name = 'focus-filter';
       else if (mod && !e.shiftKey && k === 'e') name = 'export';
+      else if (mod && !e.shiftKey && e.key === ',') name = 'settings';
       else if (mod && e.shiftKey && k === 'm') name = 'toggle-mode';
       else if (e.ctrlKey && e.key === 'Tab') name = e.shiftKey ? 'prev-tab' : 'next-tab';
       else if (e.ctrlKey && e.key === 'PageDown') name = 'next-chapter';
@@ -291,6 +311,22 @@ export function App() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  // Ctrl+Up / Ctrl+Down jump between scene breaks while you are in the editor. Captured so the
+  // editor's own handling of those keys (move by paragraph) never sees them.
+  useEffect(() => {
+    const onSceneKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey) return;
+      if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+      const target = e.target as HTMLElement | null;
+      if (!target?.closest('.pane') || target.closest('.modal-backdrop')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      act.current[e.key === 'ArrowDown' ? 'next-scene' : 'prev-scene']();
+    };
+    window.addEventListener('keydown', onSceneKey, true);
+    return () => window.removeEventListener('keydown', onSceneKey, true);
   }, []);
 
   // ---- sidebar resize --------------------------------------------------------------------
@@ -459,12 +495,23 @@ export function App() {
                     {chapterLabel(chapter)}
                     {dirty && <span className="dirty" title="Unsaved changes"> ●</span>}
                   </h2>
+                  {active && sceneMsg && (
+                    <span className="scene-msg" role="status">
+                      {sceneMsg}
+                    </span>
+                  )}
                   <div className="head-actions">
                     <button aria-label="Previous chapter" title="Previous chapter (Ctrl+PgUp)" disabled={tab.chapter === 0} onClick={() => void ws.gotoChapter(-1)}>
                       ‹
                     </button>
                     <button aria-label="Next chapter" title="Next chapter (Ctrl+PgDn)" disabled={tab.chapter >= doc.chapters.length - 1} onClick={() => void ws.gotoChapter(1)}>
                       ›
+                    </button>
+                    <button aria-label="Previous scene break" title="Previous scene break (Ctrl+↑)" onClick={() => gotoScene(-1)}>
+                      ↑ Scene
+                    </button>
+                    <button aria-label="Next scene break" title="Next scene break (Ctrl+↓)" onClick={() => gotoScene(1)}>
+                      ↓ Scene
                     </button>
                     <button
                       onClick={() => ws.setMode(tab.id, tab.mode === 'visual' ? 'source' : 'visual')}
@@ -484,6 +531,7 @@ export function App() {
                     restore={tab.draft}
                     onChange={(md) => ws.setDraft(tab.id, md)}
                     saved={tab.saved}
+                    onNav={(n) => (n ? navs.current.set(tab.id, n) : navs.current.delete(tab.id))}
                   />
                 ) : (
                   <SourceEditor
@@ -492,6 +540,7 @@ export function App() {
                     draft={tab.draft}
                     onChange={(md) => ws.setDraft(tab.id, md)}
                     savedVersion={tab.saved?.version ?? 0}
+                    onNav={(n) => (n ? navs.current.set(tab.id, n) : navs.current.delete(tab.id))}
                   />
                 )}
               </section>
@@ -513,6 +562,7 @@ export function App() {
       </main>
 
       {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItems(menu.row)} onClose={() => setMenu(null)} />}
+      {showSettings && <SettingsDialog onSave={(d) => ws.applyAppDefaults(d)} onClose={() => setShowSettings(false)} />}
       {prompt && <PromptDialog spec={prompt} onClose={() => setPrompt(null)} />}
       {relink && (
         <RelinkDialog sidecar={relink} candidates={relinkCandidates} onLink={(md) => ws.relinkSidecar(relink, md)} onClose={() => setRelink(null)} />
@@ -520,6 +570,7 @@ export function App() {
       {exportFile && (
         <ExportDialog
           files={markedFiles}
+          chapterLevel={s.chapterLevel}
           initialFile={exportFile}
           dirtyFiles={dirtyFiles}
           saveFile={async (f) => {

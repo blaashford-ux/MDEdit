@@ -671,3 +671,89 @@ describe('files opened from outside (double-click / Open with / second launch)',
     expect(state().activeId).toBe(tabOf('/other/x.md').id);
   });
 });
+
+describe('chapter heading level setting', () => {
+  const LEVEL2 = '# Book\n\nintro\n\n## One\nfirst\n\n## Two\nsecond\n\n### Deep\nx\n\n## Three\nthird\n';
+  const defaultsWith = (chapterLevel: number) => ({ ...api.appDefaults, chapterLevel });
+
+  it('loads the saved level on init', async () => {
+    api.appDefaults = defaultsWith(2);
+    api.add('lv.md', LEVEL2);
+    const w = new Workspace(api, { draftDelayMs: 5, sessionDelayMs: 5 });
+    await w.init();
+    await w.openPath(ROOT);
+    await w.openChapter(`${ROOT}/lv.md`, 1);
+    expect(w.getState().chapterLevel).toBe(2);
+    expect(w.getState().docs.get(`${ROOT}/lv.md`)!.chapters.map((c) => c.title)).toEqual(['', 'One', 'Two', 'Three']);
+  });
+
+  it('changing the level re-splits open files and keeps each tab on the same text', async () => {
+    api.add('lv.md', LEVEL2);
+    await ws.openChapter(`${ROOT}/lv.md`, 0); // level 1: "Book" is chapter 0
+    expect(state().docs.get(`${ROOT}/lv.md`)!.chapters).toHaveLength(1);
+    expect(await ws.applyAppDefaults(defaultsWith(2))).toBe(true);
+    expect(state().chapterLevel).toBe(2);
+    expect(api.appDefaults.chapterLevel).toBe(2);
+    const doc = state().docs.get(`${ROOT}/lv.md`)!;
+    expect(doc.chapters.map((c) => c.title)).toEqual(['', 'One', 'Two', 'Three']);
+    expect(tabOf(`${ROOT}/lv.md`).chapter).toBe(0); // was at the very top: still in the preamble
+    expect(api.text(`${ROOT}/lv.md`)).toBe(LEVEL2); // never rewrites files
+  });
+
+  it('keeps a tab on the chapter that contains its position', async () => {
+    api.add('lv.md', LEVEL2);
+    await ws.applyAppDefaults(defaultsWith(2));
+    await ws.openChapter(`${ROOT}/lv.md`, 2); // "Two"
+    await ws.applyAppDefaults(defaultsWith(3));
+    const doc = state().docs.get(`${ROOT}/lv.md`)!;
+    expect(doc.chapters.map((c) => c.title)).toEqual(['', 'Deep']);
+    expect(tabOf(`${ROOT}/lv.md`).chapter).toBe(0); // "Two" starts before "Deep", so it is in the preamble now
+    await ws.applyAppDefaults(defaultsWith(1));
+    expect(tabOf(`${ROOT}/lv.md`).chapter).toBe(0);
+  });
+
+  it('asks about unsaved edits first, and Cancel changes nothing', async () => {
+    api.add('lv.md', LEVEL2);
+    await ws.openChapter(`${ROOT}/lv.md`, 0);
+    ws.setDraft(tabOf(`${ROOT}/lv.md`).id, '# Book EDITED\n');
+    api.unsavedAnswers = ['cancel'];
+    expect(await ws.applyAppDefaults(defaultsWith(2))).toBe(false);
+    expect(state().chapterLevel).toBe(1);
+    expect(api.appDefaults.chapterLevel).toBe(1);
+    expect(tabOf(`${ROOT}/lv.md`).draft).toBe('# Book EDITED\n');
+
+    api.unsavedAnswers = ['discard'];
+    expect(await ws.applyAppDefaults(defaultsWith(2))).toBe(true);
+    expect(tabOf(`${ROOT}/lv.md`).draft).toBeNull();
+    expect(state().chapterLevel).toBe(2);
+  });
+
+  it('changing something else does not prompt or re-split', async () => {
+    api.add('lv.md', LEVEL2);
+    await ws.openChapter(`${ROOT}/lv.md`, 0);
+    ws.setDraft(tabOf(`${ROOT}/lv.md`).id, '# Book EDITED\n');
+    const next = { ...api.appDefaults, book: { ...api.appDefaults.book, author: 'New Default' } };
+    expect(await ws.applyAppDefaults(next)).toBe(true);
+    expect(api.unsavedAsked).toEqual([]);
+    expect(api.appDefaults.book.author).toBe('New Default');
+    expect(tabOf(`${ROOT}/lv.md`).draft).toBe('# Book EDITED\n');
+  });
+
+  it('structural edits and saves use the level', async () => {
+    api.add('lv.md', '## One\na\n\n## Two\nb\n');
+    await ws.applyAppDefaults(defaultsWith(2));
+    await ws.newChapter(`${ROOT}/lv.md`, 0, 'Middle');
+    expect(api.text(`${ROOT}/lv.md`)).toBe('## One\na\n\n## Middle\n\n## Two\nb\n');
+    await ws.openChapter(`${ROOT}/lv.md`, 0);
+    ws.setDraft(tabOf(`${ROOT}/lv.md`).id, '## One\nchanged');
+    await ws.save();
+    expect(api.text(`${ROOT}/lv.md`)).toBe('## One\nchanged\n\n## Middle\n\n## Two\nb\n');
+    expect(state().docs.get(`${ROOT}/lv.md`)!.chapters.map((c) => c.title)).toEqual(['One', 'Middle', 'Two']);
+  });
+
+  it('a new book from Mark for Export uses the template', async () => {
+    api.appDefaults = { ...api.appDefaults, book: { ...api.appDefaults.book, author: 'Template Author' } };
+    await ws.setMarked(A, true);
+    expect(api.books.get(A)).toMatchObject({ marked: true, author: 'Template Author', title: 'a' });
+  });
+});

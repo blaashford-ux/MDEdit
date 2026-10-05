@@ -1,6 +1,7 @@
 import { promises as fs } from 'node:fs';
 import { basename } from 'node:path';
-import { sanitizeBookDetails, defaultBookDetails, type BookDetails } from '../../src/shared/export/model';
+import { bookFromDefaults, defaultAppDefaults, type AppDefaults } from '../../src/shared/appDefaults';
+import { sanitizeBookDetails, type BookDetails } from '../../src/shared/export/model';
 import { sidecarPathFor, stemOf } from '../../src/shared/export/sidecar';
 import { writeFileAtomic } from '../files';
 
@@ -13,22 +14,24 @@ export interface LoadedDetails {
 }
 
 const seedFor = (mdPath: string) => ({ title: stemOf(basename(mdPath)) });
+const fresh = (mdPath: string, defaults: AppDefaults) => bookFromDefaults(defaults, seedFor(mdPath));
 
-export async function loadDetails(mdPath: string): Promise<LoadedDetails> {
+/** `defaults` seeds a book that has no saved details yet (the Settings template). */
+export async function loadDetails(mdPath: string, defaults: AppDefaults = defaultAppDefaults()): Promise<LoadedDetails> {
   const file = sidecarPathFor(mdPath);
   let text: string;
   try {
     text = await fs.readFile(file, 'utf8');
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code === 'ENOENT') {
-      return { details: defaultBookDetails({ ...seedFor(mdPath), author: '' }), exists: false, damaged: false };
+      return { details: fresh(mdPath, defaults), exists: false, damaged: false };
     }
     throw e;
   }
   try {
     return { details: sanitizeBookDetails(JSON.parse(text), seedFor(mdPath)), exists: true, damaged: false };
   } catch {
-    return { details: defaultBookDetails({ ...seedFor(mdPath), author: '' }), exists: true, damaged: true };
+    return { details: fresh(mdPath, defaults), exists: true, damaged: true };
   }
 }
 
@@ -44,8 +47,8 @@ export async function saveDetails(mdPath: string, details: BookDetails): Promise
 }
 
 /** Returns whether unreadable existing settings were replaced (their content is kept as `.bak`). */
-export async function setMarked(mdPath: string, marked: boolean): Promise<{ backedUp: boolean }> {
-  const loaded = await loadDetails(mdPath);
+export async function setMarked(mdPath: string, marked: boolean, defaults?: AppDefaults): Promise<{ backedUp: boolean }> {
+  const loaded = await loadDetails(mdPath, defaults);
   if (!marked && !loaded.exists) return { backedUp: false }; // nothing to unmark
   await saveDetails(mdPath, { ...loaded.details, marked });
   return { backedUp: loaded.damaged };

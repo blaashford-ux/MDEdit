@@ -1,9 +1,13 @@
 import { Crepe, CrepeFeature } from '@milkdown/crepe';
+import { editorViewCtx } from '@milkdown/kit/core';
+import { Selection } from '@milkdown/kit/prose/state';
 import { replaceAll } from '@milkdown/kit/utils';
 import { useEffect, useRef } from 'react';
 import '@milkdown/crepe/theme/common/style.css';
 import '@milkdown/crepe/theme/classic.css';
 import './milkdownDark';
+import { pickScene } from '../shared/sceneBreaks';
+import type { SceneNav } from './sceneNav';
 
 interface Props {
   /** The chapter as it is on disk. Read once on mount: remount (via `key`) to load another. */
@@ -24,15 +28,19 @@ interface Props {
    * Anything typed while the save was in flight stays dirty.
    */
   saved: { version: number; markdown: string } | null;
+  /** Hands the parent a way to jump between scene breaks (null on unmount). */
+  onNav?(nav: SceneNav | null): void;
 }
 
-export function Editor({ initial, restore, onChange, saved }: Props) {
+export function Editor({ initial, restore, onChange, saved, onNav }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const crepeRef = useRef<Crepe | null>(null);
   const baseline = useRef<string | null>(null);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
   const mountProps = useRef({ initial, restore });
+  const onNavRef = useRef(onNav);
+  onNavRef.current = onNav;
 
   useEffect(() => {
     const crepe = new Crepe({
@@ -63,7 +71,33 @@ export function Editor({ initial, restore, onChange, saved }: Props) {
       if (draft !== null) crepe.editor.action(replaceAll(draft));
     });
 
+    onNavRef.current?.({
+      go: (dir) => {
+        if (!crepeRef.current) return false;
+        return crepeRef.current.editor.action((ctx) => {
+          const view = ctx.get(editorViewCtx);
+          const { doc, selection } = view.state;
+          // a scene starts at the block right after each horizontal rule (`* * *`, `---`)
+          const starts: number[] = [];
+          doc.forEach((node, offset) => {
+            const end = offset + node.nodeSize;
+            if (node.type.name === 'hr' && end < doc.content.size) starts.push(end);
+          });
+          const $from = selection.$from;
+          const blockStart = $from.depth >= 1 ? $from.before(1) : $from.pos;
+          const target = pickScene(starts, blockStart, dir);
+          if (target === null) return false;
+          view.dispatch(view.state.tr.setSelection(Selection.near(doc.resolve(target), 1)).scrollIntoView());
+          view.focus();
+          const el = view.nodeDOM(target);
+          if (el instanceof HTMLElement) el.scrollIntoView({ block: 'center' });
+          return true;
+        });
+      }
+    });
+
     return () => {
+      onNavRef.current?.(null);
       disposed = true;
       crepeRef.current = null;
       void crepe.destroy();

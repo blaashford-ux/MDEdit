@@ -34,6 +34,7 @@ export function installMenu(theme: ThemeHooks): void {
         { label: 'Refresh\tF5', click: send('refresh') },
         { type: 'separator' },
         { label: 'Export…\tCtrl+E', click: send('export') },
+        { label: 'Settings…\tCtrl+,', click: send('settings') },
         { type: 'separator' },
         { label: 'Save\tCtrl+S', click: send('save') },
         { label: 'Close Tab\tCtrl+W', click: send('close-tab') },
@@ -58,6 +59,9 @@ export function installMenu(theme: ThemeHooks): void {
       submenu: [
         { label: 'Next Chapter\tCtrl+PgDn', click: send('next-chapter') },
         { label: 'Previous Chapter\tCtrl+PgUp', click: send('prev-chapter') },
+        { type: 'separator' },
+        { label: 'Next Scene Break\tCtrl+Down', click: send('next-scene') },
+        { label: 'Previous Scene Break\tCtrl+Up', click: send('prev-scene') },
         { type: 'separator' },
         { label: 'Next Tab\tCtrl+Tab', click: send('next-tab') },
         { label: 'Previous Tab\tCtrl+Shift+Tab', click: send('prev-tab') }

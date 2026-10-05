@@ -34,6 +34,8 @@ const api: MdeditApi = {
     ipcRenderer.on('app:launchFiles', handler);
     return () => ipcRenderer.removeListener('app:launchFiles', handler);
   },
+  getAppDefaults: () => ipcRenderer.invoke('app:getDefaults'),
+  setAppDefaults: (d) => ipcRenderer.invoke('app:setDefaults', d),
   getPrefs: () => ipcRenderer.invoke('prefs:get'),
   setPrefs: (patch) => ipcRenderer.send('prefs:set', patch),
   getSession: (folder) => ipcRenderer.invoke('session:get', folder),

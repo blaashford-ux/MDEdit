@@ -62,3 +62,31 @@ describe('assembleBook', () => {
     expect(build!.warnings.some((w) => /isn’t a web or email address/.test(w))).toBe(true);
   });
 });
+
+describe('assembleBook with a different chapter heading level', () => {
+  const SRC2 = '# My Book\n\nignored intro\n\n## Chapter One\n\nHello.\n\n### A sub heading\n\nMore.\n\n## Chapter Two\n\nBye.\n';
+
+  it('chapters are the level-2 headings; the text above the first is left out with a matching warning', () => {
+    const r = assembleBook(SRC2, details(), { ...env, chapterLevel: 2 });
+    expect(r.errors).toEqual([]);
+    expect(r.build!.chapters.map((c) => c.title)).toEqual(['Chapter One', 'Chapter Two']);
+    expect(r.build!.warnings.join('\n')).toMatch(/before the first Heading 2/);
+  });
+
+  it('turns the next level down into sub-headings (### under ## chapters becomes a level-2 sub-heading)', () => {
+    const r = assembleBook(SRC2, details(), { ...env, chapterLevel: 2 });
+    const subs = r.build!.chapters[0].blocks.filter((b) => b.t === 'sub');
+    expect(subs).toHaveLength(1);
+    expect(subs[0]).toMatchObject({ t: 'sub', level: 2 });
+  });
+
+  it('the no-chapters error names the chosen level', () => {
+    const r = assembleBook('# Only a title\n\ntext\n', details(), { ...env, chapterLevel: 3 });
+    expect(r.errors.join(' ')).toMatch(/Heading 3 \(a line starting with “### ”\)/);
+  });
+
+  it('level 1 still behaves as before', () => {
+    const r = assembleBook(SRC, details(), env);
+    expect(r.build!.chapters.map((c) => c.title)).toContain('Chapter 1: Coming Back');
+  });
+});

@@ -15,6 +15,7 @@ import { promises as fsp } from 'node:fs';
 import { installMenu } from './menu';
 import { confirmDelete, confirmOverwrite, confirmRecover, confirmUnsaved } from './prompts';
 import { scanFolder } from './scan';
+import { sanitizeAppDefaults } from '../src/shared/appDefaults';
 import { existingFolder, SettingsStore, type WindowState } from './settings';
 
 const settings = new SettingsStore(path.join(app.getPath('userData'), 'settings.json'));
@@ -109,9 +110,9 @@ function registerIpc(): void {
     if (!isMarkdown(full)) throw new Error('Only Markdown files can be exported');
     return full;
   };
-  ipcMain.handle('export:getDetails', (_e, p: string) => loadDetails(mdPath(p)));
+  ipcMain.handle('export:getDetails', (_e, p: string) => loadDetails(mdPath(p), settings.appDefaults()));
   ipcMain.handle('export:saveDetails', (_e, p: string, details: unknown) => saveDetails(mdPath(p), details as never));
-  ipcMain.handle('export:setMarked', (_e, p: string, marked: boolean) => setMarked(mdPath(p), marked === true));
+  ipcMain.handle('export:setMarked', (_e, p: string, marked: boolean) => setMarked(mdPath(p), marked === true, settings.appDefaults()));
   ipcMain.handle('export:relink', async (_e, sidecar: string, md: string) => {
     const from = inRoot(sidecar);
     const target = sidecarPathFor(mdPath(md));
@@ -125,7 +126,7 @@ function registerIpc(): void {
     await fsp.rename(from, target);
   });
   // --- export ---
-  const exportDeps = () => makeExportDeps();
+  const exportDeps = () => makeExportDeps(undefined, () => settings.appDefaults());
   let exportAbort: AbortController | null = null;
   const exportedFiles = new Set<string>(); // only files produced by an export may be revealed/opened
   ipcMain.handle('export:plan', (_e, p: string, unsaved?: unknown) =>
@@ -164,6 +165,14 @@ function registerIpc(): void {
     }
   });
 
+  ipcMain.handle('app:getDefaults', () => settings.appDefaults());
+  ipcMain.handle('app:setDefaults', (_e, raw: unknown) => {
+    const next = sanitizeAppDefaults(raw);
+    settings.update((s) => {
+      s.appDefaults = next;
+    });
+    return next;
+  });
   ipcMain.handle('prefs:get', () => settings.get().prefs ?? {});
   ipcMain.on('prefs:set', (_e, patch: Partial<Prefs>) => {
     if (typeof patch?.sidebarWidth === 'number' && Number.isFinite(patch.sidebarWidth)) {

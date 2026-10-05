@@ -1,3 +1,4 @@
+import { bookFromDefaults, defaultAppDefaults, type AppDefaults } from '../../shared/appDefaults';
 import type { BookDetails } from '../../shared/export/model';
 import { defaultBookDetails } from '../../shared/export/model';
 import type {
@@ -83,11 +84,11 @@ export class FakeApi implements MdeditApi {
   coverPick: string | null = null;
   getBookDetails = async (file: string) => {
     const d = this.books.get(file);
-    return { details: d ?? defaultBookDetails({ title: basename(file).replace(/\.md$/, ''), author: '' }), exists: !!d, damaged: false };
+    return { details: d ?? bookFromDefaults(this.appDefaults, { title: basename(file).replace(/\.md$/, '') }), exists: !!d, damaged: false };
   };
   saveBookDetails = async (file: string, d: BookDetails) => void this.books.set(file, d);
   setMarked = async (file: string, marked: boolean) => {
-    const cur = this.books.get(file) ?? defaultBookDetails({ title: basename(file).replace(/\.md$/, ''), author: '' });
+    const cur = this.books.get(file) ?? bookFromDefaults(this.appDefaults, { title: basename(file).replace(/\.md$/, '') });
     if (!marked && !this.books.has(file)) return { backedUp: false };
     this.books.set(file, { ...cur, marked });
     return { backedUp: this.damagedOnMark };
@@ -96,6 +97,9 @@ export class FakeApi implements MdeditApi {
     this.orphans = this.orphans.filter((o) => o !== sidecar);
     this.books.set(md, defaultBookDetails({ title: 'relinked', author: 'x' }));
   };
+  appDefaults: AppDefaults = defaultAppDefaults();
+  getAppDefaults = async () => this.appDefaults;
+  setAppDefaults = async (d: AppDefaults) => (this.appDefaults = d);
   pickCoverImage = async () => this.coverPick;
   launchFiles: string[] = [];
   takeLaunchFiles = async () => this.launchFiles.splice(0);

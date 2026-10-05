@@ -4,6 +4,7 @@ import path from 'node:path';
 import { writeBytesAtomic } from '../files';
 import { buildPrintPdf, type PdfResources } from './pdf';
 import type { ExportDeps } from './run';
+import { defaultAppDefaults, type AppDefaults } from '../../src/shared/appDefaults';
 import { loadDetails } from './sidecar';
 
 /** Bundled files the print pipeline needs (inside the asar when packaged). */
@@ -15,8 +16,9 @@ export function pdfResources(): PdfResources {
 }
 
 /** The real-file-system implementation of everything the export orchestrator needs. */
-export function makeExportDeps(resources: PdfResources = pdfResources()): ExportDeps {
+export function makeExportDeps(resources: PdfResources = pdfResources(), getDefaults: () => AppDefaults = defaultAppDefaults): ExportDeps {
   return {
+    chapterLevel: () => getDefaults().chapterLevel,
     readText: (p) => fsp.readFile(p, 'utf8'),
     readBytes: async (p, max) => {
       const st = await fsp.stat(p);
@@ -26,7 +28,7 @@ export function makeExportDeps(resources: PdfResources = pdfResources()): Export
     writeBytes: writeBytesAtomic,
     mkdirp: (d) => fsp.mkdir(d, { recursive: true }).then(() => undefined),
     exists: (p) => fsp.lstat(p).then(() => true, () => false),
-    loadDetails: async (p) => (await loadDetails(p)).details,
+    loadDetails: async (p) => (await loadDetails(p, getDefaults())).details,
     buildPdf: (book, say, signal) =>
       buildPrintPdf(
         book,

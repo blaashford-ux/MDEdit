@@ -1,6 +1,7 @@
 import type { DirNode, DraftRecord, EditorMode, FileStamp, MdeditApi, Session } from '../shared/api';
 import {
   chapterBody,
+  clampLevel,
   deleteChapter as deleteChapterIn,
   insertChapter,
   joinChapters,
@@ -9,6 +10,7 @@ import {
   updateChapter,
   type MarkdownDoc
 } from '../shared/chapters';
+import type { AppDefaults } from '../shared/appDefaults';
 import { basename, dirname, isInside, remapPath } from '../shared/paths';
 import { collectFiles, collectOrphans, flattenPaths } from '../shared/tree';
 
@@ -40,6 +42,8 @@ export interface WorkspaceState {
   notice: string | null;
   refreshing: boolean;
   sidebarWidth: number;
+  /** The heading level that starts a chapter (File → Settings). */
+  chapterLevel: number;
 }
 
 export interface WorkspaceOptions {
@@ -71,7 +75,8 @@ export class Workspace {
     error: null,
     notice: null,
     refreshing: false,
-    sidebarWidth: SIDEBAR_DEFAULT
+    sidebarWidth: SIDEBAR_DEFAULT,
+    chapterLevel: 1
   };
   private listeners = new Set<() => void>();
   private stamps = new Map<string, FileStamp>();
@@ -133,6 +138,10 @@ export class Workspace {
       tabs: this.state.tabs.map((t) => (t.id === id ? { ...t, ...(typeof patch === 'function' ? patch(t) : patch) } : t))
     });
   }
+  /** Splits text into chapters at the configured heading level. */
+  private split(text: string): MarkdownDoc {
+    return splitChapters(text, this.state.chapterLevel);
+  }
   private setDoc(file: string, doc: MarkdownDoc): void {
     this.set({ docs: new Map(this.state.docs).set(file, doc) });
   }
@@ -150,10 +159,59 @@ export class Workspace {
     if (persist) this.api.setPrefs({ sidebarWidth: w });
   }
 
+  // ---- settings ---------------------------------------------------------------------------
+
+  /**
+   * Saves the app defaults. Changing the chapter heading level re-splits every open file, so any
+   * unsaved edits are resolved first (Save / Don't Save / Cancel); cancelling changes nothing.
+   * Open tabs stay on the same spot in the text.
+   */
+  async applyAppDefaults(next: AppDefaults): Promise<boolean> {
+    const level = clampLevel(next.chapterLevel);
+    const changed = level !== this.state.chapterLevel;
+    if (changed && !(await this.resolveDirtyTabs())) return false;
+    try {
+      await this.api.setAppDefaults({ ...next, chapterLevel: level });
+    } catch (e) {
+      this.set({ error: `Could not save settings: ${e instanceof Error ? e.message : e}` });
+      return false;
+    }
+    if (!changed) return true;
+    const old = this.state.docs;
+    this.state = { ...this.state, chapterLevel: level };
+    const docs = new Map<string, MarkdownDoc>();
+    const startOf = (doc: MarkdownDoc, index: number) => doc.chapters.slice(0, index).reduce((n, c) => n + c.raw.length, 0);
+    const moved = new Map<string, number>();
+    for (const [file, doc] of old) {
+      const text = joinChapters(doc);
+      const fresh = this.split(text);
+      docs.set(file, fresh);
+      const tab = this.tabForFile(file);
+      if (tab) {
+        const offset = startOf(doc, tab.chapter);
+        let at = 0;
+        for (let i = 0, pos = 0; i < fresh.chapters.length; i++) {
+          if (pos <= offset) at = i;
+          pos += fresh.chapters[i].raw.length;
+        }
+        moved.set(tab.id, at);
+      }
+    }
+    this.set({
+      docs,
+      tabs: this.state.tabs.map((t) =>
+        moved.has(t.id) ? { ...t, chapter: moved.get(t.id)!, draft: null, saved: null, conflict: null, reloadKey: t.reloadKey + 1 } : t
+      )
+    });
+    return true;
+  }
+
   // ---- startup, folders -----------------------------------------------------------------
 
   async init(): Promise<void> {
     try {
+      const defaults = await this.api.getAppDefaults();
+      if (defaults.chapterLevel !== this.state.chapterLevel) this.set({ chapterLevel: defaults.chapterLevel });
       const prefs = await this.api.getPrefs();
       if (typeof prefs.sidebarWidth === 'number') this.setSidebarWidth(prefs.sidebarWidth, false);
       const folder = await this.api.getLastFolder();
@@ -261,7 +319,7 @@ export class Workspace {
     const { text, stamp } = await this.api.readFile(file);
     this.stamps.set(file, stamp);
     const existing = this.state.docs.get(file);
-    if (!existing || joinChapters(existing) !== text) this.setDoc(file, splitChapters(text));
+    if (!existing || joinChapters(existing) !== text) this.setDoc(file, this.split(text));
   }
 
   async toggleExpanded(path: string, isFile: boolean): Promise<void> {
@@ -493,7 +551,7 @@ export class Workspace {
       const updated = updateChapter(doc, tab.chapter, text);
       const out = joinChapters(updated);
       this.stamps.set(tab.file, await this.api.writeFile(tab.file, out));
-      const fresh = splitChapters(out);
+      const fresh = this.split(out);
       this.setDoc(tab.file, fresh);
       const idx = Math.min(tab.chapter, fresh.chapters.length - 1);
       // If the edit added or removed a Heading 1 the editor no longer matches one chapter: reload it.
@@ -521,7 +579,7 @@ export class Workspace {
 
   /** Replaces a file's content from disk, dropping the tab's edits. */
   private applyDisk(file: string, text: string, stamp: FileStamp): void {
-    const doc = splitChapters(text);
+    const doc = this.split(text);
     this.stamps.set(file, stamp);
     this.set({ docs: new Map(this.state.docs).set(file, doc) });
     const tab = this.tabForFile(file);
@@ -749,17 +807,17 @@ export class Workspace {
     if (tab && !(await this.leaveTab(tab))) return null;
     try {
       const { text } = await this.api.readFile(file);
-      const result = edit(splitChapters(text));
+      const result = edit(this.split(text));
       if (!result) return null;
       const out = joinChapters(result.doc);
       const stamp = await this.api.writeFile(file, out);
       this.stamps.set(file, stamp);
-      this.setDoc(file, splitChapters(out));
+      this.setDoc(file, this.split(out));
       const open = this.tabForFile(file);
       if (open) {
         const next = result.remapIndex(open.chapter);
         this.patchTab(open.id, (t) => ({
-          chapter: Math.max(0, Math.min(next, splitChapters(out).chapters.length - 1)),
+          chapter: Math.max(0, Math.min(next, this.split(out).chapters.length - 1)),
           draft: null,
           conflict: null,
           reloadKey: t.reloadKey + 1

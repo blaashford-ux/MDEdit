@@ -1,3 +1,4 @@
+import type { AppDefaults } from './appDefaults';
 import type { BookDetails } from './export/model';
 
 export interface FileNode {
@@ -35,6 +36,9 @@ export type MenuAction =
   | 'new-file'
   | 'new-folder'
   | 'export'
+  | 'settings'
+  | 'next-scene'
+  | 'prev-scene'
   | 'close-tab'
   | 'next-tab'
   | 'prev-tab'
@@ -145,6 +149,11 @@ export interface MdeditApi {
   takeLaunchFiles(): Promise<string[]>;
   /** Fires when another launch hands a file to this running instance. */
   onLaunchFiles(cb: () => void): () => void;
+
+  /** Chapter heading level and the template new books start from. */
+  getAppDefaults(): Promise<AppDefaults>;
+  /** Saves them (sanitised) and returns what was stored. */
+  setAppDefaults(defaults: AppDefaults): Promise<AppDefaults>;
 
   getPrefs(): Promise<Prefs>;
   setPrefs(patch: Partial<Prefs>): void;
