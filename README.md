@@ -118,18 +118,17 @@ automatically. See [docs/RELEASING.md](docs/RELEASING.md).
 
 ## Changelog
 
-### 0.3.0
+### 0.3.0 — 2026-10-05
 **New**
 - **Projects**: a project is a folder (with subfolders) marked by a small hidden `.mdedit` folder. MDEdit works out of a **Root Folder** (default `%USERPROFILE%\MDEdit`; chosen on first run, changeable in Settings, with an offer to move your projects). A welcome screen sets this up the first time, and offers the folder you last used as a project.
 - **Projects home** with a card per project (status, word count, goal progress, last edited), search, sort, archive, and a context menu to open, rename, duplicate, change status or delete (to the Recycle Bin, after typing the name).
-- **New Project** dialog (Ctrl+Alt+N): name + template with a live preview of the folders it will create. Built-in templates: Novel, Series book, Short story, Blank.
+- **New Project** dialog (Ctrl+Alt+N): name + template with a live preview of the folders it will create. Built-in templates: Novel, Series, Short story, Blank.
 - **Project templates** (Settings → Projects): edit the folder tree, which folders count toward word goals, starter files and the export defaults each template carries.
 - **Project switcher** in the sidebar and **Ctrl+K quick switcher**; File → Open Folder still opens any folder, and other folders in the Root can be converted to projects.
 - **Per-project overrides**: chapter-heading level and export defaults can be set per project; the template's values are copied in when the project is made.
 - **Project status** (Planning, Drafting, Revising, Editing, Published, On hold) and notes.
 - **Word-count goals and progress**: target and optional deadline; Progress window with a day-by-day bar chart, burn-down against a steady-pace line, words per day needed, and estimated completion at the 3-day and 5-day averages; running total in the status bar.
-
-- **Series template** (replaces Series Book): a Manuscripts folder for several books (no book files created) plus a series bible.
+- **Series template**: a Manuscripts folder for several books (no book files created) plus a series bible.
 - **Active Manuscript**: right-click a file → *Active Manuscript* to make word-count goals and progress follow that single file (one at a time; choosing another swaps without asking). A target marker shows on the file in the browser, the Progress chart and tiles are labelled with its filename, and each manuscript keeps its own goal and writing history.
 
 **Changed**
