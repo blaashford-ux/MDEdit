@@ -1,6 +1,6 @@
 # MDEdit
 
-Windows desktop Markdown editor: pick a folder, browse its `.md` files, and edit them one chapter (Heading 1) at a time.
+Windows desktop Markdown editor: pick a folder, browse its `.md` files, and edit them one chapter (Heading 1 by default) at a time.
 
 ## Develop
 ```
@@ -111,3 +111,30 @@ Download the latest Windows installer from
 [Releases](https://github.com/blaashford-ux/MDEdit/releases/latest). Pushing a version tag
 (`npm version 0.2.0 && git push origin HEAD --follow-tags`) builds, tests and publishes a release
 automatically. See [docs/RELEASING.md](docs/RELEASING.md).
+
+## Changelog
+
+### 0.2.0 — 2026-10-05
+**New**
+- **Find & Replace** (Ctrl+F / Ctrl+H, F3 / Shift+F3, Edit menu): highlights in the formatted editor, works in Source mode, match case / whole word / regular expressions (`$1`, `$&` in replacements); search this chapter or the whole file (Replace All in the file asks first).
+- **Undo Last Action** (Ctrl+Alt+Z, redo Ctrl+Alt+Y, Edit menu, status-bar button): reverses the last 5 delete / move / add-chapter actions and whole-file Replace All.
+- **Settings** (File → Settings, Ctrl+,): choose which heading level starts a chapter (H1–H6), set the template new books start from (author, copyright page, dedication, epigraph, back matter) and the default export choices.
+- **Fonts for export**: EB Garamond, Crimson Pro and Libre Baskerville (all open-licence) ship with the app and are embedded in EPUB and PDF; any font installed on your computer can be used for the print PDF.
+- **Scene-break navigation**: Ctrl+↑ / Ctrl+↓ or the ↑ Scene / ↓ Scene buttons jump between scene breaks, in Visual and Source mode.
+- **New look**: borderless, tonal, rounded design with a palette drawn from the app icon, in light and dark, with line icons.
+- **Custom title bar**: frameless window with in-window File / Edit / Go / View / Help menus (mouse, arrows, Alt+letter), the open chapter and file, and window buttons (drawn by the OS on Windows).
+- The chapter heading and toolbar stay pinned while you scroll.
+- The AI disclosure on the copyright page is now a **Content Warning** (default text “Add Content Warnings here”).
+
+**Changed**
+- Export files (`<name>.export.json`) use the field names `contentWarning` / `contentWarningText`; older files are tidied automatically the first time they are read.
+- Exports record the chosen fonts; a missing font falls back to EB Garamond with a warning.
+- Clicking Undo / Cut / Copy / Paste in the menu now acts on the editor (the menu no longer takes focus).
+
+**Release pipeline**
+- Pushing a version tag, or running the *release* workflow from the Actions tab, builds, tests and publishes the Windows installer with checksums (see `docs/RELEASING.md`).
+
+### 0.1.0 — 2026-10-05
+- First release: folder browser with expandable folders and empty folders, chapter-at-a-time WYSIWYG editing (Milkdown), Save / Don't Save / Cancel prompts, external-change detection, tabs, session restore, crash-recovery drafts, dark mode, Source mode, file and chapter management.
+- **Export for KDP**: mark a file for export, fill in Book Details (title page, copyright page, dedication, epigraph, back matter), export to EPUB 3, KDP print-interior PDF (trim sizes from 5 × 8, automatic gutter) and DOCX.
+- Windows installer with app icon, single instance and `.md` file association.
