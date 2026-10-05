@@ -17,6 +17,7 @@ const PATHS = {
   code: 'm8 8-4 4 4 4m8-8 4 4-4 4',
   eye: 'M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Zm10 3a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z',
   save: 'M5 4h11l3 3v13H5V4Zm3 0v5h7V4M8 20v-6h8v6',
+  check: 'm5 12.5 4.5 4.5L19 7',
   scene: 'M4 12h4m4 0h.01M16 12h4'
 } as const;
 

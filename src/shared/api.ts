@@ -81,6 +81,30 @@ export interface ExportPlan {
   outputs: { kind: ExportKind; path: string; exists: boolean }[];
 }
 
+/** One entry of the application menu, as drawn by the in-window menu bar. */
+export interface MenuNode {
+  id: string;
+  /** Without the `&` mnemonic marker or the `\t` shortcut hint. */
+  label: string;
+  /** Shortcut text shown on the right, e.g. "Ctrl+N". */
+  hint?: string;
+  /** The letter that opens a top-level menu with Alt (from "&File"). */
+  mnemonic?: string;
+  type: 'normal' | 'separator' | 'checkbox' | 'radio' | 'submenu';
+  checked?: boolean;
+  enabled: boolean;
+  submenu?: MenuNode[];
+}
+
+/** How the window is dressed, so the custom title bar knows whether to draw its own buttons. */
+export interface WindowInfo {
+  platform: string;
+  /** True when the OS draws the minimise/maximise/close buttons over our title bar (Windows). */
+  overlay: boolean;
+  maximized: boolean;
+  fullscreen: boolean;
+}
+
 export type UnsavedChoice = 'save' | 'discard' | 'cancel';
 export type ThemeSource = 'system' | 'light' | 'dark';
 export type EditorMode = 'visual' | 'source';
@@ -185,6 +209,13 @@ export interface MdeditApi {
   onCloseRequested(cb: () => void): () => void;
   /** true = all tabs resolved, go ahead and close; false = the user cancelled. */
   reportCloseDecision(ok: boolean): void;
+  /** The application menu, to draw in the title bar. */
+  getMenu(): Promise<MenuNode[]>;
+  /** Runs a menu item (by `MenuNode.id`) exactly as if it had been clicked in a native menu. */
+  clickMenu(id: string): void;
+  windowInfo(): Promise<WindowInfo>;
+  onWindowState(cb: (info: WindowInfo) => void): () => void;
+  windowControl(action: 'minimize' | 'maximize' | 'close'): void;
   /** Native menu item clicked. Returns an unsubscribe function. */
   onMenuAction(cb: (action: MenuAction) => void): () => void;
 }

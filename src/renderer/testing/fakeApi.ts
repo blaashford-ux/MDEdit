@@ -100,6 +100,11 @@ export class FakeApi implements MdeditApi {
   appDefaults: AppDefaults = defaultAppDefaults();
   getAppDefaults = async () => this.appDefaults;
   setAppDefaults = async (d: AppDefaults) => (this.appDefaults = d);
+  getMenu = async () => [];
+  clickMenu = () => undefined;
+  windowInfo = async () => ({ platform: 'win32', overlay: true, maximized: false, fullscreen: false });
+  onWindowState = () => () => undefined;
+  windowControl = () => undefined;
   installedFonts: string[] = ['Georgia', 'Times New Roman'];
   listInstalledFonts = async () => this.installedFonts;
   bundledFontPreview = async () => null;

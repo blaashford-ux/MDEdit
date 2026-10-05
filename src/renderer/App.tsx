@@ -7,7 +7,6 @@ import { BookDetailsDialog } from './BookDetailsDialog';
 import { ContextMenu, type MenuItem } from './ContextMenu';
 import { Editor } from './Editor';
 import { Icon } from './Icon';
-import logo from './logo.png';
 import { ExportDialog } from './ExportDialog';
 import { FindBar, initialFindForm, type FindForm } from './FindBar';
 import { PromptDialog, type PromptSpec } from './PromptDialog';
@@ -16,6 +15,7 @@ import { SettingsDialog } from './SettingsDialog';
 import type { SceneNav } from './sceneNav';
 import { SourceEditor } from './SourceEditor';
 import { StatusBar } from './StatusBar';
+import { TitleBar } from './TitleBar';
 import { Tabs } from './Tabs';
 import { Tree } from './Tree';
 import { buildRows, chapterKey, chapterLabel, type Row } from './treeRows';
@@ -96,12 +96,11 @@ export function App() {
     };
   }, [ws]);
 
+  const activeDirty = activeTab !== undefined && activeTab.draft !== null;
+  const titleText = activeTab ? `${activeChapter ? chapterLabel(activeChapter) + ' — ' : ''}${basename(activeTab.file)}` : 'MDEdit';
   useEffect(() => {
-    const dirty = activeTab?.draft !== null && activeTab !== undefined;
-    document.title = activeTab
-      ? `${activeChapter ? chapterLabel(activeChapter) + ' — ' : ''}${basename(activeTab.file)}${dirty ? ' ●' : ''} — MDEdit`
-      : 'MDEdit';
-  }, [activeTab, activeChapter]);
+    document.title = activeTab ? `${titleText}${activeDirty ? ' ●' : ''} — MDEdit` : 'MDEdit';
+  }, [activeTab, titleText, activeDirty]);
 
   // ---- actions ---------------------------------------------------------------------------
 
@@ -417,12 +416,10 @@ export function App() {
   const toolbarBusy = s.refreshing;
 
   return (
+    <div className="frame">
+    <TitleBar title={titleText} dirty={activeDirty} />
     <div className="app" style={{ gridTemplateColumns: `${s.sidebarWidth}px 6px minmax(0, 1fr)` }}>
       <aside className="sidebar">
-        <div className="brand">
-          <img src={logo} alt="" width={26} height={26} />
-          <span className="wordmark">MDEdit</span>
-        </div>
         <div className="toolbar">
           <button onClick={() => void ws.openFolder()} title="Choose a different folder (Ctrl+O)">
             {s.root ? 'Change Folder…' : 'Open Folder…'}
@@ -678,6 +675,7 @@ export function App() {
           }}
         />
       )}
+    </div>
     </div>
   );
 }

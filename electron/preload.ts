@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { ExportProgress, MdeditApi, MenuAction } from '../src/shared/api';
+import type { ExportProgress, MdeditApi, MenuAction, WindowInfo } from '../src/shared/api';
 
 const api: MdeditApi = {
   pickFolder: () => ipcRenderer.invoke('dialog:pickFolder'),
@@ -56,6 +56,15 @@ const api: MdeditApi = {
     return () => ipcRenderer.removeListener('app:closeRequested', handler);
   },
   reportCloseDecision: (ok) => ipcRenderer.send('app:closeDecision', ok),
+  getMenu: () => ipcRenderer.invoke('menu:describe'),
+  clickMenu: (id) => ipcRenderer.send('menu:click', id),
+  windowInfo: () => ipcRenderer.invoke('window:info'),
+  onWindowState: (cb) => {
+    const handler = (_e: unknown, info: WindowInfo) => cb(info);
+    ipcRenderer.on('window:state', handler);
+    return () => ipcRenderer.removeListener('window:state', handler);
+  },
+  windowControl: (action) => ipcRenderer.send('window:control', action),
   onMenuAction: (cb) => {
     const handler = (_e: unknown, action: MenuAction) => cb(action);
     ipcRenderer.on('menu:action', handler);

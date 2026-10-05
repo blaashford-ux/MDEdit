@@ -13,6 +13,7 @@ import { createFile, createFolder, renameNode } from './fsops';
 import { sidecarPathFor } from '../src/shared/export/sidecar';
 import { promises as fsp } from 'node:fs';
 import { installMenu } from './menu';
+import { chromeOptions, registerWindowChrome, shellColor, watchWindow } from './windowChrome';
 import { confirmDelete, confirmOverwrite, confirmRecover, confirmUnsaved } from './prompts';
 import { scanFolder } from './scan';
 import { bundledFont } from '../src/shared/export/fonts';
@@ -268,7 +269,8 @@ function createWindow(): BrowserWindow {
     ...restoredBounds(),
     title: 'MDEdit',
     // match the app's shell colour so there is no white flash while the page loads
-    backgroundColor: nativeTheme.shouldUseDarkColors ? '#1a1430' : '#ece9f8',
+    backgroundColor: shellColor(),
+    ...chromeOptions(),
     icon: path.join(app.getAppPath(), 'assets', 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -283,6 +285,7 @@ function createWindow(): BrowserWindow {
     if (mainWindow === win) mainWindow = null;
   });
   guardClose(win);
+  watchWindow(win);
 
   let timer: NodeJS.Timeout | undefined;
   const later = () => {
@@ -339,6 +342,7 @@ if (!firstInstance) {
     nativeTheme.themeSource = settings.get().theme ?? 'system';
 
     registerIpc();
+    registerWindowChrome(() => mainWindow);
     installMenu({ get: () => settings.get().theme ?? 'system', set: setTheme });
     createWindow();
     app.on('activate', () => {

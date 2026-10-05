@@ -1,5 +1,5 @@
-import { app, BrowserWindow, dialog, Menu, type MenuItemConstructorOptions } from 'electron';
-import type { MenuAction, ThemeSource } from '../src/shared/api';
+import { app, BrowserWindow, dialog, Menu, type MenuItem, type MenuItemConstructorOptions } from 'electron';
+import type { MenuAction, MenuNode, ThemeSource } from '../src/shared/api';
 
 interface ThemeHooks {
   get(): ThemeSource;
@@ -115,5 +115,62 @@ export function installMenu(theme: ThemeHooks): void {
       ]
     }
   ];
-  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+  Menu.setApplicationMenu(Menu.buildFromTemplate(withIds(template)));
+}
+
+/** Gives every item a stable id ("m0", "m0.3", …) so the in-window menu can ask for it to be run. */
+function withIds(items: MenuItemConstructorOptions[], prefix = 'm'): MenuItemConstructorOptions[] {
+  return items.map((item, i) => {
+    const id = `${prefix}${prefix === 'm' ? i : '.' + i}`;
+    return { ...item, id, ...(Array.isArray(item.submenu) ? { submenu: withIds(item.submenu, id) } : {}) };
+  });
+}
+
+/** Shortcut hints for items that rely on a built-in role rather than a "\t" label. */
+const ROLE_HINTS: Record<string, string> = {
+  undo: 'Ctrl+Z',
+  redo: 'Ctrl+Y',
+  cut: 'Ctrl+X',
+  copy: 'Ctrl+C',
+  paste: 'Ctrl+V',
+  selectall: 'Ctrl+A',
+  zoomin: 'Ctrl++',
+  zoomout: 'Ctrl+-',
+  resetzoom: 'Ctrl+0',
+  togglefullscreen: 'F11',
+  toggledevtools: 'Ctrl+Shift+I'
+};
+
+function describe(items: readonly MenuItem[]): MenuNode[] {
+  return items
+    .filter((i) => i.visible !== false)
+    .map((i): MenuNode => {
+      const raw = i.label ?? '';
+      const [text, tab] = raw.split('\t');
+      const mnemonic = /&(\w)/.exec(text)?.[1];
+      const submenu = i.submenu?.items;
+      return {
+        id: i.id,
+        label: text.replace(/&(\w)/, '$1'),
+        ...(tab ? { hint: tab } : i.role && ROLE_HINTS[i.role.toLowerCase()] ? { hint: ROLE_HINTS[i.role.toLowerCase()] } : {}),
+        ...(mnemonic ? { mnemonic: mnemonic.toLowerCase() } : {}),
+        type: i.type === 'separator' ? 'separator' : submenu ? 'submenu' : i.type === 'checkbox' || i.type === 'radio' ? i.type : 'normal',
+        ...(i.type === 'checkbox' || i.type === 'radio' ? { checked: i.checked } : {}),
+        enabled: i.enabled,
+        ...(submenu ? { submenu: describe(submenu) } : {})
+      };
+    });
+}
+
+/** The application menu as plain data. */
+export function describeMenu(): MenuNode[] {
+  const menu = Menu.getApplicationMenu();
+  return menu ? describe(menu.items) : [];
+}
+
+/** Runs a menu item by id (roles included), as if it had been chosen in a native menu. */
+export function invokeMenuItem(id: string, win: BrowserWindow | null): void {
+  const item = Menu.getApplicationMenu()?.getMenuItemById(id);
+  if (!item || !item.enabled || item.type === 'separator' || item.submenu) return;
+  item.click(undefined as never, win ?? undefined, win?.webContents);
 }

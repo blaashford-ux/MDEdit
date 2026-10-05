@@ -101,11 +101,12 @@ select { padding: 5px 8px; cursor: pointer; }
 input:focus-visible, textarea:focus-visible, select:focus-visible { outline-offset: 0; }
 
 /* ---- layout: the sidebar sits on the window; the editor is a floating card ---- */
-.app { display: grid; height: 100%; padding: 0; }
-.sidebar { display: flex; flex-direction: column; min-width: 0; overflow: hidden; background: transparent; padding: 12px 0 6px; }
+.frame { display: flex; flex-direction: column; height: 100%; }
+.app { display: grid; flex: 1; min-height: 0; padding: 0; }
+.sidebar { display: flex; flex-direction: column; min-width: 0; overflow: hidden; background: transparent; padding: 4px 0 6px; }
 .splitter { cursor: col-resize; background: transparent; margin-left: -3px; z-index: 2; border-radius: 3px; transition: background 0.12s; }
 .splitter:hover, .splitter:focus-visible { background: var(--accent); opacity: 0.55; }
-.content { display: flex; flex-direction: column; min-width: 0; min-height: 0; margin: 10px 10px 10px 0; background: var(--bg); border-radius: var(--radius-lg); box-shadow: var(--shadow-card); overflow: hidden; }
+.content { display: flex; flex-direction: column; min-width: 0; min-height: 0; margin: 2px 10px 10px 0; background: var(--bg); border-radius: var(--radius-lg); box-shadow: var(--shadow-card); overflow: hidden; }
 
 .brand { display: flex; align-items: center; gap: 9px; padding: 0 16px 10px; }
 .brand img { border-radius: 7px; }
@@ -318,3 +319,30 @@ code.path { background: var(--raised); padding: 1px 6px; border-radius: 6px; }
 .editor .milkdown .ProseMirror h2 { font-size: 1.55em; font-weight: 650; letter-spacing: -0.01em; }
 .editor .milkdown .ProseMirror h3 { font-size: 1.25em; font-weight: 650; }
 .editor .milkdown .ProseMirror h4, .editor .milkdown .ProseMirror h5, .editor .milkdown .ProseMirror h6 { font-size: 1.05em; font-weight: 650; }
+
+/* ---- custom title bar ---- */
+.titlebar { flex: none; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; height: env(titlebar-area-height, 40px); min-height: 40px; width: env(titlebar-area-width, 100%); margin-left: env(titlebar-area-x, 0px); padding-left: 12px; background: transparent; -webkit-app-region: drag; user-select: none; }
+.tb-left { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.tb-logo { border-radius: 6px; }
+.tb-left .wordmark { margin-right: 10px; }
+.tb-title { justify-self: center; max-width: 100%; padding: 0 16px; font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tb-controls { display: flex; align-self: stretch; -webkit-app-region: no-drag; }
+.tb-btn { width: 46px; height: 100%; padding: 0; border-radius: 0; background: transparent; color: var(--muted); }
+.tb-btn:hover:not(:disabled) { background: var(--raised); color: var(--fg); }
+.tb-btn.close:hover:not(:disabled) { background: #e5484d; color: #fff; }
+
+.menubar { display: flex; align-items: center; gap: 2px; -webkit-app-region: no-drag; }
+.mb-top-wrap { position: relative; }
+.mb-top { padding: 4px 10px; background: transparent; color: var(--muted); border-radius: 8px; font-size: 13px; }
+.mb-top:hover, .mb-top.open { background: var(--raised); color: var(--fg); }
+.mb-drop { position: absolute; top: calc(100% + 4px); left: 0; z-index: 60; }
+.mb-list { min-width: 230px; padding: 6px; background: var(--panel); border-radius: 12px; box-shadow: var(--shadow-pop); }
+.mb-item-wrap { position: relative; }
+.mb-item { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 10px; background: none; border-radius: 8px; text-align: left; justify-content: flex-start; font-size: 13px; }
+.mb-item.hot:not(:disabled), .mb-item:hover:not(:disabled) { background: var(--raised); }
+.mb-check { width: 14px; flex: none; color: var(--accent); display: inline-flex; }
+.mb-label { flex: 1; }
+.mb-hint { color: var(--faint); font-size: 12px; margin-left: 24px; }
+.mb-sub { color: var(--faint); }
+.mb-sep { height: 1px; margin: 5px 8px; background: var(--hover); border: 0; opacity: 0.8; }
+.mb-flyout { position: absolute; left: calc(100% - 2px); top: -6px; z-index: 61; }
