@@ -1,12 +1,13 @@
 import { Crepe, CrepeFeature } from '@milkdown/crepe';
 import { editorViewCtx } from '@milkdown/kit/core';
 import { Selection } from '@milkdown/kit/prose/state';
-import { replaceAll } from '@milkdown/kit/utils';
+import { $prose, replaceAll } from '@milkdown/kit/utils';
 import { useEffect, useRef } from 'react';
 import '@milkdown/crepe/theme/common/style.css';
 import '@milkdown/crepe/theme/classic.css';
 import './milkdownDark';
 import { pickScene } from '../shared/sceneBreaks';
+import { findApiFor, findPlugin } from './findPlugin';
 import type { SceneNav } from './sceneNav';
 
 interface Props {
@@ -63,19 +64,20 @@ export function Editor({ initial, restore, onChange, saved, onNav }: Props) {
         onChangeRef.current(md === baseline.current ? null : md);
       });
     });
+    crepe.editor.use($prose(() => findPlugin)); // highlights for Find & Replace
+    const getView = () => (crepeRef.current ? crepeRef.current.editor.action((ctx) => ctx.get(editorViewCtx)) : null);
     void crepe.create().then(() => {
       if (disposed) return;
       crepeRef.current = crepe;
       if (baseline.current === null) baseline.current = crepe.getMarkdown();
       const { restore: draft } = mountProps.current;
       if (draft !== null) crepe.editor.action(replaceAll(draft));
-    });
-
-    onNavRef.current?.({
-      go: (dir) => {
-        if (!crepeRef.current) return false;
-        return crepeRef.current.editor.action((ctx) => {
-          const view = ctx.get(editorViewCtx);
+      // Only now can the parent drive the editor (scene jumps, find & replace).
+      onNavRef.current?.({
+        find: findApiFor(getView),
+        go: (dir) => {
+          const view = getView();
+          if (!view) return false;
           const { doc, selection } = view.state;
           // a scene starts at the block right after each horizontal rule (`* * *`, `---`)
           const starts: number[] = [];
@@ -92,8 +94,8 @@ export function Editor({ initial, restore, onChange, saved, onNav }: Props) {
           const el = view.nodeDOM(target);
           if (el instanceof HTMLElement) el.scrollIntoView({ block: 'center' });
           return true;
-        });
-      }
+        }
+      });
     });
 
     return () => {

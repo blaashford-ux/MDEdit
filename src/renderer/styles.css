@@ -83,7 +83,9 @@ button:disabled { opacity: 0.5; cursor: default; }
 .panes { flex: 1; min-height: 0; position: relative; }
 .pane { position: absolute; inset: 0; overflow: auto; padding: 0 24px 24px; }
 /* stays visible while the chapter scrolls underneath */
-.editor-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; position: sticky; top: 0; z-index: 30; padding: 8px 0; background: var(--bg); border-bottom: 1px solid var(--border); }
+/* the heading row and the find bar stay visible while the chapter scrolls underneath */
+.pane-top { position: sticky; top: 0; z-index: 30; background: var(--bg); border-bottom: 1px solid var(--border); }
+.editor-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; }
 .editor-head h2 { margin: 0; font-size: 18px; }
 .head-actions { display: flex; gap: 6px; }
 .scene-msg { margin-right: auto; margin-left: 12px; font-size: 12px; color: var(--muted, #888); }
@@ -187,3 +189,19 @@ code.path { background: var(--hover); padding: 1px 5px; border-radius: 3px; }
 
 .font-field select { width: 100%; }
 .font-preview { margin-top: 6px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 4px; font-size: 16px; line-height: 1.4; overflow-wrap: anywhere; }
+
+.find-bar { padding: 0 0 8px; display: flex; flex-direction: column; gap: 6px; }
+.find-row { display: flex; align-items: center; gap: 6px; }
+.find-row .find-input { flex: 1; min-width: 120px; max-width: 360px; padding: 4px 8px; }
+.find-row input[aria-invalid='true'] { border-color: #c0392b; }
+.find-expand { width: 22px; padding: 0; background: none; border: none; color: var(--muted); cursor: pointer; }
+.find-expand.spacer { display: inline-block; }
+.find-toggle { min-width: 30px; padding: 2px 6px; font-family: Consolas, 'Cascadia Mono', monospace; }
+.find-toggle.on { background: var(--accent); color: var(--bg); border-color: transparent; }
+.find-scope { padding: 3px 4px; }
+.find-status { flex: 1; min-width: 0; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.find-flash { font-size: 12px; color: var(--accent); white-space: nowrap; }
+.find-confirm { background: rgba(255, 170, 0, 0.15); border-radius: 4px; padding: 4px 8px; }
+.find-confirm span { flex: 1; font-size: 13px; }
+.ProseMirror .find-match { background: rgba(255, 200, 0, 0.4); border-radius: 2px; }
+.ProseMirror .find-match.find-current { background: rgba(255, 140, 0, 0.7); outline: 1px solid rgba(255, 140, 0, 0.9); }

@@ -241,3 +241,12 @@ export function deleteChapter(doc: MarkdownDoc, index: number): MarkdownDoc | nu
   raws.splice(index, 1);
   return rebuild(doc, raws, hadFinalNewline(doc));
 }
+
+/** Rewrites every chapter's text with `fn`, then re-splits (the edit may have added or removed headings). */
+export function mapChapters(doc: MarkdownDoc, fn: (raw: string, index: number) => string): MarkdownDoc {
+  return rebuild(
+    doc,
+    doc.chapters.map((c, i) => fn(c.raw, i)),
+    hadFinalNewline(doc)
+  );
+}

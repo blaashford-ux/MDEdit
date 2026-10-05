@@ -51,7 +51,12 @@ export function installMenu(theme: ThemeHooks): void {
         { role: 'cut' },
         { role: 'copy' },
         { role: 'paste' },
-        { role: 'selectAll' }
+        { role: 'selectAll' },
+        { type: 'separator' },
+        { label: 'Find…\tCtrl+F', click: send('find') },
+        { label: 'Find Next\tF3', click: send('find-next') },
+        { label: 'Find Previous\tShift+F3', click: send('find-prev') },
+        { label: 'Replace…\tCtrl+H', click: send('replace') }
       ]
     },
     {

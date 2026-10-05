@@ -5,12 +5,14 @@ import {
   deleteChapter as deleteChapterIn,
   insertChapter,
   joinChapters,
+  mapChapters,
   moveChapter as moveChapterIn,
   splitChapters,
   updateChapter,
   type MarkdownDoc
 } from '../shared/chapters';
 import type { AppDefaults } from '../shared/appDefaults';
+import { compileFind, replaceAllInText, type FindOptions } from '../shared/find';
 import { basename, dirname, isInside, remapPath } from '../shared/paths';
 import { collectFiles, collectOrphans, flattenPaths } from '../shared/tree';
 
@@ -828,6 +830,25 @@ export class Workspace {
       this.set({ error: `Could not edit chapters: ${e instanceof Error ? e.message : e}` });
       return null;
     }
+  }
+
+  /**
+   * Find & Replace across a whole file: every chapter's Markdown text is rewritten and saved. Unsaved
+   * edits in the file's tab are resolved first (Save / Don't Save / Cancel). Returns how many
+   * replacements were made, or null if it was cancelled or failed.
+   */
+  async replaceInFile(file: string, find: FindOptions, replacement: string): Promise<number | null> {
+    if (compileFind(find)?.error) return null;
+    let count = 0;
+    const done = await this.editStructure(file, (doc) => {
+      const next = mapChapters(doc, (raw) => {
+        const r = replaceAllInText(raw, find, replacement);
+        count += r.count;
+        return r.text;
+      });
+      return { doc: next, index: null, remapIndex: (old) => old };
+    });
+    return done ? count : null;
   }
 
   async newChapter(file: string, afterIndex: number, title: string): Promise<boolean> {

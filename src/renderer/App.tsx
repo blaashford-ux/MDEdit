@@ -7,6 +7,7 @@ import { BookDetailsDialog } from './BookDetailsDialog';
 import { ContextMenu, type MenuItem } from './ContextMenu';
 import { Editor } from './Editor';
 import { ExportDialog } from './ExportDialog';
+import { FindBar, initialFindForm, type FindForm } from './FindBar';
 import { PromptDialog, type PromptSpec } from './PromptDialog';
 import { RelinkDialog } from './RelinkDialog';
 import { SettingsDialog } from './SettingsDialog';
@@ -33,6 +34,9 @@ export function App() {
   const [relink, setRelink] = useState<string | null>(null);
   const [exportFile, setExportFile] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [find, setFindState] = useState<FindForm>(initialFindForm);
+  const [navVersion, setNavVersion] = useState(0);
+  const setFind = (patch: Partial<FindForm>) => setFindState((f) => ({ ...f, ...patch }));
   const [sceneMsg, setSceneMsg] = useState<string | null>(null);
   const navs = useRef(new Map<string, SceneNav>());
   const sceneTimer = useRef<ReturnType<typeof setTimeout>>();
@@ -259,6 +263,40 @@ export function App() {
     if (!moved) sceneTimer.current = setTimeout(() => setSceneMsg(null), 2500);
   };
 
+  const registerNav = (id: string, n: SceneNav | null) => {
+    if (n) navs.current.set(id, n);
+    else navs.current.delete(id);
+    setNavVersion((v) => v + 1);
+  };
+  void navVersion; // re-render when an editor registers, so the find bar gets its handle
+
+  const closeFind = () => {
+    setFind({ open: false });
+    // hand the keyboard back to the editor
+    (document.querySelector('.pane:not([hidden]) .ProseMirror, .pane:not([hidden]) textarea.source-editor') as HTMLElement | null)?.focus();
+  };
+
+  /** Opens the find bar (prefilled with the selected text); `replace` also shows the Replace row. */
+  const openFind = (replace: boolean) => {
+    if (!s.activeId) return;
+    const picked = navs.current.get(s.activeId)?.find.selectedText() ?? '';
+    setFindState((f) => ({
+      ...f,
+      open: true,
+      replace: replace || (f.open && f.replace),
+      query: picked || f.query,
+      focusTick: f.focusTick + 1
+    }));
+  };
+  const findStep = (dir: 1 | -1) => {
+    if (!s.activeId) return;
+    if (!find.open) {
+      setFindState((f) => ({ ...f, open: true, focusTick: f.focusTick + 1 }));
+      return;
+    }
+    setFindState((f) => ({ ...f, step: { dir, n: f.step.n + 1 } }));
+  };
+
   // Shortcuts and the native menu share the same actions. The ref keeps listeners stable.
   const actions: Record<MenuAction | 'toggle-mode' | 'focus-filter', () => void> = {
     save: () => void ws.save(),
@@ -271,6 +309,10 @@ export function App() {
     'prev-tab': () => ws.cycleTab(-1),
     'next-chapter': () => void ws.gotoChapter(1),
     'prev-chapter': () => void ws.gotoChapter(-1),
+    find: () => openFind(false),
+    replace: () => openFind(true),
+    'find-next': () => findStep(1),
+    'find-prev': () => findStep(-1),
     'next-scene': () => gotoScene(1),
     'prev-scene': () => gotoScene(-1),
     settings: () => setShowSettings(true),
@@ -300,6 +342,10 @@ export function App() {
       else if (mod && k === 'p') name = 'focus-filter';
       else if (mod && !e.shiftKey && k === 'e') name = 'export';
       else if (mod && !e.shiftKey && e.key === ',') name = 'settings';
+      else if (mod && !e.shiftKey && !e.altKey && k === 'f') name = 'find';
+      else if (mod && !e.shiftKey && !e.altKey && k === 'h') name = 'replace';
+      else if (e.key === 'F3' && !mod) name = e.shiftKey ? 'find-prev' : 'find-next';
+      else if (mod && !e.altKey && k === 'g') name = e.shiftKey ? 'find-prev' : 'find-next';
       else if (mod && e.shiftKey && k === 'm') name = 'toggle-mode';
       else if (e.ctrlKey && e.key === 'Tab') name = e.shiftKey ? 'prev-tab' : 'next-tab';
       else if (e.ctrlKey && e.key === 'PageDown') name = 'next-chapter';
@@ -327,6 +373,22 @@ export function App() {
     };
     window.addEventListener('keydown', onSceneKey, true);
     return () => window.removeEventListener('keydown', onSceneKey, true);
+  }, []);
+
+  // Esc in the editor closes an open find bar (Esc inside the bar is handled by the bar itself).
+  const findOpenRef = useRef(false);
+  findOpenRef.current = find.open;
+  const closeFindRef = useRef(closeFind);
+  closeFindRef.current = closeFind;
+  useEffect(() => {
+    const onEsc = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || !findOpenRef.current) return;
+      const t = e.target as HTMLElement | null;
+      if (!t?.closest('.pane') || t.closest('.find-bar') || t.closest('.modal-backdrop')) return;
+      closeFindRef.current();
+    };
+    window.addEventListener('keydown', onEsc);
+    return () => window.removeEventListener('keydown', onEsc);
   }, []);
 
   // ---- sidebar resize --------------------------------------------------------------------
@@ -490,6 +552,7 @@ export function App() {
                     <button onClick={() => ws.resolveConflict(tab.id, 'dismiss')}>Dismiss</button>
                   </div>
                 )}
+                <div className="pane-top">
                 <div className="editor-head">
                   <h2>
                     {chapterLabel(chapter)}
@@ -524,6 +587,23 @@ export function App() {
                     </button>
                   </div>
                 </div>
+                {active && find.open && (
+                  <FindBar
+                    form={find}
+                    setForm={setFind}
+                    handle={navs.current.get(tab.id)}
+                    chapterIndex={tab.chapter}
+                    chapterTexts={doc.chapters.map((c, i) => (i === tab.chapter && tab.draft !== null ? tab.draft : c.raw))}
+                    fileName={basename(tab.file)}
+                    gotoChapter={async (i) => {
+                      await ws.openChapter(tab.file, i);
+                      return ws.tabForFile(tab.file)?.chapter === i;
+                    }}
+                    replaceInFile={(o, r) => ws.replaceInFile(tab.file, o, r)}
+                    onClose={closeFind}
+                  />
+                )}
+                </div>
                 {tab.mode === 'visual' ? (
                   <Editor
                     key={`${tab.id}@${tab.reloadKey}@v`}
@@ -531,7 +611,7 @@ export function App() {
                     restore={tab.draft}
                     onChange={(md) => ws.setDraft(tab.id, md)}
                     saved={tab.saved}
-                    onNav={(n) => (n ? navs.current.set(tab.id, n) : navs.current.delete(tab.id))}
+                    onNav={(n) => registerNav(tab.id, n)}
                   />
                 ) : (
                   <SourceEditor
@@ -540,7 +620,7 @@ export function App() {
                     draft={tab.draft}
                     onChange={(md) => ws.setDraft(tab.id, md)}
                     savedVersion={tab.saved?.version ?? 0}
-                    onNav={(n) => (n ? navs.current.set(tab.id, n) : navs.current.delete(tab.id))}
+                    onNav={(n) => registerNav(tab.id, n)}
                   />
                 )}
               </section>

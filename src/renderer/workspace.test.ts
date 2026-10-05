@@ -757,3 +757,59 @@ describe('chapter heading level setting', () => {
     expect(api.books.get(A)).toMatchObject({ marked: true, author: 'Template Author', title: 'a' });
   });
 });
+
+describe('replace in file', () => {
+  const find = { query: 'dave', caseSensitive: false, wholeWord: true, regex: false };
+
+  it('rewrites every chapter on disk, keeps the structure, and reloads the open tab', async () => {
+    api.add('r.md', '# One\nDave went home.\n\n# Two\nHe met dave. Davey stayed.\n\n# Three\nnone\n');
+    await ws.openChapter(`${ROOT}/r.md`, 1);
+    const n = await ws.replaceInFile(`${ROOT}/r.md`, find, 'Mark');
+    expect(n).toBe(2);
+    expect(api.text(`${ROOT}/r.md`)).toBe('# One\nMark went home.\n\n# Two\nHe met Mark. Davey stayed.\n\n# Three\nnone\n');
+    expect(state().docs.get(`${ROOT}/r.md`)!.chapters.map((c) => c.title)).toEqual(['One', 'Two', 'Three']);
+    expect(tabOf(`${ROOT}/r.md`).chapter).toBe(1);
+    expect(tabOf(`${ROOT}/r.md`).draft).toBeNull();
+  });
+
+  it('asks about unsaved edits first; Cancel changes nothing', async () => {
+    api.add('r.md', '# One\nDave\n');
+    await ws.openChapter(`${ROOT}/r.md`, 0);
+    ws.setDraft(tabOf(`${ROOT}/r.md`).id, '# One\nDave EDITED');
+    api.unsavedAnswers = ['cancel'];
+    expect(await ws.replaceInFile(`${ROOT}/r.md`, find, 'Mark')).toBeNull();
+    expect(api.text(`${ROOT}/r.md`)).toBe('# One\nDave\n');
+    expect(tabOf(`${ROOT}/r.md`).draft).toBe('# One\nDave EDITED');
+  });
+
+  it('Save first applies the replacement to the saved edits too', async () => {
+    api.add('r.md', '# One\nDave\n');
+    await ws.openChapter(`${ROOT}/r.md`, 0);
+    ws.setDraft(tabOf(`${ROOT}/r.md`).id, '# One\nDave and Dave');
+    api.unsavedAnswers = ['save'];
+    expect(await ws.replaceInFile(`${ROOT}/r.md`, find, 'Mark')).toBe(2);
+    expect(api.text(`${ROOT}/r.md`)).toBe('# One\nMark and Mark\n');
+  });
+
+  it('works with regular expressions and capture groups, and refuses a bad pattern', async () => {
+    api.add('r.md', '# One\nChapter 3 and chapter 12\n');
+    expect(await ws.replaceInFile(`${ROOT}/r.md`, { ...find, wholeWord: false, regex: true, query: 'chapter (\\d+)' }, 'Part $1')).toBe(2);
+    expect(api.text(`${ROOT}/r.md`)).toBe('# One\nPart 3 and Part 12\n');
+    expect(await ws.replaceInFile(`${ROOT}/r.md`, { ...find, regex: true, query: '(' }, 'x')).toBeNull();
+  });
+
+  it('zero matches writes nothing new but still succeeds with 0', async () => {
+    api.add('r.md', '# One\nnothing\n');
+    const before = api.writes.length;
+    expect(await ws.replaceInFile(`${ROOT}/r.md`, find, 'x')).toBe(0);
+    expect(api.text(`${ROOT}/r.md`)).toBe('# One\nnothing\n');
+    expect(api.writes.length).toBeGreaterThanOrEqual(before);
+  });
+
+  it('a replacement that introduces a heading re-splits the file', async () => {
+    api.add('r.md', '# One\nSPLIT HERE and more\n');
+    await ws.openChapter(`${ROOT}/r.md`, 0);
+    await ws.replaceInFile(`${ROOT}/r.md`, { query: 'SPLIT HERE', caseSensitive: true, wholeWord: false, regex: false }, '\n# Two\n');
+    expect(state().docs.get(`${ROOT}/r.md`)!.chapters.map((c) => c.title)).toEqual(['One', 'Two']);
+  });
+});
