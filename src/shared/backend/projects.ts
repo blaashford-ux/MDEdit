@@ -132,11 +132,9 @@ export function makeProjects(fs: FsPort) {
     const meta = await readMeta(dir, now);
     if (!meta) return null;
     const c = await countProject(dir, meta.excludedFolders);
-    if (meta.activeManuscript) {
-      const n = await countFile(dir, meta.activeManuscript);
-      if (n !== null) return { path: dir, name: basename(dir), meta, ...c, words: n };
-    }
-    return { path: dir, name: basename(dir), meta, ...c };
+    // words belong to the active manuscript alone: without one (or if it has gone) there is no count
+    const words = meta.activeManuscript ? await countFile(dir, meta.activeManuscript) : null;
+    return { path: dir, name: basename(dir), meta, files: c.files, lastEdited: c.lastEdited, words };
   }
 
   /** The projects (and other folders) directly inside the Root Folder. */
@@ -190,22 +188,19 @@ export function makeProjects(fs: FsPort) {
   }
 
   /**
-   * Counts the words that goals follow now (the active manuscript, or the project's counted folders) and notes them in
-   * that history for today. If the active manuscript has been deleted or moved away, it is cleared.
+   * Counts the words of the active manuscript and notes them in that manuscript's own history for today (each
+   * manuscript keeps its history, so swapping back shows it again). With no active manuscript there is nothing to
+   * count: the total is null and nothing is recorded. If the active manuscript has been deleted or moved away, it is cleared.
    */
-  async function recordProgress(dir: string, now: () => Date = () => new Date()): Promise<{ progress: Progress; total: number; manuscript: string | null }> {
-    let meta = await readMeta(dir, now);
+  async function recordProgress(dir: string, now: () => Date = () => new Date()): Promise<{ progress: Progress; total: number | null; manuscript: string | null }> {
+    const meta = await readMeta(dir, now);
     if (!meta) throw new Error('That folder is not a project.');
-    let manuscript = meta.activeManuscript;
-    let words: number;
-    if (manuscript) {
-      const n = await countFile(dir, manuscript);
-      if (n === null) {
-        meta = await updateMeta(dir, { activeManuscript: null }, now);
-        manuscript = null;
-        words = (await countProject(dir, meta.excludedFolders)).words;
-      } else words = n;
-    } else words = (await countProject(dir, meta.excludedFolders)).words;
+    const manuscript = meta.activeManuscript;
+    const words = manuscript ? await countFile(dir, manuscript) : null;
+    if (!manuscript || words === null) {
+      if (manuscript) await updateMeta(dir, { activeManuscript: null }, now);
+      return { progress: sanitizeProgress(null), total: null, manuscript: null };
+    }
     const before = await readProgress(dir, manuscript);
     const after = recordSnapshot(before, localDate(now()), words);
     if (after !== before) {

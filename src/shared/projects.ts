@@ -274,9 +274,9 @@ function sanitizeManuscriptGoals(raw: unknown, today: string): Record<string, Go
   return out;
 }
 
-/** The goal that applies now: the active manuscript's own goal, or the project's when no manuscript is active. */
+/** The goal that applies now: the active manuscript's own goal. Without an active manuscript there is none (goals are kept per manuscript). */
 export function goalFor(meta: Pick<ProjectMeta, 'goal' | 'activeManuscript' | 'manuscriptGoals'>): Goal | null {
-  return meta.activeManuscript ? (meta.manuscriptGoals[meta.activeManuscript] ?? null) : meta.goal;
+  return meta.activeManuscript ? (meta.manuscriptGoals[meta.activeManuscript] ?? null) : null;
 }
 
 /** The same metadata with the applicable goal replaced (null removes it). */
@@ -377,8 +377,8 @@ export interface ProjectSummary {
   path: string;
   name: string;
   meta: ProjectMeta;
-  /** Words in the files that count toward the goal. */
-  words: number;
+  /** Words in the active manuscript; null when no manuscript is active (nothing is counted then). */
+  words: number | null;
   files: number;
   /** Most recent edit among the project's Markdown files (ms since epoch), or null if it has none. */
   lastEdited: number | null;

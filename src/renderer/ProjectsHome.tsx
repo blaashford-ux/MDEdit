@@ -51,7 +51,7 @@ export function ProjectsHome(p: Props) {
     const q = query.trim().toLowerCase();
     const list = all.filter((x) => x.meta.archived === showArchived && (q === '' || x.name.toLowerCase().includes(q) || x.meta.templateName.toLowerCase().includes(q)));
     return list.sort((a, b) =>
-      sort === 'name' ? a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }) : sort === 'words' ? b.words - a.words : (b.lastEdited ?? 0) - (a.lastEdited ?? 0)
+      sort === 'name' ? a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }) : sort === 'words' ? (b.words ?? -1) - (a.words ?? -1) : (b.lastEdited ?? 0) - (a.lastEdited ?? 0)
     );
   }, [all, query, sort, showArchived]);
 
@@ -146,7 +146,7 @@ export function ProjectsHome(p: Props) {
         <div className="project-grid">
           {shown.map((x) => {
             const g = goalFor(x.meta);
-            const pct = g ? Math.min(100, Math.round((x.words / g.targetWords) * 100)) : null;
+            const pct = g && x.words !== null ? Math.min(100, Math.round((x.words / g.targetWords) * 100)) : null;
             return (
               <div
                 key={x.path}
@@ -190,7 +190,7 @@ export function ProjectsHome(p: Props) {
                   </div>
                 )}
                 <div className="card-words">
-                  <strong>{x.words.toLocaleString()}</strong> <span className="muted">words{g ? ` of ${g.targetWords.toLocaleString()}` : ''}</span>
+                  <strong>{x.words === null ? '-' : x.words.toLocaleString()}</strong> <span className="muted">words{g ? ` of ${g.targetWords.toLocaleString()}` : ''}</span>
                 </div>
                 {pct !== null && (
                   <div className="goal-bar" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label={`${pct}% of the word goal`}>

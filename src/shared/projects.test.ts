@@ -177,9 +177,10 @@ describe('active manuscript', () => {
     expect(t.folders.map((f) => f.name)).toContain('Manuscripts');
     expect(t.files.map((f) => f.path).filter((f) => f.startsWith('Manuscripts'))).toEqual([]);
   });
-  it('goalFor follows the active manuscript, otherwise the project goal', () => {
+  it('goalFor follows the active manuscript; with none there is no goal (the project goal is kept, not shown)', () => {
     let m = withGoal(meta(), g);
-    expect(goalFor(m)).toEqual(g);
+    expect(goalFor(m)).toBeNull();
+    expect(m.goal).toEqual(g);
     m = { ...m, activeManuscript: 'Manuscripts/Book 1.md' };
     expect(goalFor(m)).toBeNull();
     m = withGoal(m, { ...g, targetWords: 70000 });

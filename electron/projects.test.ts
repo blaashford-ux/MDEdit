@@ -84,7 +84,9 @@ describe('listProjects', () => {
     await writeFile(path.join(root, 'stray.md'), 'x');
     const l = await listProjects(root);
     expect(l.exists).toBe(true);
-    expect(l.projects.map((p) => [p.name, p.words, p.files])).toEqual([['Alpha', 3, 1]]);
+    expect(l.projects.map((p) => [p.name, p.words, p.files])).toEqual([['Alpha', null, 1]]); // no active manuscript: no word count
+    await updateMeta(a.path, { activeManuscript: 'Manuscript/Draft.md' });
+    expect((await listProjects(root)).projects[0].words).toBe(3);
     expect(l.folders.map((f) => f.name)).toEqual(['Plain Folder']);
     expect(l.projects[0].lastEdited).toBeGreaterThan(0);
   });
@@ -170,25 +172,33 @@ describe('progress recording', () => {
     const a = await createProject(root, 'Alpha', novel(), { now: at('2026-10-05T08:00:00') });
     const draft = path.join(a.path, 'Manuscript', 'Draft.md');
     await writeFile(draft, 'w '.repeat(100));
+    await updateMeta(a.path, { activeManuscript: 'Manuscript/Draft.md' });
     let r = await recordProgress(a.path, at('2026-10-05T12:00:00'));
     expect(r.total).toBe(100);
-    expect(r.progress.days['2026-10-05']).toEqual({ start: 2, end: 100 }); // the starter heading is 2 words
-    const mtime = (await stat(path.join(a.path, '.mdedit', 'progress.json'))).mtimeMs;
+    expect(r.progress.days['2026-10-05']).toEqual({ start: 100, end: 100 }); // the first sighting is the baseline
+    const history = path.join(a.path, '.mdedit', (await readdir(path.join(a.path, '.mdedit'))).find((f) => /^progress-.*\.json$/.test(f))!);
+    const mtime = (await stat(history)).mtimeMs;
     await new Promise((res) => setTimeout(res, 20));
     await recordProgress(a.path, at('2026-10-05T12:30:00')); // nothing changed
-    expect((await stat(path.join(a.path, '.mdedit', 'progress.json'))).mtimeMs).toBe(mtime);
+    expect((await stat(history)).mtimeMs).toBe(mtime);
     await writeFile(draft, 'w '.repeat(350));
     r = await recordProgress(a.path, at('2026-10-06T09:00:00'));
     expect(r.progress.days['2026-10-06']).toEqual({ start: 100, end: 350 });
   });
-  it('words outside the counted folders do not move the total', async () => {
+  it('with no active manuscript nothing is counted or recorded', async () => {
     const a = await createProject(root, 'Alpha', novel(), { now: at('2026-10-05T08:00:00') });
-    await writeFile(path.join(a.path, 'Research', 'big.md'), 'w '.repeat(5000));
-    expect((await recordProgress(a.path, at('2026-10-05T12:00:00'))).total).toBe(2); // only the starter heading
+    await writeFile(path.join(a.path, 'Manuscript', 'Draft.md'), 'w '.repeat(5000));
+    const r = await recordProgress(a.path, at('2026-10-05T12:00:00'));
+    expect(r).toMatchObject({ total: null, manuscript: null });
+    expect(r.progress.days).toEqual({});
   });
   it('a damaged history file starts over instead of failing', async () => {
     const a = await createProject(root, 'Alpha', blank(), { now: at('2026-10-05T08:00:00') });
-    await writeFile(path.join(a.path, '.mdedit', 'progress.json'), 'garbage');
+    await writeFile(path.join(a.path, 'Book.md'), 'a few words');
+    await updateMeta(a.path, { activeManuscript: 'Book.md' });
+    await recordProgress(a.path, at('2026-10-05T09:00:00'));
+    const history = (await readdir(path.join(a.path, '.mdedit'))).find((f) => /^progress-.*\.json$/.test(f))!;
+    await writeFile(path.join(a.path, '.mdedit', history), 'garbage');
     expect((await recordProgress(a.path, at('2026-10-05T12:00:00'))).progress.days['2026-10-05']).toBeDefined();
   });
 });
@@ -252,12 +262,25 @@ describe('active manuscript', () => {
     expect(r.progress.days['2026-10-05']).toEqual({ start: 40, end: 40 });
     expect((await readProgress(a.path, 'Manuscripts/One.md')).days['2026-10-05'].end).toBe(100);
   });
-  it('a deleted manuscript is cleared and the project is counted again', async () => {
+  it('a deleted manuscript is cleared and nothing is counted', async () => {
     const a = await createProject(root, 'Saga', series(), { now: at('2026-10-05T08:00:00') });
     await updateMeta(a.path, { activeManuscript: 'Manuscripts/Gone.md' });
     const r = await recordProgress(a.path, at('2026-10-05T12:00:00'));
-    expect(r.manuscript).toBeNull();
+    expect(r).toMatchObject({ manuscript: null, total: null });
     expect((await readMeta(a.path))!.activeManuscript).toBeNull();
+  });
+  it('clearing the active manuscript shows no count, and its stats come back when it is chosen again', async () => {
+    const a = await createProject(root, 'Saga', series(), { now: at('2026-10-05T08:00:00') });
+    await writeFile(path.join(a.path, 'Manuscripts', 'One.md'), 'w '.repeat(100));
+    await updateMeta(a.path, { activeManuscript: 'Manuscripts/One.md' });
+    await recordProgress(a.path, at('2026-10-05T12:00:00'));
+    await updateMeta(a.path, { activeManuscript: null });
+    expect(await recordProgress(a.path, at('2026-10-05T13:00:00'))).toMatchObject({ total: null, manuscript: null });
+    expect((await listProjects(root)).projects[0].words).toBeNull();
+    await updateMeta(a.path, { activeManuscript: 'Manuscripts/One.md' });
+    const r = await recordProgress(a.path, at('2026-10-05T14:00:00'));
+    expect(r.total).toBe(100);
+    expect(r.progress.days['2026-10-05']).toEqual({ start: 100, end: 100 });
   });
 });
 

@@ -422,7 +422,7 @@ export function App() {
     onDelete: (p: ProjectSummary) =>
       setPrompt({
         title: `Delete “${p.name}”?`,
-        hint: `Its folder and everything in it (${p.files} file${p.files === 1 ? '' : 's'}, ${p.words.toLocaleString()} words) goes to the Recycle Bin.`,
+        hint: `Its folder and everything in it (${p.files} file${p.files === 1 ? '' : 's'}) goes to the Recycle Bin.`,
         label: 'Type the project name to confirm',
         initial: '',
         confirm: 'Delete project',

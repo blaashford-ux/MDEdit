@@ -194,7 +194,7 @@ export interface CoreApi {
   /** Adds template folders / starter files the project is missing; returns what was added. */
   addMissingTemplateParts(path: string, templateId: string): Promise<string[]>;
   /** Counts the project's words now, notes them in its history, and returns the history. */
-  recordProgress(path: string): Promise<{ progress: Progress; total: number; manuscript: string | null }>;
+  recordProgress(path: string): Promise<{ progress: Progress; total: number | null; manuscript: string | null }>;
   /** Moves every project in the Root to a new Root Folder (best effort; reports what failed). */
   moveProjects(newRoot: string): Promise<{ moved: string[]; failed: { name: string; error: string }[] }>;
   /** Remembers which project is open (so it can be reopened at startup). */
