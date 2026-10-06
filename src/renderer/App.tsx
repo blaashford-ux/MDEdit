@@ -25,6 +25,7 @@ import { SettingsDialog } from './SettingsDialog';
 import type { SceneNav } from './sceneNav';
 import { SourceEditor } from './SourceEditor';
 import { StatusBar } from './StatusBar';
+import { MobileBar } from './MobileBar';
 import { TitleBar } from './TitleBar';
 import { Tabs } from './Tabs';
 import { Tree } from './Tree';
@@ -38,6 +39,8 @@ const POLL_MS = 2000;
 const cleanError = (e: unknown) => String(e instanceof Error ? e.message : e).replace(/^Error invoking remote method '[^']*': (\w*Error: )?/, '');
 
 export function App() {
+  const caps = window.mdedit.capabilities;
+  const [drawer, setDrawer] = useState(false);
   const [ws] = useState(() => new Workspace(window.mdedit));
   const s = useWorkspace(ws);
   const [filter, setFilter] = useState('');
@@ -71,6 +74,11 @@ export function App() {
   const activeDoc = activeTab ? s.docs.get(activeTab.file) : undefined;
   const activeChapter = activeDoc?.chapters[activeTab?.chapter ?? 0];
   const activeKey = activeTab ? chapterKey(activeTab.file, activeTab.chapter) : null;
+  useEffect(() => setDrawer(false), [activeKey]);
+  // On the phone, a project with nothing open starts with its file list showing.
+  useEffect(() => {
+    if (!caps.windowChrome && s.root && !s.activeId) setDrawer(true);
+  }, [caps.windowChrome, s.root, s.activeId]);
 
   const rows = useMemo(
     () => (s.root ? buildRows(s.root, s.expanded, s.docs, filter) : []),
@@ -99,7 +107,8 @@ export function App() {
       const cfg = await window.mdedit.getProjectsConfig().catch(() => null);
       if (cfg) setPConfig(cfg);
       const lastFolder = await window.mdedit.getLastFolder().catch(() => null);
-      if (cfg && !cfg.setupDone) setWelcome({ lastFolder });
+      if (cfg && !cfg.setupDone && !caps.folderPicker) await window.mdedit.setProjectsConfig({ setupDone: true }).then(setPConfig);
+      else if (cfg && !cfg.setupDone) setWelcome({ lastFolder });
       else if (cfg?.reopenLast && cfg.lastProject) await ws.openProject(cfg.lastProject);
       else if (lastFolder && !cfg?.lastProject) await ws.openPath(lastFolder, true);
       setStarted(true);
@@ -271,13 +280,13 @@ export function App() {
   };
 
   const menuItems = (row: Row): MenuItem[] => {
-    const reveal = { label: 'Show in File Explorer', onClick: () => ws.reveal(row.path) };
+    const reveal: MenuItem[] = caps.folderPicker ? [{ label: 'Show in File Explorer', onClick: () => ws.reveal(row.path) }] : [];
     if (row.kind === 'dir') {
       return [
         { label: 'New File Here…', onClick: () => promptNewFile(row.path) },
         { label: 'New Folder Here…', onClick: () => promptNewFolder(row.path) },
         { label: 'Rename…', hint: 'F2', onClick: () => promptRename(row) },
-        reveal,
+        ...reveal,
         { label: 'Delete Folder…', danger: true, hint: 'Del', onClick: () => deleteRow(row) }
       ];
     }
@@ -301,9 +310,9 @@ export function App() {
         : [];
       return [
         ...manuscriptItems,
-        ...exportItems,
+        ...(caps.export ? exportItems : []),
         { label: 'Rename…', hint: 'F2', onClick: () => promptRename(row) },
-        reveal,
+        ...reveal,
         { label: 'Delete…', danger: true, hint: 'Del', onClick: () => deleteRow(row) }
       ];
     }
@@ -376,8 +385,8 @@ export function App() {
     loading: listing_loading,
     onOpen: (p: string) => void openProject(p),
     onNew: () => setShowNewProject(true),
-    onOpenFolder: () => void ws.openFolder(),
-    onChangeRoot: () => void changeRoot(),
+    onOpenFolder: caps.folderPicker ? () => void ws.openFolder() : undefined,
+    onChangeRoot: caps.folderPicker ? () => void changeRoot() : undefined,
     onRetry: () => void reloadListing(),
     onConvert: (p: string) => void projectCall(() => window.mdedit.convertFolder(p)),
     onRename: (p: ProjectSummary) => promptProjectName('Rename project', p.name, 'Rename', (n) => window.mdedit.renameProject(p.path, n)),
@@ -404,7 +413,7 @@ export function App() {
     onArchive: (p: ProjectSummary, archived: boolean) => void projectCall(() => window.mdedit.updateProject(p.path, { archived })),
     onStatus: (p: ProjectSummary, status: ProjectStatus) => void projectCall(() => window.mdedit.updateProject(p.path, { status })),
     onProperties: (p: ProjectSummary) => setProjectSettings(p.path),
-    onReveal: (p: string) => ws.reveal(p)
+    onReveal: caps.folderPicker ? (p: string) => ws.reveal(p) : undefined
   };
 
   /** Jumps the active editor to the next/previous scene break and says so when there are no more. */
@@ -580,8 +589,12 @@ export function App() {
   const toolbarBusy = s.refreshing;
 
   return (
-    <div className="frame">
-    <TitleBar title={titleText} dirty={activeDirty} />
+    <div className={`frame${caps.windowChrome ? '' : ' mobile'}${drawer ? ' drawer-open' : ''}`}>
+    {caps.windowChrome ? (
+      <TitleBar title={titleText} dirty={activeDirty} />
+    ) : (
+      <MobileBar title={titleText} dirty={activeDirty} showFiles={!!s.root} onFiles={() => setDrawer((d) => !d)} onHome={s.root ? () => void goHome() : undefined} onSave={() => void ws.save()} canSave={activeDirty} />
+    )}
     {!s.root ? (
       <div className="app-home">
         {s.error && (
@@ -603,7 +616,7 @@ export function App() {
             onOpen={(p) => void openProject(p)}
             onHome={() => void goHome()}
             onNew={() => setShowNewProject(true)}
-            onOpenFolder={() => void ws.openFolder()}
+            onOpenFolder={caps.folderPicker ? () => void ws.openFolder() : undefined}
             onSettings={() => s.project && setProjectSettings(s.project.path)}
             onProgress={() => setShowProgress(true)}
           />
@@ -614,9 +627,11 @@ export function App() {
           >
             <Icon name="refresh" /> {toolbarBusy ? 'Refreshing…' : 'Refresh'}
           </button>
-          <button onClick={() => actions.export()} disabled={!s.root} title="Export marked books for KDP (Ctrl+E)">
-            <Icon name="download" /> Export…
-          </button>
+          {caps.export && (
+            <button onClick={() => actions.export()} disabled={!s.root} title="Export marked books for KDP (Ctrl+E)">
+              <Icon name="download" /> Export…
+            </button>
+          )}
           <button onClick={() => promptNewFile(dirFor(null))} disabled={!s.root} title="New file (Ctrl+N)" aria-label="New file">
             <Icon name="filePlus" /> File
           </button>
@@ -674,6 +689,7 @@ export function App() {
         )}
       </aside>
 
+      {!caps.windowChrome && drawer && <div className="drawer-backdrop" onClick={() => setDrawer(false)} />}
       <div
         className="splitter"
         role="separator"
