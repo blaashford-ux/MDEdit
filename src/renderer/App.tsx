@@ -75,18 +75,17 @@ export function App() {
 
   const activeTab = s.tabs.find((t) => t.id === s.activeId);
 
-  // the pane element outlives a chapter change within a tab, so its scroll position would carry over: always start a chapter at the top
-  const activeChapter = activeTab?.chapter;
-  useEffect(() => {
-    if (activeChapter === undefined) return;
-    document.querySelectorAll<HTMLElement>('.pane:not([hidden])').forEach((el) => {
-      el.scrollTop = 0;
-    });
-  }, [s.activeId, activeChapter]);
   const activeDoc = activeTab ? s.docs.get(activeTab.file) : undefined;
   const activeChapter = activeDoc?.chapters[activeTab?.chapter ?? 0];
   const activeKey = activeTab ? chapterKey(activeTab.file, activeTab.chapter) : null;
   useEffect(() => setDrawer(false), [activeKey]);
+  // the pane element outlives a chapter change within a tab, so its scroll position would carry over: always start a chapter at the top
+  useEffect(() => {
+    if (!activeKey) return;
+    document.querySelectorAll<HTMLElement>('.pane:not([hidden])').forEach((el) => {
+      el.scrollTop = 0;
+    });
+  }, [activeKey]);
   // On the phone, a project with nothing open starts with its file list showing.
   useEffect(() => {
     if (!caps.windowChrome && s.root && !s.activeId) setDrawer(true);
