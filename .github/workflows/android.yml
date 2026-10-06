@@ -4,6 +4,7 @@ on:
   push:
     branches: ['**']
     paths: ['android/**', 'src/**', 'capacitor.config.ts', 'vite.mobile.config.ts', 'package.json', 'package-lock.json', '.github/workflows/android.yml']
+  workflow_call: # reused by release.yml, so a release carries the APK
   workflow_dispatch:
     inputs:
       publish:

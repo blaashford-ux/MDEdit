@@ -1,6 +1,6 @@
 # MDEdit
 
-Windows desktop Markdown editor for book projects: keep each book in a **project** (a folder with the subfolders you choose), browse its `.md` files, and edit them one chapter (Heading 1 by default) at a time.
+Markdown editor for book projects, on **Windows and Android**: keep each book in a **project** (a folder with the subfolders you choose), browse its `.md` files, and edit them one chapter (Heading 1 by default) at a time. Both apps keep your projects in step through **Google Drive**.
 
 ## Develop
 ```
@@ -8,9 +8,16 @@ npm install
 npm test          # chapter engine tests
 npm run dev       # Electron + Vite
 npm run dist      # Windows installer (run on Windows / CI)
+npm run dev:mobile      # the phone UI in a browser (an in-memory demo library and a demo Drive)
+npm run android:sync    # build the phone bundle and copy it into the Android project (the APK itself is built by CI)
 ```
 
+Google sign-in needs the app's OAuth clients: the Windows build reads the Desktop client secret from `MDEDIT_GOOGLE_CLIENT_SECRET`
+(a repository secret `GOOGLE_DESKTOP_CLIENT_SECRET` in CI) and the Android build is signed with the keystore in the `ANDROID_KEYSTORE_*`
+repository secrets. See [docs/sync-rules.md](docs/sync-rules.md) for how sync behaves and [docs/RELEASING.md](docs/RELEASING.md) for releases.
+
 ## Status
+- [x] **Android app and Google Drive sync** (0.4): the same editor on your phone (projects, chapters, goals; no export), and both apps keep the Root Folder in step through an `MDEdit` folder in your Google Drive. Edits sync a few seconds after you save and when you switch back to the app; two devices changing the same chapter keep **both** versions; nothing is deleted in bulk without asking. Details in [docs/sync-rules.md](docs/sync-rules.md)
 - [x] **Projects** (0.3): a project is a folder with a hidden `.mdedit` marker, living in your **Root Folder** (default `%USERPROFILE%\MDEdit`, chosen on first run and changeable in Settings). The Projects home shows every project as a card (status, words, goal progress); **New Project** (Ctrl+Alt+N) makes one from a **template** — folders, starter files and export defaults, all editable in Settings → Projects. Ctrl+K switches project; rename, duplicate, archive, delete (to the Recycle Bin) and status (planning → published) are on each card. Folders outside the Root still open with File → Open Folder, and can be converted to projects
 - [x] **Project settings and defaults**: each project can override the chapter-heading level and the export defaults (author, copyright page, fonts, trim size…); everything inside a project uses them. Order of precedence: built-in → app Settings → template → project → the book's own export settings
 - [x] **Goals and progress**: set a word-count goal (and deadline) per project, choose which folders count; the Progress window (status bar or switcher) shows a day-by-day bar chart with a burn-down line, the words per day needed to finish on time, and the estimated finish date at your 3-day and 5-day averages
@@ -117,6 +124,22 @@ Download the latest Windows installer from
 automatically. See [docs/RELEASING.md](docs/RELEASING.md).
 
 ## Changelog
+
+### 0.4.0 — 2026-10-06
+**New**
+- **Android app** (an APK on each release): the editor, Projects home, goals and progress on your phone, with files stored on the phone. It has no KDP export, fonts or Explorer actions, and its Root Folder is fixed.
+- **Google Drive sync** on Windows (File → Google Drive Sync…, plus a status-bar chip) and Android (cloud button): sign in once per device; MDEdit keeps your projects in an `MDEdit` folder in your Drive and can only see files it created there. Passes run a few seconds after you save, when you return to the app, and every minute or two; a status screen shows progress, the last pass and any problems.
+- **Keep both versions on conflict**: a chapter changed on two devices keeps Drive's version under its name and your other version beside it as `Name (conflict - Device - date).md`. Writing history is merged day by day; project settings use the last writer. A delete beats nothing that was edited elsewhere, and a sync that would delete most of your files stops and asks first.
+- **Windows-compliant names everywhere**: new and renamed files and folders follow Windows' rules on every device (no `< > : " / \ | ? *`, reserved names, trailing dots or spaces; at most 120 characters). Names that arrive from Drive in another form are renamed to match, in Drive too.
+- Files deleted by another device go to the **Recycle Bin** on Windows and to the app's trash on Android.
+
+**Notes**
+- Only text files sync for now (`.md`, `.txt`, `.json`, `.csv`, `.html`, `.css`, `.xml`, `.yml`); images and other binaries, and each project's `Exports` folder, are left alone.
+- Sync covers the Root Folder. Don't put it inside OneDrive, Dropbox or Google Drive for Desktop, or two syncs will fight over it.
+- Sync is much faster than the first builds: transfers run in parallel, scans use the file listing instead of a lookup per file, and the Projects screen caches word counts.
+
+**Changed**
+- The Windows installer is built with the Google sign-in configured. The Android app is signed with your own key.
 
 ### 0.3.0 — 2026-10-05
 **New**
