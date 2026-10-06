@@ -270,6 +270,24 @@ describe('file types', () => {
     expect(r.conflicts).toEqual([]); // never a conflict copy of a history file
   });
 
+  it('merges edited-chapter marks from both devices, keeping an unmark', async () => {
+    const f = 'Novel/.mdedit/edited.json';
+    const marks = (files: Record<string, Record<string, { edited: boolean; at: number }>>) => JSON.stringify({ version: 1, files });
+    a.put(f, marks({ 'Book.md': { One: { edited: true, at: 100 } } }));
+    await a.sync();
+    await b.sync();
+    a.put(f, marks({ 'Book.md': { One: { edited: false, at: 300 }, Two: { edited: true, at: 250 } } }));
+    b.put(f, marks({ 'Book.md': { One: { edited: true, at: 100 }, Three: { edited: true, at: 200 } } }));
+    await a.sync();
+    const r = await b.sync();
+    expect(r.merged).toEqual([f]);
+    await a.sync();
+    for (const d of [a, b]) {
+      expect(JSON.parse((await d.read(f))!).files['Book.md']).toEqual({ One: { edited: false, at: 300 }, Two: { edited: true, at: 250 }, Three: { edited: true, at: 200 } });
+    }
+    expect(r.conflicts).toEqual([]);
+  });
+
   it('last writer wins for project settings, with no conflict copy', async () => {
     const meta = 'Novel/.mdedit/project.json';
     a.put(meta, '{"status":"planning"}');

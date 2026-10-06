@@ -576,14 +576,16 @@ export class Workspace {
     const project = this.state.project;
     const ref = this.chapterRef(file, chapter);
     if (!project || !ref) return false;
-    return this.patchEdited(withChapterEdited(project.meta.editedChapters, ref.rel, ref.id, on));
+    return this.patchEdited((edited) => withChapterEdited(edited, ref.rel, ref.id, on));
   }
 
-  private async patchEdited(editedChapters: Record<string, string[]>): Promise<boolean> {
+  /** Changes the edited marks, starting from what is stored now (a sync may have brought marks from another device). */
+  private async patchEdited(change: (current: Record<string, string[]>) => Record<string, string[]>): Promise<boolean> {
     const project = this.state.project;
     if (!project) return false;
     try {
-      const meta = await this.api.updateProject(project.path, { editedChapters });
+      const current = (await this.api.getProjectMeta(project.path))?.editedChapters ?? project.meta.editedChapters;
+      const meta = await this.api.updateProject(project.path, { editedChapters: change(current) });
       if (this.state.project?.path === project.path) this.set({ project: { ...this.state.project, meta } });
       return true;
     } catch (e) {
@@ -968,7 +970,7 @@ export class Workspace {
     const was = chapterIds(before.chapters)[chapter];
     const now = chapterIds(after.chapters)[chapter];
     if (was === now || !isChapterEdited(project.meta, rel, was)) return;
-    await this.patchEdited(withChapterEdited(withChapterEdited(project.meta.editedChapters, rel, was, false), rel, now, true));
+    await this.patchEdited((edited) => withChapterEdited(withChapterEdited(edited, rel, was, false), rel, now, true));
   }
 
   /** A renamed file (or folder): point the active manuscript and the edited-chapter marks at its new path. */
@@ -979,10 +981,11 @@ export class Workspace {
     const t = relativeTo(project.path, to);
     const active = project.meta.activeManuscript;
     const moved = active ? remapPath(active, f, t) : null;
-    const edited = Object.fromEntries(Object.entries(project.meta.editedChapters).map(([k, v]) => [remapPath(k, f, t), v]));
+    const current = (await this.api.getProjectMeta(project.path))?.editedChapters ?? project.meta.editedChapters;
+    const edited = Object.fromEntries(Object.entries(current).map(([k, v]) => [remapPath(k, f, t), v]));
     const patch: { activeManuscript?: string | null; editedChapters?: Record<string, string[]> } = {};
     if (active && moved !== active) patch.activeManuscript = moved;
-    if (Object.keys(edited).some((k) => !(k in project.meta.editedChapters))) patch.editedChapters = edited;
+    if (Object.keys(edited).some((k) => !(k in current))) patch.editedChapters = edited;
     if (!Object.keys(patch).length) return;
     try {
       const meta = await this.api.updateProject(project.path, patch);

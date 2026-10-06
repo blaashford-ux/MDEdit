@@ -150,7 +150,7 @@ describe('word counts', () => {
     let reads = 0;
     fs.readText = async (p: string) => (reads++, real(p));
     await backend.api.listProjects();
-    expect(reads).toBe(1); // only the project marker; the chapter's count came from the cache
+    expect(reads).toBe(2); // the project marker and its edited-chapter marks; the chapter's count came from the cache
     await backend.api.writeFile(`${path}/Manuscript/Ch 1.md`, '# One\nfour little words now\n');
     await backend.api.updateProject(path, { activeManuscript: 'Manuscript/Ch 1.md' });
     const again = await backend.api.listProjects();

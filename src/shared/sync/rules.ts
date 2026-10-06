@@ -8,6 +8,8 @@ export type FileClass =
   | 'prose'
   /** Per-day writing history: merged day by day. */
   | 'progress'
+  /** Edited-chapter marks: merged chapter by chapter, newest change wins. */
+  | 'marks'
   /** Project / export settings: last writer wins (a conflict copy would confuse the project scan). */
   | 'meta'
   /** Anything else small (images…): last writer wins. */
@@ -36,6 +38,7 @@ export function classify(rel: string, opts: { includeExports?: boolean } = {}): 
   if (hidden >= 0) {
     if (hidden !== segments.length - 2) return null;
     if (/^progress(-[0-9a-f]+)?\.json$/i.test(name)) return 'progress';
+    if (/^edited\.json$/i.test(name)) return 'marks';
     if (/^(project|settings)\.json$/i.test(name)) return 'meta';
     return null;
   }

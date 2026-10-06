@@ -1,5 +1,6 @@
 import { errorCode, type FsPort } from '../fsPort';
 import { basename, dirname, joinParts, joinPath } from '../paths';
+import { applyMap, EDITED_FILE, emptyMarks, marksToMap, sanitizeMarks, type EditedMarks } from '../editedMarks';
 import { localDate, recordSnapshot, sanitizeProgress, type Progress } from '../progress';
 import { sha1Hex } from '../sha1';
 import {
@@ -17,6 +18,7 @@ export interface Deps {
 }
 
 const metaPath = (dir: string) => joinParts(dir, PROJECT_DIR, PROJECT_FILE);
+const marksPath = (dir: string) => joinParts(dir, PROJECT_DIR, EDITED_FILE);
 /** History file: one for the whole project, and one per active manuscript (named from a hash of its relative path). */
 const progressPath = (dir: string, manuscript: string | null = null) =>
   joinParts(dir, PROJECT_DIR, manuscript ? `progress-${sha1Hex(manuscript.toLowerCase()).slice(0, 12)}.json` : PROGRESS_FILE);
@@ -51,6 +53,12 @@ export function makeProjects(fs: FsPort) {
       damaged = true;
     }
     const meta = sanitizeProjectMeta(raw, basename(dir), localDate(now()));
+    // Edited-chapter marks live in their own file (so sync can merge them). Marks an older project.json still carries move across once.
+    let marks = await readMarks(dir);
+    if (!marks && Object.keys(meta.editedChapters).length) {
+      marks = applyMap(emptyMarks(), meta.editedChapters, now().getTime());
+      await writeMarks(dir, marks).catch(() => undefined);
+    }
     if (damaged) {
       // keep what was there, then start again from defaults named after the folder
       await fs.copy(metaPath(dir), metaPath(dir) + '.bak').catch(() => undefined);
@@ -58,21 +66,42 @@ export function makeProjects(fs: FsPort) {
     } else if (JSON.stringify(raw) !== JSON.stringify(meta)) {
       await writeMeta(dir, meta).catch(() => undefined); // tidy once
     }
-    return meta;
+    return { ...meta, editedChapters: marks ? marksToMap(marks) : {} };
   }
 
+  /** The project's edited-chapter marks, or null when it has none yet (or the file is unreadable). */
+  async function readMarks(dir: string): Promise<EditedMarks | null> {
+    try {
+      return sanitizeMarks(JSON.parse(await fs.readText(marksPath(dir))));
+    } catch {
+      return null;
+    }
+  }
+
+  async function writeMarks(dir: string, marks: EditedMarks): Promise<void> {
+    await fs.mkdir(joinPath(dir, PROJECT_DIR), { recursive: true });
+    await writeFileAtomic(marksPath(dir), JSON.stringify(marks, null, 2) + '\n');
+  }
+
+  /** project.json never holds the marks (they would be overwritten, not merged, when two devices sync). */
   async function writeMeta(dir: string, meta: ProjectMeta): Promise<void> {
     await fs.mkdir(joinPath(dir, PROJECT_DIR), { recursive: true });
-    await writeFileAtomic(metaPath(dir), JSON.stringify(meta, null, 2) + '\n');
+    await writeFileAtomic(metaPath(dir), JSON.stringify({ ...meta, editedChapters: {} }, null, 2) + '\n');
   }
 
   /** Merges a partial change into a project's metadata (sanitised) and saves it. */
   async function updateMeta(dir: string, patch: Partial<Omit<ProjectMeta, 'version' | 'id'>>, now: () => Date = () => new Date()): Promise<ProjectMeta> {
     const current = await readMeta(dir, now);
     if (!current) throw new Error('That folder is not a project.');
-    const next = sanitizeProjectMeta({ ...current, ...patch, overrides: { ...current.overrides, ...(patch.overrides ?? {}) } }, current.name, localDate(now()));
+    const { editedChapters, ...rest } = patch;
+    if (editedChapters) {
+      const before = (await readMarks(dir)) ?? emptyMarks();
+      const after = applyMap(before, editedChapters, now().getTime());
+      if (after !== before) await writeMarks(dir, after);
+    }
+    const next = sanitizeProjectMeta({ ...current, ...rest, overrides: { ...current.overrides, ...(rest.overrides ?? {}) } }, current.name, localDate(now()));
     await writeMeta(dir, next);
-    return next;
+    return (await readMeta(dir, now))!;
   }
 
   // ---- counting ---------------------------------------------------------------------------

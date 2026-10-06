@@ -284,3 +284,26 @@ describe('active manuscript', () => {
   });
 });
 
+
+describe('edited chapter marks', () => {
+  it('are kept in .mdedit/edited.json, not project.json, and read back with the project', async () => {
+    const a = await createProject(root, 'Alpha', novel(), { now: at('2026-10-05T08:00:00') });
+    const meta = await updateMeta(a.path, { editedChapters: { 'Manuscript/Draft.md': ['One'] } }, at('2026-10-05T09:00:00'));
+    expect(meta.editedChapters).toEqual({ 'Manuscript/Draft.md': ['One'] });
+    const stored = JSON.parse(await readFile(path.join(a.path, '.mdedit', 'edited.json'), 'utf8'));
+    expect(stored.files['Manuscript/Draft.md'].One.edited).toBe(true);
+    expect(JSON.parse(await readFile(path.join(a.path, '.mdedit', 'project.json'), 'utf8')).editedChapters).toEqual({});
+    expect((await readMeta(a.path))!.editedChapters).toEqual({ 'Manuscript/Draft.md': ['One'] });
+    await updateMeta(a.path, { editedChapters: {} }, at('2026-10-05T10:00:00'));
+    expect((await readMeta(a.path))!.editedChapters).toEqual({});
+    expect(JSON.parse(await readFile(path.join(a.path, '.mdedit', 'edited.json'), 'utf8')).files['Manuscript/Draft.md'].One).toMatchObject({ edited: false });
+  });
+  it('marks an older project.json still carried are moved across once', async () => {
+    const a = await createProject(root, 'Alpha', novel(), { now: at('2026-10-05T08:00:00') });
+    const file = path.join(a.path, '.mdedit', 'project.json');
+    const raw = JSON.parse(await readFile(file, 'utf8'));
+    await writeFile(file, JSON.stringify({ ...raw, editedChapters: { 'Book.md': ['Two'] } }));
+    expect((await readMeta(a.path))!.editedChapters).toEqual({ 'Book.md': ['Two'] });
+    expect((await readMeta(a.path))!.editedChapters).toEqual({ 'Book.md': ['Two'] }); // still there once project.json has been tidied
+  });
+});
