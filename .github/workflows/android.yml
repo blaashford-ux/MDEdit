@@ -79,6 +79,9 @@ jobs:
         run: |
           APK="${{ steps.key.outputs.apk }}"
           ls -l "$APK"
+          echo "Signed with: ${{ steps.key.outputs.mode }}"
+          echo "Certificate $(cat "$RUNNER_TEMP/sha1.txt")"
+          echo "Expected for Google sign-in: SHA1: EF:45:1A:10:EA:9B:61:87:93:99:68:51:86:E6:4E:2B:D4:89:44:EB"
           {
             echo "### MDEdit Android build"
             echo "- Signed with: ${{ steps.key.outputs.mode }}"
