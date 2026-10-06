@@ -57,7 +57,7 @@ export function SyncDialog({ status, onClose }: Props) {
         ) : (
           <>
             <p className={`sync-line s-${status.state}`} role="status">
-              {status.state === 'syncing' ? 'Syncing…' : status.state === 'error' ? 'Problem syncing' : status.state === 'confirm' ? 'Waiting for your OK' : 'Up to date'}
+              {status.state === 'syncing' ? (status.progress ? `Syncing… ${status.progress.done.toLocaleString()} of ${status.progress.total.toLocaleString()} files` : 'Syncing…') : status.state === 'error' ? 'Problem syncing' : status.state === 'confirm' ? 'Waiting for your OK' : 'Up to date'}
               <span className="muted"> · last sync {ago(status.lastSyncAt)}</span>
             </p>
             {status.message && <div className={status.state === 'error' ? 'modal-error' : 'modal-hint'} role="alert">{status.message}</div>}
@@ -80,7 +80,8 @@ export function SyncDialog({ status, onClose }: Props) {
             {sum && (
               <p className="muted small">
                 Last pass: {plural(sum.uploaded, 'file')} sent, {plural(sum.downloaded, 'file')} received
-                {sum.deleted > 0 ? `, ${plural(sum.deleted, 'file')} removed` : ''}.
+                {sum.deleted > 0 ? `, ${plural(sum.deleted, 'file')} removed` : ''}
+                {sum.durationMs >= 1000 ? ` · took ${sum.durationMs < 90_000 ? `${Math.round(sum.durationMs / 1000)} s` : `${Math.round(sum.durationMs / 60_000)} min`}` : ''}.
               </p>
             )}
 

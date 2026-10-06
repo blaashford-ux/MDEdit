@@ -59,6 +59,18 @@ export interface SyncOptions {
   /** Run the deletes even though the plan would remove a large share of the files. */
   allowDeletes?: boolean;
   includeExports?: boolean;
+  /** How many files transfer at once (default 4: fast, and gentle on Drive's rate limits). */
+  concurrency?: number;
+  /** Called as the pass moves along, so the UI can show "120 of 400". */
+  onProgress?(p: SyncProgress): void;
+  /** Called whenever a file or folder on this device changed during the pass (callers should throttle what they do with it). */
+  onLocalChange?(): void;
+}
+
+export interface SyncProgress {
+  phase: 'scanning' | 'syncing';
+  done: number;
+  total: number;
 }
 
 export interface SyncReport {
@@ -92,6 +104,15 @@ function syncable(path: string, includeExports: boolean | undefined): boolean {
   return cls !== null && (cls !== 'asset' || TEXT_EXT.test(path));
 }
 
+/** Runs `fn` over `items` with at most `limit` in flight. `fn` must handle its own errors. */
+async function pool<T>(items: readonly T[], limit: number, fn: (item: T) => Promise<void>): Promise<void> {
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) await fn(items[next++]);
+  };
+  await Promise.all(Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, worker));
+}
+
 export async function syncOnce(o: SyncOptions): Promise<SyncReport> {
   const { fs, drive } = o;
   const report = emptyReport();
@@ -99,6 +120,12 @@ export async function syncOnce(o: SyncOptions): Promise<SyncReport> {
   const files = makeFiles(fs);
   const full = (rel: string) => (rel === '' ? o.root : joinParts(o.root, ...rel.split('/')));
   const now = o.now ?? (() => new Date());
+  const concurrency = o.concurrency ?? 4;
+  const changed = () => {
+    report.changedLocal = true;
+    o.onLocalChange?.();
+  };
+  o.onProgress?.({ phase: 'scanning', done: 0, total: 0 });
 
   try {
     // ---- Drive side ---------------------------------------------------------------------------------------
@@ -139,19 +166,32 @@ export async function syncOnce(o: SyncOptions): Promise<SyncReport> {
     for (const [path, id] of remote.folders) folderIds.set(path, id);
     const remoteById = new Map(all.map((f) => [f.id, f]));
 
-    const ensureRemoteFolder = async (rel: string): Promise<string> => {
-      if (rel === '') return rootId!;
-      const known = folderIds.get(nameKey(rel));
-      if (known) return known;
-      const parent = await ensureRemoteFolder(dirOf(rel));
-      const made = await drive.createFolder(nameOf(rel), parent);
-      folderIds.set(nameKey(rel), made.id);
-      folderPaths.set(nameKey(rel), rel);
-      state.folders[rel] = made.id;
-      return made.id;
+    const makingFolder = new Map<string, Promise<string>>();
+    /** The Drive folder for a relative path, created (once, even if many uploads ask at the same moment) if it isn't there. */
+    const ensureRemoteFolder = (rel: string): Promise<string> => {
+      if (rel === '') return Promise.resolve(rootId!);
+      const key = nameKey(rel);
+      const known = folderIds.get(key);
+      if (known) return Promise.resolve(known);
+      let pending = makingFolder.get(key);
+      if (!pending) {
+        pending = (async () => {
+          const parent = await ensureRemoteFolder(dirOf(rel));
+          const made = await drive.createFolder(nameOf(rel), parent);
+          folderIds.set(key, made.id);
+          folderPaths.set(key, rel);
+          state.folders[rel] = made.id;
+          return made.id;
+        })().finally(() => makingFolder.delete(key));
+        makingFolder.set(key, pending);
+      }
+      return pending;
     };
+    const madeDirs = new Set<string>();
     const ensureLocalDir = async (rel: string) => {
-      if (rel !== '') await fs.mkdir(full(rel), { recursive: true });
+      if (rel === '' || madeDirs.has(rel)) return;
+      await fs.mkdir(full(rel), { recursive: true });
+      madeDirs.add(rel);
     };
     const md5Now = async (path: string): Promise<string | null> => {
       try {
@@ -160,25 +200,46 @@ export async function syncOnce(o: SyncOptions): Promise<SyncReport> {
         return null;
       }
     };
-    /** True when the file still holds what the scan saw, so it is safe to overwrite or delete it. */
-    const unchanged = async (path: string) => (await md5Now(path)) === (localByKey.get(nameKey(path))?.md5 ?? null);
+    /** True when the file still holds what the scan saw, so it is safe to overwrite or delete it. One `stat` unless it really changed. */
+    const unchanged = async (path: string) => {
+      const seen = localByKey.get(nameKey(path));
+      const st = await fs.stat(full(path));
+      if (!seen) return st === null; // it wasn't there at the scan: it must still not be
+      if (!st) return false;
+      return st.mtimeMs === seen.modifiedMs || (await md5Now(path)) === seen.md5;
+    };
     const remember = (path: string, text: string, id: string) => {
       state.files[path] = { id, md5: md5Hex(text) };
     };
     const writeLocal = async (path: string, text: string) => {
       await ensureLocalDir(dirOf(path));
       const stamp = await files.writeFileAtomic(full(path), text);
-      report.changedLocal = true;
+      changed();
       state.cache[path] = { mtimeMs: stamp.mtimeMs, size: stamp.size, md5: md5Hex(text) }; // known, so the next scan needn't re-read it
     };
 
-    for (const a of actions) {
-      const path = actionPath(a);
-      try {
-        await run(a);
-      } catch (e) {
-        report.errors.push({ path, message: e instanceof Error ? e.message : String(e) });
-      }
+    const phase = (a: SyncAction) => (a.type === 'renameLocal' || a.type === 'renameRemote' ? 0 : a.type === 'deleteLocal' || a.type === 'deleteRemote' ? 2 : 1);
+    let done = 0;
+    let sinceSave = 0;
+    o.onProgress?.({ phase: 'syncing', done, total: actions.length });
+    for (const group of [0, 1, 2]) {
+      await pool(
+        actions.filter((a) => phase(a) === group),
+        group === 1 ? concurrency : group === 2 ? concurrency : 1, // renames can depend on each other's folders
+        async (a) => {
+          try {
+            await run(a);
+          } catch (e) {
+            report.errors.push({ path: actionPath(a), message: e instanceof Error ? e.message : String(e) });
+          }
+          o.onProgress?.({ phase: 'syncing', done: ++done, total: actions.length });
+          // A long first sync saves its memory as it goes, so an interruption doesn't start over.
+          if (++sinceSave >= 50) {
+            sinceSave = 0;
+            await o.store.save(state);
+          }
+        }
+      );
     }
 
     async function run(a: SyncAction): Promise<void> {
@@ -232,7 +293,7 @@ export async function syncOnce(o: SyncOptions): Promise<SyncReport> {
           await (o.trashLocal ?? ((x) => fs.rm(x)))(full(a.path));
           delete state.files[a.path];
           delete state.cache[a.path];
-          report.changedLocal = true;
+          changed();
           report.deletedLocal.push(a.path);
           return;
         }
@@ -250,7 +311,7 @@ export async function syncOnce(o: SyncOptions): Promise<SyncReport> {
           if (entry) state.files[a.to] = entry;
           delete state.files[a.from];
           delete state.cache[a.from];
-          report.changedLocal = true;
+          changed();
           report.renamed++;
           return;
         }
@@ -281,8 +342,10 @@ export async function syncOnce(o: SyncOptions): Promise<SyncReport> {
 
     async function syncFolders(): Promise<void> {
       const localDirs = new Set(local.dirs);
-      for (const d of [...localDirs]) if (!(await fs.stat(full(d)))?.isDirectory) localDirs.delete(d);
-      const hasLocalKey = (dir: string) => [...localDirs].some((d) => nameKey(d) === nameKey(dir));
+      // The scan's list is right unless this pass changed folders (a rename or delete), in which case check each one.
+      if (report.changedLocal) for (const d of [...localDirs]) if (!(await fs.stat(full(d)))?.isDirectory) localDirs.delete(d);
+      const localKeys = new Set([...localDirs].map(nameKey));
+      const hasLocalKey = (dir: string) => localKeys.has(nameKey(dir));
       /** Any file at all counts (images, junk…): a folder is only removed when it holds no files, so nothing unsynced is lost. */
       const holdsLocalFiles = async (d: string): Promise<boolean> => {
         for (const e of await fs.readdir(full(d)).catch(() => [])) {
@@ -305,7 +368,7 @@ export async function syncOnce(o: SyncOptions): Promise<SyncReport> {
           } else if (!inLocal && inRemote) {
             if (holdsRemoteFiles(dir)) {
               await ensureLocalDir(dir); // its files come back to this device
-              report.changedLocal = true;
+              changed();
             } else {
               await drive.trash(folderIds.get(nameKey(dir))!).catch((e) => report.errors.push({ path: dir, message: String(e) }));
               folderIds.delete(nameKey(dir));
@@ -316,9 +379,10 @@ export async function syncOnce(o: SyncOptions): Promise<SyncReport> {
               await ensureRemoteFolder(dir);
             } else {
               await fs.rm(full(dir), { recursive: true, force: true });
-              for (const d of [...localDirs]) if (d === dir || d.startsWith(dir + '/')) localDirs.delete(d);
+              for (const m of [...madeDirs]) if (m === dir || m.startsWith(dir + '/')) madeDirs.delete(m);
+              for (const d of [...localDirs]) if (d === dir || d.startsWith(dir + '/')) (localDirs.delete(d), localKeys.delete(nameKey(d)));
               delete state.folders[dir];
-              report.changedLocal = true;
+              changed();
             }
           }
         }
@@ -332,9 +396,9 @@ export async function syncOnce(o: SyncOptions): Promise<SyncReport> {
       for (const [key, id] of [...folderIds].filter(([k]) => k !== '').sort()) {
         const dir = folderPaths.get(key) ?? key;
         if (!isCompliantPath(dir) || dir.split('/').some((seg) => seg.startsWith('.') && seg !== '.mdedit')) continue;
-        if (!(await fs.stat(full(dir)))) {
+        if (!hasLocalKey(dir) && !(await fs.stat(full(dir)))) {
           await ensureLocalDir(dir);
-          report.changedLocal = true;
+          changed();
         }
         state.folders[dir] = id;
       }
@@ -342,6 +406,7 @@ export async function syncOnce(o: SyncOptions): Promise<SyncReport> {
   } finally {
     await o.store.save(state);
   }
+  for (const list of [report.uploaded, report.downloaded, report.deletedLocal, report.deletedRemote, report.conflicts, report.merged]) list.sort();
   return report;
 }
 
@@ -422,9 +487,11 @@ async function applyRemoteRenames(drive: DriveApi, tree: Tree, fixes: { id: stri
 
 async function scanLocal(o: SyncOptions, state: SyncState, report: SyncReport): Promise<{ files: LocalFile[]; dirs: string[] }> {
   const { fs } = o;
-  const out: LocalFile[] = [];
   const dirs: string[] = [];
   const cache: SyncState['cache'] = {};
+  const found: { rel: string; full: string; mtimeMs: number; size: number }[] = [];
+
+  // Walk the folders (one listing each). Size and time come with the listing where the platform provides them, so an unchanged file costs nothing.
   const walk = async (dir: string, rel: string): Promise<void> => {
     let entries;
     try {
@@ -432,6 +499,7 @@ async function scanLocal(o: SyncOptions, state: SyncState, report: SyncReport): 
     } catch {
       return;
     }
+    const subdirs: { full: string; rel: string }[] = [];
     for (const e of entries) {
       if (e.isSymbolicLink) continue;
       const childRel = rel ? `${rel}/${e.name}` : e.name;
@@ -439,31 +507,41 @@ async function scanLocal(o: SyncOptions, state: SyncState, report: SyncReport): 
       if (e.isDirectory) {
         if (e.name.startsWith('.') && e.name !== '.mdedit') continue;
         dirs.push(childRel);
-        await walk(childFull, childRel);
+        subdirs.push({ full: childFull, rel: childRel });
       } else if (e.isFile) {
-        const cls = classify(childRel, { includeExports: o.includeExports });
-        if (cls === null) continue;
+        if (classify(childRel, { includeExports: o.includeExports }) === null) continue;
         if (!syncable(childRel, o.includeExports)) {
           report.skipped.push({ path: childRel, reason: 'Only text files sync for now.' });
           continue;
         }
-        const st = await fs.stat(childFull);
-        if (!st) continue;
-        const cached = state.cache[childRel];
-        let md5 = cached && cached.mtimeMs === st.mtimeMs && cached.size === st.size ? cached.md5 : null;
-        if (md5 === null) {
-          try {
-            md5 = md5Hex(await fs.readText(childFull));
-          } catch {
-            continue;
-          }
-        }
-        cache[childRel] = { mtimeMs: st.mtimeMs, size: st.size, md5 };
-        out.push({ path: childRel, md5, modifiedMs: st.mtimeMs });
+        found.push({ rel: childRel, full: childFull, mtimeMs: e.mtimeMs ?? NaN, size: e.size ?? NaN });
       }
     }
+    for (const d of subdirs) await walk(d.full, d.rel);
   };
   await walk(o.root, '');
+
+  // Hash only what changed: a file is re-read when its size or modification time differs from the last time.
+  const out: LocalFile[] = [];
+  await pool(found, o.concurrency ?? 4, async (f) => {
+    let { mtimeMs, size } = f;
+    if (Number.isNaN(mtimeMs) || Number.isNaN(size)) {
+      const st = await fs.stat(f.full);
+      if (!st) return;
+      ({ mtimeMs, size } = st);
+    }
+    const cached = state.cache[f.rel];
+    let md5 = cached && cached.mtimeMs === mtimeMs && cached.size === size ? cached.md5 : null;
+    if (md5 === null) {
+      try {
+        md5 = md5Hex(await fs.readText(f.full));
+      } catch {
+        return;
+      }
+    }
+    cache[f.rel] = { mtimeMs, size, md5 };
+    out.push({ path: f.rel, md5, modifiedMs: mtimeMs });
+  });
   state.cache = cache;
   return { files: out, dirs };
 }

@@ -40,7 +40,7 @@ interface Saved {
 
 const TOKEN_LIFETIME_MS = 45 * 60_000;
 
-const summarise = (r: SyncReport): SyncSummary => ({
+const summarise = (r: SyncReport, durationMs: number): SyncSummary => ({
   uploaded: r.uploaded.length + r.merged.length,
   downloaded: r.downloaded.length,
   deleted: r.deletedLocal.length + r.deletedRemote.length,
@@ -48,6 +48,7 @@ const summarise = (r: SyncReport): SyncSummary => ({
   skipped: r.skipped,
   errors: r.errors,
   rootCreated: r.rootCreated,
+  durationMs,
 });
 
 const friendly = (e: unknown): string => {
@@ -58,7 +59,10 @@ const friendly = (e: unknown): string => {
 
 export class SyncService implements SyncApi {
   private saved: Saved;
-  private status: SyncStatus = { connected: false, state: 'off', lastSyncAt: null, message: null, summary: null, pendingDeletes: [], localChanges: 0 };
+  private status: SyncStatus = { connected: false, state: 'off', lastSyncAt: null, message: null, summary: null, pendingDeletes: [], localChanges: 0, progress: null };
+  private lastRefreshAt = 0;
+  /** Files changed since the UI was last told. */
+  private unreported = false;
   /** Edits are waiting for a pass (set by `syncSoon`, cleared when a pass starts). */
   dirty = false;
   private listeners = new Set<(s: SyncStatus) => void>();
@@ -164,27 +168,40 @@ export class SyncService implements SyncApi {
           this.rerun = false;
           this.dirty = false;
           this.set({ state: 'syncing', message: null });
+          const startedAt = Date.now();
           const drive = this.o.makeDrive ? this.o.makeDrive(this.getToken) : createDriveRest({ getToken: this.getToken });
           const report = await syncOnce({
             fs: this.o.fs, root: this.o.root, drive, store: this.store, device: this.o.device, now: this.o.now,
             trashLocal: this.o.trashLocal, allowDeletes: allowDeletes && !this.rerun,
+            // A long pass shows how far it has got, and lets the app refresh its lists every few seconds instead of only at the very end.
+            onProgress: (p) => this.set({ progress: p.phase === 'syncing' && p.total > 0 ? { done: p.done, total: p.total } : null }),
+            onLocalChange: () => {
+              this.unreported = true;
+              if (Date.now() - this.lastRefreshAt < 4000) return;
+              this.lastRefreshAt = Date.now();
+              this.unreported = false;
+              this.set({ localChanges: this.status.localChanges + 1 });
+            },
           });
           this.saved.lastSyncAt = Date.now();
           await this.persist();
           const confirm = report.pendingDeletes.length > 0;
           this.set({
+            progress: null,
             state: confirm ? 'confirm' : report.errors.length > 0 ? 'error' : 'idle',
-            lastSyncAt: this.saved.lastSyncAt, summary: summarise(report), pendingDeletes: report.pendingDeletes,
+            lastSyncAt: this.saved.lastSyncAt, summary: summarise(report, Date.now() - startedAt), pendingDeletes: report.pendingDeletes,
             message: confirm ? `This would delete ${report.pendingDeletes.length} files. Check it’s what you meant.` : report.errors.length > 0 ? `${report.errors.length} file${report.errors.length === 1 ? '' : 's'} couldn’t sync; they will be retried.` : null,
           });
           if (report.changedLocal) {
-            this.set({ localChanges: this.status.localChanges + 1 });
+            if (this.unreported) this.set({ localChanges: this.status.localChanges + 1 }); // the end of the pass: tell the UI about whatever it hasn't heard yet
+            this.unreported = false;
+            this.lastRefreshAt = Date.now();
             this.o.onLocalChanges?.(report);
           }
           allowDeletes = false;
         } while (this.rerun);
       } catch (e) {
-        this.set({ state: 'error', message: friendly(e) });
+        this.set({ state: 'error', message: friendly(e), progress: null });
       } finally {
         this.running = null;
       }

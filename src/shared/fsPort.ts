@@ -9,6 +9,9 @@ export interface FsEntry {
   isDirectory: boolean;
   isFile: boolean;
   isSymbolicLink: boolean;
+  /** Size and modification time, when the platform returns them with the listing (the phone does). Saves a `stat` per file. */
+  size?: number;
+  mtimeMs?: number;
 }
 
 export interface FsStat {

@@ -46,7 +46,7 @@ export class MemoryFs implements FsPort {
     if (!this.isDir(p)) throw fsError(this.files.has(p) ? 'ENOTDIR' : 'ENOENT', path);
     const out: FsEntry[] = [];
     for (const d of this.dirs) if (d !== '' && this.parent(d) === p) out.push({ name: d.slice(p === '' ? 0 : p.length + 1), isDirectory: true, isFile: false, isSymbolicLink: false });
-    for (const f of this.files.keys()) if (this.parent(f) === p) out.push({ name: f.slice(p === '' ? 0 : p.length + 1), isDirectory: false, isFile: true, isSymbolicLink: false });
+    for (const [f, v] of this.files) if (this.parent(f) === p) out.push({ name: f.slice(p === '' ? 0 : p.length + 1), isDirectory: false, isFile: true, isSymbolicLink: false, size: new TextEncoder().encode(v.text).length, mtimeMs: v.mtimeMs });
     return out;
   }
 

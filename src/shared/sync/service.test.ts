@@ -220,4 +220,20 @@ describe('SyncService', () => {
     await vi.advanceTimersByTimeAsync(1100);
     expect(s.dirty).toBe(false);
   });
+
+  it('shows progress during a long pass and refreshes the lists along the way, not only at the end', async () => {
+    const s = make();
+    await s.load();
+    await s.connectSync();
+    const rootId = JSON.parse(await fs.readText('/state/sync.json')).state.rootId as string;
+    for (let i = 0; i < 20; i++) drive.seed(`Novel/Chapter ${i}.md`, `chapter ${i}`, rootId);
+    const seen: { progress: { done: number; total: number } | null; localChanges: number }[] = [];
+    s.onSyncStatus((st) => seen.push({ progress: st.progress, localChanges: st.localChanges }));
+    await s.syncNow();
+    const withProgress = seen.filter((x) => x.progress);
+    expect(withProgress.length).toBeGreaterThan(1);
+    expect(withProgress[withProgress.length - 1].progress).toEqual({ done: 20, total: 20 });
+    expect(seen[seen.length - 1].progress).toBeNull(); // cleared when the pass ends
+    expect(seen[seen.length - 1].localChanges).toBeGreaterThan(0);
+  });
 });

@@ -153,11 +153,11 @@ describe('edits travel', () => {
     a.put(CH, 'remote edit');
     await a.sync();
     // The phone edits the file between the scan and the download.
-    const realRead = b.fs.readText.bind(b.fs);
-    let reads = 0;
-    b.fs.readText = async (p: string) => {
-      if (p.endsWith('Ch 1.md') && ++reads === 1) b.put(CH, 'typed just now'); // after the scan, before the download
-      return realRead(p);
+    const realStat = b.fs.stat.bind(b.fs);
+    let checks = 0;
+    b.fs.stat = async (p: string) => {
+      if (p.endsWith('Ch 1.md') && ++checks === 1) b.put(CH, 'typed just now'); // after the scan, before the overwrite
+      return realStat(p);
     };
     const r = await b.sync();
     expect(await b.read(CH)).toBe('typed just now');

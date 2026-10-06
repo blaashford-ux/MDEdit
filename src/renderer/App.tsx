@@ -885,7 +885,7 @@ export function App() {
                 : null
             }
             onProgress={() => setShowProgress(true)}
-            sync={caps.sync && caps.windowChrome && syncStatus ? { state: syncStatus.state, onOpen: () => setShowSync(true) } : undefined}
+            sync={caps.sync && caps.windowChrome && syncStatus ? { state: syncStatus.state, progress: syncStatus.progress, onOpen: () => setShowSync(true) } : undefined}
           />
         )}
       </main>

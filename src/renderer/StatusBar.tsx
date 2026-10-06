@@ -16,7 +16,7 @@ interface Props {
   project?: { total: number; goal: number | null; today: number } | null;
   onProgress?(): void;
   /** Google Drive sync (absent where it isn't available). */
-  sync?: { state: 'off' | 'idle' | 'syncing' | 'error' | 'confirm'; onOpen(): void };
+  sync?: { state: 'off' | 'idle' | 'syncing' | 'error' | 'confirm'; progress?: { done: number; total: number } | null; onOpen(): void };
 }
 
 export function StatusBar(p: Props) {
@@ -39,7 +39,7 @@ export function StatusBar(p: Props) {
       )}
       {p.sync && (
         <button type="button" className={`sb-undo sb-sync s-${p.sync.state}`} onClick={p.sync.onOpen} title="Google Drive sync">
-          {p.sync.state === 'off' ? 'Sync off' : p.sync.state === 'syncing' ? 'Syncing…' : p.sync.state === 'error' ? 'Sync problem' : p.sync.state === 'confirm' ? 'Sync needs OK' : 'Synced'}
+          {p.sync.state === 'off' ? 'Sync off' : p.sync.state === 'syncing' ? (p.sync.progress ? `Syncing ${p.sync.progress.done}/${p.sync.progress.total}` : 'Syncing…') : p.sync.state === 'error' ? 'Sync problem' : p.sync.state === 'confirm' ? 'Sync needs OK' : 'Synced'}
         </button>
       )}
       {p.undoLabel && (

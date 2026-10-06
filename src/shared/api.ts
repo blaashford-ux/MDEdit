@@ -283,6 +283,8 @@ export interface SyncSummary {
   errors: { path: string; message: string }[];
   /** A new `MDEdit` folder was made in Drive because none was visible to this app. */
   rootCreated: boolean;
+  /** How long the pass took. */
+  durationMs: number;
 }
 
 export interface SyncStatus {
@@ -295,8 +297,10 @@ export interface SyncStatus {
   summary: SyncSummary | null;
   /** Files a pass wanted to delete but held back for the user's go-ahead (`state: 'confirm'`). */
   pendingDeletes: string[];
-  /** Goes up each time a pass changed files on this device, so the UI knows to refresh. */
+  /** Goes up when files on this device changed (at most every few seconds during a long pass), so the UI knows to refresh. */
   localChanges: number;
+  /** While syncing: how many of this pass's changes are done. */
+  progress: { done: number; total: number } | null;
 }
 
 /** Keeping the Root Folder in step with Google Drive. Desktop and phone get the same engine (docs/sync-rules.md). */

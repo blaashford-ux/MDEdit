@@ -138,3 +138,19 @@ describe('state on the phone’s API', () => {
     expect((await again.api.getProjectsConfig()).lastProject).toBe(`${ROOT}/The Lost King`);
   });
 });
+
+describe('word counts', () => {
+  it('are not re-read from files that have not changed', async () => {
+    const path = await novel();
+    await backend.api.createFile(`${path}/Manuscript`, 'Ch 1', '# One\nthree little words\n');
+    await backend.api.listProjects();
+    const real = fs.readText.bind(fs);
+    let reads = 0;
+    fs.readText = async (p: string) => (reads++, real(p));
+    await backend.api.listProjects();
+    expect(reads).toBe(1); // only the project marker; the chapter's count came from the cache
+    await backend.api.writeFile(`${path}/Manuscript/Ch 1.md`, '# One\nfour little words now\n');
+    const again = await backend.api.listProjects();
+    expect(again.projects[0].words).toBeGreaterThanOrEqual(4); // an edited file is counted afresh
+  });
+});

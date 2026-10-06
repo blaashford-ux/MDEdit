@@ -42,10 +42,19 @@ export function createCapacitorFs(plugin: FilesystemLike, directory = 'DATA', en
     if (!st.isDirectory) throw fsError('ENOTDIR', p);
   };
 
+  /** The success path is one bridge call; only a failure pays for `stat` to say why. */
   async function readdir(p: string): Promise<FsEntry[]> {
-    await requireDir(p);
-    const { files } = await plugin.readdir(at(p));
-    return files.map((f) => ({ name: f.name, isDirectory: f.type === 'directory', isFile: f.type !== 'directory', isSymbolicLink: false }));
+    let files;
+    try {
+      ({ files } = await plugin.readdir(at(p)));
+    } catch (e) {
+      await requireDir(p); // missing → ENOENT, a file → ENOTDIR
+      throw e;
+    }
+    return files.map((f) => ({
+      name: f.name, isDirectory: f.type === 'directory', isFile: f.type !== 'directory', isSymbolicLink: false,
+      ...(f.type !== 'directory' && typeof f.mtime === 'number' && typeof f.size === 'number' ? { size: f.size, mtimeMs: f.mtime } : {}),
+    }));
   }
 
   async function copyTree(from: string, to: string): Promise<void> {
@@ -64,20 +73,27 @@ export function createCapacitorFs(plugin: FilesystemLike, directory = 'DATA', en
 
   return {
     async readText(p) {
-      const st = await stat(p);
-      if (!st) throw fsError('ENOENT', p);
-      if (st.isDirectory) throw fsError('EISDIR', p);
-      const { data } = await plugin.readFile({ ...at(p), encoding });
+      let data: string | Blob;
+      try {
+        ({ data } = await plugin.readFile({ ...at(p), encoding }));
+      } catch (e) {
+        const st = await stat(p); // why did it fail?
+        if (!st) throw fsError('ENOENT', p);
+        if (st.isDirectory) throw fsError('EISDIR', p);
+        throw e;
+      }
       return typeof data === 'string' ? data : await data.text();
     },
 
     async writeText(p, content, opts) {
-      const parent = await stat(parentOf(p));
-      if (!parent) throw fsError('ENOENT', p);
-      const existing = await stat(p);
-      if (existing?.isDirectory) throw fsError('EISDIR', p);
-      if (existing && opts?.exclusive) throw fsError('EEXIST', p);
-      await plugin.writeFile({ ...at(p), data: content, encoding, recursive: false });
+      if (opts?.exclusive && (await stat(p))) throw fsError('EEXIST', p);
+      try {
+        await plugin.writeFile({ ...at(p), data: content, encoding, recursive: false });
+      } catch (e) {
+        if (!(await stat(parentOf(p)))) throw fsError('ENOENT', p); // the parent folder is missing
+        if ((await stat(p))?.isDirectory) throw fsError('EISDIR', p);
+        throw e;
+      }
     },
 
     readdir,
@@ -90,9 +106,15 @@ export function createCapacitorFs(plugin: FilesystemLike, directory = 'DATA', en
         if (!st) await plugin.mkdir({ ...at(p), recursive: true });
         return;
       }
-      if (await stat(p)) throw fsError('EEXIST', p);
-      await requireDir(parentOf(p));
-      await plugin.mkdir({ ...at(p), recursive: false });
+      try {
+        await plugin.mkdir({ ...at(p), recursive: false });
+      } catch (e) {
+        if (await stat(p)) throw fsError('EEXIST', p);
+        await requireDir(parentOf(p)).catch(() => {
+          throw fsError('ENOENT', p);
+        });
+        throw e;
+      }
     },
 
     async rename(from, to) {

@@ -77,6 +77,9 @@ export function makeProjects(fs: FsPort) {
 
   // ---- counting ---------------------------------------------------------------------------
 
+  /** Word counts remembered by file (path + size + modification time), so unchanged files aren't read again each time the home screen refreshes. */
+  const wordCache = new Map<string, { mtimeMs: number; size: number; words: number }>();
+
   /** Words, file count and last edit of a project's Markdown files, leaving out `excluded` folders (relative, "/" separated). */
   async function countProject(dir: string, excluded: readonly string[] = []): Promise<{ words: number; files: number; lastEdited: number | null }> {
     const skip = excluded.map((e) => e.toLowerCase());
@@ -102,10 +105,18 @@ export function makeProjects(fs: FsPort) {
           } else if (e.isFile && MD.test(e.name)) {
             try {
               const full = joinPath(d, e.name);
-              const [text, st] = await Promise.all([fs.readText(full), fs.stat(full)]);
-              words += countWords(text);
+              const st = e.mtimeMs !== undefined && e.size !== undefined ? { mtimeMs: e.mtimeMs, size: e.size } : await fs.stat(full);
+              if (!st) return;
+              const cached = wordCache.get(full);
+              let n: number;
+              if (cached && cached.mtimeMs === st.mtimeMs && cached.size === st.size) n = cached.words;
+              else {
+                n = countWords(await fs.readText(full));
+                wordCache.set(full, { mtimeMs: st.mtimeMs, size: st.size, words: n });
+              }
+              words += n;
               files++;
-              lastEdited = Math.max(lastEdited ?? 0, st?.mtimeMs ?? 0);
+              lastEdited = Math.max(lastEdited ?? 0, st.mtimeMs);
             } catch {
               // unreadable file: ignore
             }
