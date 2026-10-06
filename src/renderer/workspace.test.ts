@@ -1154,3 +1154,18 @@ describe('edited chapters (Editing stage)', () => {
     expect(edited()).toEqual({});
   });
 });
+
+describe('refresh picks up changes to the project made elsewhere', () => {
+  it('shows edited marks that arrived from another device (a sync) and keeps open work', async () => {
+    api.addProject(ROOT, { status: 'editing' });
+    await ws.openPath(ROOT);
+    await ws.openChapter(A, 0);
+    ws.setDraft(tabOf(A).id, '# One\nunsaved');
+    expect(state().project!.meta.editedChapters).toEqual({});
+    api.projectMetas.set(ROOT, { ...api.projectMetas.get(ROOT)!, editedChapters: { 'a.md': ['Two'] } });
+    await ws.refresh();
+    expect(state().project!.meta.editedChapters).toEqual({ 'a.md': ['Two'] });
+    expect(ws.isChapterEdited(A, 1)).toBe(true);
+    expect(tabOf(A).draft).toBe('# One\nunsaved');
+  });
+});

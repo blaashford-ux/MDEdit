@@ -856,6 +856,22 @@ export class Workspace {
   }
 
   /** Rescans the folder and re-reads expanded/open files, keeping tabs and unsaved edits. */
+  /**
+   * Picks up changes to the open project's own record that were made elsewhere (a sync from another device brings its edited
+   * marks, status, active manuscript and goals). Settings that reshape the open files (chapter level) are left to the settings dialog.
+   */
+  private async reloadProjectState(): Promise<void> {
+    const project = this.state.project;
+    if (!project) return;
+    const fresh = await this.api.getProjectMeta(project.path).catch(() => null);
+    if (!fresh || this.state.project?.path !== project.path) return;
+    const pick = (m: ProjectMeta) => JSON.stringify([m.editedChapters, m.status, m.activeManuscript, m.manuscriptGoals, m.goal]);
+    if (pick(fresh) === pick(project.meta)) return;
+    const { editedChapters, status, activeManuscript, manuscriptGoals, goal } = fresh;
+    this.set({ project: { ...project, meta: { ...project.meta, editedChapters, status, activeManuscript, manuscriptGoals, goal } } });
+    if (activeManuscript !== project.meta.activeManuscript) void this.refreshProgress();
+  }
+
   async refresh(): Promise<void> {
     const current = this.state.root;
     if (!current || this.state.refreshing) return;
@@ -876,6 +892,7 @@ export class Workspace {
           await this.loadDoc(file).catch(() => undefined);
         }
       }
+      await this.reloadProjectState();
       this.set({ error: null });
     } catch (e) {
       this.set({ error: `Could not refresh: ${e}` });
