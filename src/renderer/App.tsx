@@ -22,6 +22,7 @@ import { goalFor, relativeTo } from '../shared/projects';
 import { projectNameError, uniqueName, type ProjectStatus, type ProjectSummary, type ProjectsConfig, type RootListing } from '../shared/projects';
 import { RelinkDialog } from './RelinkDialog';
 import { SettingsDialog } from './SettingsDialog';
+import { chapterStartLine, locateLine, totalLines } from '../shared/lines';
 import type { SceneNav } from './sceneNav';
 import { SourceEditor } from './SourceEditor';
 import { StatusBar } from './StatusBar';
@@ -452,12 +453,52 @@ export function App() {
     if (!moved) sceneTimer.current = setTimeout(() => setSceneMsg(null), 2500);
   };
 
+  /** A Go To that is waiting for the editor of its chapter to open. */
+  const pendingLine = useRef<{ id: string; chapter: number; line: number } | null>(null);
+  const applyPendingLine = () => {
+    const p = pendingLine.current;
+    const tab = p && s.tabs.find((t) => t.id === p.id);
+    const nav = p && navs.current.get(p.id);
+    if (!p || !tab || !nav || s.activeId !== p.id || tab.chapter !== p.chapter) return;
+    pendingLine.current = null;
+    setTimeout(() => nav.goToLine(p.line), 80); // after the Go To dialog has closed and given focus back
+  };
+
+  /** Ctrl+G: asks for a line number and goes there, opening another chapter if that is where it is (unsaved edits are checked first). */
+  const promptGoToLine = () => {
+    const tab = activeTab;
+    const doc = tab && s.docs.get(tab.file);
+    if (!tab || !doc) return;
+    const total = totalLines(doc);
+    setPrompt({
+      title: 'Go to Line',
+      label: `Line number (1–${total})`,
+      initial: '',
+      confirm: 'Go',
+      validate: (v) => (/^\d+$/.test(v.trim()) && Number(v) >= 1 && Number(v) <= total ? null : `Enter a line number from 1 to ${total}.`),
+      onSubmit: async (v) => {
+        const line = Number(v);
+        const at = locateLine(doc, line);
+        if (at.chapter === tab.chapter) {
+          pendingLine.current = null;
+          setTimeout(() => navs.current.get(tab.id)?.goToLine(line), 80);
+          return null;
+        }
+        pendingLine.current = { id: tab.id, chapter: at.chapter, line };
+        await ws.openChapter(tab.file, at.chapter);
+        if (ws.tabForFile(tab.file)?.chapter !== at.chapter) pendingLine.current = null; // cancelled at the unsaved-changes prompt
+        return null;
+      }
+    });
+  };
+
   const registerNav = (id: string, n: SceneNav | null) => {
     if (n) navs.current.set(id, n);
     else navs.current.delete(id);
     setNavVersion((v) => v + 1);
   };
   void navVersion; // re-render when an editor registers, so the find bar gets its handle
+  useEffect(applyPendingLine); // a Go To into another chapter lands once that chapter's editor is up
 
   const closeFind = () => {
     setFind({ open: false });
@@ -508,6 +549,7 @@ export function App() {
     'redo-action': () => void ws.redoAction(),
     find: () => openFind(false),
     replace: () => openFind(true),
+    'go-to-line': promptGoToLine,
     'find-next': () => findStep(1),
     'find-prev': () => findStep(-1),
     'next-scene': () => gotoScene(1),
@@ -546,7 +588,7 @@ export function App() {
       else if (mod && !e.shiftKey && !e.altKey && k === 'f') name = 'find';
       else if (mod && !e.shiftKey && !e.altKey && k === 'h') name = 'replace';
       else if (e.key === 'F3' && !mod) name = e.shiftKey ? 'find-prev' : 'find-next';
-      else if (mod && !e.altKey && k === 'g') name = e.shiftKey ? 'find-prev' : 'find-next';
+      else if (mod && !e.shiftKey && !e.altKey && k === 'g') name = 'go-to-line';
       else if (mod && e.shiftKey && k === 'm') name = 'toggle-mode';
       else if (e.ctrlKey && e.key === 'Tab') name = e.shiftKey ? 'prev-tab' : 'next-tab';
       else if (e.ctrlKey && e.key === 'PageDown') name = 'next-chapter';
@@ -853,6 +895,7 @@ export function App() {
                     onChange={(md) => ws.setDraft(tab.id, md)}
                     saved={tab.saved}
                     onNav={(n) => registerNav(tab.id, n)}
+                    firstLine={chapterStartLine(doc, tab.chapter)}
                   />
                 ) : (
                   <SourceEditor
@@ -862,6 +905,7 @@ export function App() {
                     onChange={(md) => ws.setDraft(tab.id, md)}
                     savedVersion={tab.saved?.version ?? 0}
                     onNav={(n) => registerNav(tab.id, n)}
+                    firstLine={chapterStartLine(doc, tab.chapter)}
                   />
                 )}
               </section>

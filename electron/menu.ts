@@ -71,6 +71,8 @@ export function installMenu(theme: ThemeHooks): void {
     {
       label: '&Go',
       submenu: [
+        { label: 'Go to Line…\tCtrl+G', click: send('go-to-line') },
+        { type: 'separator' },
         { label: 'Next Chapter\tCtrl+PgDn', click: send('next-chapter') },
         { label: 'Previous Chapter\tCtrl+PgUp', click: send('prev-chapter') },
         { type: 'separator' },

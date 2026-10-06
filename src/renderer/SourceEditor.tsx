@@ -1,7 +1,9 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { chapterBody } from '../shared/chapters';
 import { sceneTarget } from '../shared/sceneBreaks';
 import { compileFind, expandReplacement, findInText, matchAtOrAfter, replaceAllInText, type FindOptions, type FindStatus } from '../shared/find';
+import { lineStarts } from '../shared/lines';
+import { LineGutter, type LineMark } from './LineGutter';
 import type { FindApi, SceneNav } from './sceneNav';
 
 interface Props {
@@ -14,6 +16,8 @@ interface Props {
   savedVersion: number;
   /** Hands the parent a way to jump between scene breaks (null on unmount). */
   onNav?(nav: SceneNav | null): void;
+  /** The file line this chapter starts on, so the gutter shows file-wide line numbers. */
+  firstLine: number;
 }
 
 /** Plain-text editing of one chapter's exact Markdown: nothing is reformatted. */
@@ -37,7 +41,41 @@ function offsetTop(ta: HTMLTextAreaElement, offset: number): number {
   return top;
 }
 
-export function SourceEditor({ raw, draft, onChange, savedVersion, onNav }: Props) {
+/** Top of every line's first row, measured on a hidden copy of the textarea (lines wrap, so this is not index * lineHeight). */
+function lineTops(ta: HTMLTextAreaElement): { tops: number[]; heights: number[]; lineHeight: number } {
+  const cs = getComputedStyle(ta);
+  const mirror = document.createElement('div');
+  for (const prop of ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'paddingLeft', 'paddingRight', 'paddingTop', 'borderLeftWidth', 'borderRightWidth', 'tabSize'] as const) {
+    mirror.style[prop] = cs[prop];
+  }
+  mirror.style.cssText += ';position:absolute;visibility:hidden;white-space:pre-wrap;overflow-wrap:break-word;top:0;left:-9999px;';
+  mirror.style.width = `${ta.clientWidth}px`;
+  mirror.style.boxSizing = 'content-box';
+  const text = ta.value.replace(/\r\n|\r/g, '\n');
+  const markers: HTMLElement[] = [];
+  const parts = text.split('\n');
+  if (parts.length > 1 && parts[parts.length - 1] === '') parts.pop(); // a final newline ends the last line, it does not start another
+  for (const line of parts) {
+    const marker = document.createElement('span');
+    marker.textContent = '\u200b';
+    markers.push(marker);
+    mirror.appendChild(marker);
+    mirror.appendChild(document.createTextNode(`${line}\n`));
+  }
+  document.body.appendChild(mirror);
+  const tops = markers.map((m) => m.offsetTop);
+  const lineHeight = parseFloat(cs.lineHeight) || 20;
+  const heights = tops.map((top, i) => (i + 1 < tops.length ? tops[i + 1] - top : lineHeight));
+  mirror.remove();
+  return { tops, heights, lineHeight };
+}
+
+export function SourceEditor({ raw, draft, onChange, savedVersion, onNav, firstLine }: Props) {
+  const wrap = useRef<HTMLDivElement>(null);
+  const [marks, setMarks] = useState<LineMark[]>([]);
+  const [scroll, setScroll] = useState(0);
+  const firstLineRef = useRef(firstLine);
+  firstLineRef.current = firstLine;
   const ref = useRef<HTMLTextAreaElement>(null);
   const rawRef = useRef(raw);
   const onNavRef = useRef(onNav);
@@ -50,6 +88,34 @@ export function SourceEditor({ raw, draft, onChange, savedVersion, onNav }: Prop
     if (ref.current && savedVersion > 0) report(ref.current.value);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savedVersion, raw]);
+
+  /** Re-measures where each line sits (after typing, wrapping changes or a resize). */
+  const measure = () => {
+    const t = ref.current;
+    if (!t) return;
+    const { tops, heights, lineHeight } = lineTops(t);
+    setMarks(tops.map((top, i) => ({ line: firstLineRef.current + i, end: firstLineRef.current + i, top, height: heights[i], lineHeight })));
+  };
+  useEffect(() => {
+    const t = ref.current;
+    if (!t) return;
+    let frame = 0;
+    const later = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(measure);
+    };
+    measure();
+    t.addEventListener('input', later);
+    const ro = new ResizeObserver(later);
+    ro.observe(t);
+    void document.fonts?.ready.then(later);
+    return () => {
+      cancelAnimationFrame(frame);
+      t.removeEventListener('input', later);
+      ro.disconnect();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [firstLine]);
 
   useEffect(() => {
     const ta = () => ref.current;
@@ -142,6 +208,16 @@ export function SourceEditor({ raw, draft, onChange, savedVersion, onNav }: Prop
     };
 
     onNavRef.current?.({
+      goToLine: (line) => {
+        const t = ref.current;
+        if (!t) return false;
+        const starts = lineStarts(t.value);
+        const i = Math.min(Math.max(line - firstLineRef.current, 0), starts.length - 1);
+        t.focus();
+        t.setSelectionRange(starts[i], starts[i]);
+        t.scrollTop = Math.max(0, offsetTop(t, starts[i]) - t.clientHeight / 3);
+        return true;
+      },
       find,
       go: (dir) => {
         const t = ref.current;
@@ -158,13 +234,17 @@ export function SourceEditor({ raw, draft, onChange, savedVersion, onNav }: Prop
   }, []);
 
   return (
-    <textarea
-      ref={ref}
-      className="source-editor"
-      spellCheck
-      aria-label="Chapter Markdown source"
-      defaultValue={draft ?? raw}
-      onInput={(e) => report(e.currentTarget.value)}
-    />
+    <div className="source-wrap" ref={wrap}>
+      <textarea
+        ref={ref}
+        className="source-editor"
+        spellCheck
+        aria-label="Chapter Markdown source"
+        defaultValue={draft ?? raw}
+        onInput={(e) => report(e.currentTarget.value)}
+        onScroll={(e) => setScroll(e.currentTarget.scrollTop)}
+      />
+      <LineGutter marks={marks} scroll={scroll} host={wrap} />
+    </div>
   );
 }

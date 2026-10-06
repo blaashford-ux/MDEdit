@@ -49,6 +49,7 @@ export type MenuAction =
   | 'find'
   | 'replace'
   | 'find-next'
+  | 'go-to-line'
   | 'find-prev'
   | 'next-scene'
   | 'prev-scene'

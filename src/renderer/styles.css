@@ -162,7 +162,9 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline-offs
 .head-actions button.save-btn:not(:disabled) { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
 .scene-msg { margin-right: auto; margin-left: 12px; font-size: 12px; color: var(--gold); }
 .editor { margin-top: 10px; max-width: 880px; margin-left: auto; margin-right: auto; }
-.source-editor { display: block; width: 100%; max-width: 880px; margin: 10px auto 0; min-height: 60vh; resize: vertical; padding: 18px 20px; font: 13px/1.6 'Cascadia Code', 'Cascadia Mono', Consolas, monospace; color: var(--fg); background: var(--bg); border: 0; border-radius: var(--radius-lg); tab-size: 4; }
+.editor-wrap, .source-wrap { position: relative; max-width: 880px; margin: 10px auto 0; }
+.editor-wrap > .editor { margin: 0; max-width: none; }
+.source-editor { display: block; width: 100%; margin: 0; min-height: 60vh; resize: vertical; padding: 18px 20px 18px 52px; font: 13px/1.6 'Cascadia Code', 'Cascadia Mono', Consolas, monospace; color: var(--fg); background: var(--bg); border: 0; border-radius: var(--radius-lg); tab-size: 4; }
 
 .statusbar { display: flex; gap: 18px; flex: none; padding: 6px 18px; font-size: 12px; color: var(--muted); background: transparent; }
 .statusbar .spacer { flex: 1; }
@@ -310,7 +312,7 @@ code.path { background: var(--raised); padding: 1px 6px; border-radius: 6px; }
   background: var(--bg);
   border-radius: var(--radius-lg);
 }
-.editor .milkdown .ProseMirror { padding: 36px 56px 96px; line-height: 1.7; }
+.editor .milkdown .ProseMirror { padding: 36px 56px 96px 64px; line-height: 1.7; }
 .editor .milkdown .ProseMirror h1 { font-weight: 700; letter-spacing: -0.02em; }
 .editor .milkdown .ProseMirror a { color: var(--accent); }
 .editor .milkdown .ProseMirror hr { border: 0; height: 1px; background: linear-gradient(90deg, transparent, var(--faint), transparent); margin: 2em 0; }
@@ -550,3 +552,13 @@ code.path { background: var(--raised); padding: 1px 6px; border-radius: 6px; }
 
 .sb-sync.s-error, .sb-sync.s-confirm { color: var(--danger); }
 .sb-sync.s-syncing { opacity: 0.75; }
+
+/* ---- line numbers: every tenth line faint, the hovered line in full ---- */
+.line-gutter { position: absolute; left: 0; top: 0; bottom: 0; width: 44px; overflow: hidden; pointer-events: none; font: 12px 'Cascadia Mono', Consolas, monospace; font-variant-numeric: tabular-nums; }
+.line-gutter > div { position: relative; }
+.line-no { position: absolute; right: 0; display: block; text-align: right; white-space: nowrap; }
+.line-no.ten { color: var(--faint); opacity: 0.75; }
+.line-no.one { color: var(--muted); }
+.frame.mobile .line-gutter { width: 24px; font-size: 9.5px; }
+.frame.mobile .source-editor { padding-left: 30px; }
+.frame.mobile .editor .milkdown .ProseMirror { padding-left: 30px; }

@@ -63,7 +63,8 @@ repository secrets. See [docs/sync-rules.md](docs/sync-rules.md) for how sync be
 | Ctrl+Alt+Z / Ctrl+Alt+Y | Undo / redo the last chapter or file action (5 deep) |
 | Ctrl+P | Filter files |
 | Ctrl+F / Ctrl+H | Find / Find & Replace in the open chapter or file |
-| F3, Shift+F3 (or Ctrl+G) | Next / previous match |
+| F3, Shift+F3 | Next / previous match |
+| Ctrl+G | Go to a line number (file-wide; asks about unsaved changes if it leaves the chapter) |
 | Alt+C / Alt+W / Alt+R | (in the find bar) match case / whole word / regular expression |
 | F5 | Refresh |
 | F2 / Del / Alt+Up / Alt+Down | Rename / delete / move chapter (in the tree) |
