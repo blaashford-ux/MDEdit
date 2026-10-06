@@ -84,6 +84,15 @@ export function SyncDialog({ status, onClose }: Props) {
               </p>
             )}
 
+            {sum?.rootCreated && (
+              <div className="sync-block">
+                <strong>New MDEdit folder in Drive</strong>
+                <p className="muted small">
+                  MDEdit couldn’t see an existing <em>MDEdit</em> folder in your Drive, so it made one. If you expected projects from another device to arrive, they’re in a different folder this app can’t see.
+                </p>
+              </div>
+            )}
+
             {sum && sum.conflicts.length > 0 && (
               <div className="sync-block">
                 <strong>Kept both versions</strong>

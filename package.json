@@ -5,7 +5,7 @@
   "main": "dist-electron/electron/main.js",
   "scripts": {
     "dev": "npm run build:electron && concurrently -k \"vite\" \"wait-on http://localhost:5173 && electron .\"",
-    "build:electron": "npm run build:assets && node -e \"require('fs').rmSync('dist-electron',{recursive:true,force:true})\" && esbuild electron/main.ts electron/preload.ts --bundle --platform=node --target=node20 --format=cjs --external:electron --outdir=dist-electron/electron --sourcemap",
+    "build:electron": "npm run build:assets && node scripts/build-electron.mjs",
     "build:renderer": "vite build",
     "build": "npm run build:electron && npm run build:renderer",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.electron.json",

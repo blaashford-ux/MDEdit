@@ -56,7 +56,8 @@ export type MenuAction =
   | 'next-tab'
   | 'prev-tab'
   | 'next-chapter'
-  | 'prev-chapter';
+  | 'prev-chapter'
+  | 'sync';
 
 export type ExportKind = 'epub' | 'pdf' | 'docx';
 
@@ -280,6 +281,8 @@ export interface SyncSummary {
   /** Files left alone, with the reason. */
   skipped: { path: string; reason: string }[];
   errors: { path: string; message: string }[];
+  /** A new `MDEdit` folder was made in Drive because none was visible to this app. */
+  rootCreated: boolean;
 }
 
 export interface SyncStatus {
@@ -292,6 +295,8 @@ export interface SyncStatus {
   summary: SyncSummary | null;
   /** Files a pass wanted to delete but held back for the user's go-ahead (`state: 'confirm'`). */
   pendingDeletes: string[];
+  /** Goes up each time a pass changed files on this device, so the UI knows to refresh. */
+  localChanges: number;
 }
 
 /** Keeping the Root Folder in step with Google Drive. Desktop and phone get the same engine (docs/sync-rules.md). */
@@ -323,7 +328,7 @@ export interface Capabilities {
   sync: boolean;
 }
 
-export const DESKTOP_CAPABILITIES: Capabilities = { export: true, windowChrome: true, folderPicker: true, launchFiles: true, fonts: true, sync: false };
+export const DESKTOP_CAPABILITIES: Capabilities = { export: true, windowChrome: true, folderPicker: true, launchFiles: true, fonts: true, sync: true };
 /** The phone: the editor and projects, nothing desktop-specific. */
 export const MOBILE_CAPABILITIES: Capabilities = { export: false, windowChrome: false, folderPicker: false, launchFiles: false, fonts: false, sync: true };
 

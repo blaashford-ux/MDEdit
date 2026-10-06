@@ -169,14 +169,12 @@ export function App() {
     return () => window.removeEventListener('focus', onFocus);
   }, [atHome, showQuick, showNewProject, reloadListing]);
   // A sync that changed files: refresh the tree (open files reload through the usual external-change check) and the project list.
+  const syncChanges = syncStatus?.localChanges ?? 0;
   useEffect(() => {
-    const onSynced = () => {
-      void ws.refresh();
-      void reloadListing();
-    };
-    window.addEventListener('mdedit:synced', onSynced);
-    return () => window.removeEventListener('mdedit:synced', onSynced);
-  }, [ws, reloadListing]);
+    if (syncChanges === 0) return;
+    void ws.refresh();
+    void reloadListing();
+  }, [syncChanges, ws, reloadListing]);
   // The switcher in the sidebar needs the list too.
   useEffect(() => {
     if (s.project) void reloadListing();
@@ -484,6 +482,7 @@ export function App() {
   const actions: Record<MenuAction | 'toggle-mode' | 'focus-filter', () => void> = {
     'new-project': () => setShowNewProject(true),
     'projects-home': () => void goHome(),
+    sync: () => caps.sync && setShowSync(true),
     'switch-project': () => setShowQuick(true),
     'project-settings': () => s.project && setProjectSettings(s.project.path),
     'project-progress': () => s.project && setShowProgress(true),
@@ -631,7 +630,7 @@ export function App() {
             {s.error} <button onClick={() => ws.setError(null)}>Dismiss</button>
           </div>
         )}
-        {caps.sync && syncStatus && !syncStatus.connected && started && !welcome && (
+        {caps.sync && !caps.windowChrome && syncStatus && !syncStatus.connected && started && !welcome && (
           <div className="banner info sync-banner" role="status">
             <span>Keep your projects in sync with Google Drive.</span> <button onClick={() => setShowSync(true)}>Set up sync</button>
           </div>
@@ -886,6 +885,7 @@ export function App() {
                 : null
             }
             onProgress={() => setShowProgress(true)}
+            sync={caps.sync && caps.windowChrome && syncStatus ? { state: syncStatus.state, onOpen: () => setShowSync(true) } : undefined}
           />
         )}
       </main>

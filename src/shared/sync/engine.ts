@@ -76,9 +76,11 @@ export interface SyncReport {
   pendingDeletes: string[];
   /** True when any local file or folder changed, so the UI should refresh. */
   changedLocal: boolean;
+  /** No `MDEdit` folder was visible in Drive, so a new one was made. On a second device this means it can't see the first device's files. */
+  rootCreated: boolean;
 }
 
-const emptyReport = (): SyncReport => ({ uploaded: [], downloaded: [], deletedLocal: [], deletedRemote: [], renamed: 0, conflicts: [], merged: [], skipped: [], errors: [], pendingDeletes: [], changedLocal: false });
+const emptyReport = (): SyncReport => ({ uploaded: [], downloaded: [], deletedLocal: [], deletedRemote: [], renamed: 0, conflicts: [], merged: [], skipped: [], errors: [], pendingDeletes: [], changedLocal: false, rootCreated: false });
 
 const dirOf = (p: string) => (p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '');
 const nameOf = (p: string) => p.slice(p.lastIndexOf('/') + 1);
@@ -102,7 +104,10 @@ export async function syncOnce(o: SyncOptions): Promise<SyncReport> {
     // ---- Drive side ---------------------------------------------------------------------------------------
     let all = await drive.listAll();
     let rootId = findRoot(all, state.rootId);
-    if (!rootId) rootId = (await drive.createFolder(DRIVE_ROOT_NAME, null)).id;
+    if (!rootId) {
+      rootId = (await drive.createFolder(DRIVE_ROOT_NAME, null)).id;
+      report.rootCreated = true;
+    }
     state.rootId = rootId;
 
     let remote = readTree(all, rootId);

@@ -11,9 +11,10 @@ let authorizeCalls: number;
 let authFails: Error | null;
 let changed: number;
 
-const make = () =>
+let signedOut: number;
+const make = (root = ROOT) =>
   new SyncService({
-    fs, root: ROOT, stateFile: '/state/sync.json', device: 'Pixel', now: () => new Date('2026-10-05T12:00:00'),
+    fs, root, signOut: async () => void signedOut++, stateFile: '/state/sync.json', device: 'Pixel', now: () => new Date('2026-10-05T12:00:00'),
     authorize: async () => {
       authorizeCalls++;
       if (authFails) throw authFails;
@@ -30,6 +31,7 @@ beforeEach(async () => {
   authorizeCalls = 0;
   authFails = null;
   changed = 0;
+  signedOut = 0;
   await fs.mkdir(ROOT, { recursive: true });
   await fs.mkdir('/state', { recursive: true });
 });
@@ -161,5 +163,61 @@ describe('SyncService', () => {
     expect(await s.getSyncStatus()).toMatchObject({ connected: false, state: 'off' });
     expect(await fs.readText(`${ROOT}/a.md`)).toBe('x');
     expect(JSON.parse(await fs.readText('/state/sync.json'))).toMatchObject({ connected: false, state: { files: {} } });
+  });
+
+  it('says when it had to create a new MDEdit folder in Drive', async () => {
+    fs.seed(`${ROOT}/a.md`, 'x');
+    const s = make();
+    await s.load();
+    expect((await s.connectSync()).summary?.rootCreated).toBe(true);
+    expect((await s.syncNow()).summary?.rootCreated).toBe(false);
+  });
+
+  it('counts passes that changed local files, so the UI knows to refresh', async () => {
+    const s = make();
+    await s.load();
+    await s.connectSync();
+    expect((await s.getSyncStatus()).localChanges).toBe(0);
+    drive.seed('Novel/x.md', 'remote', JSON.parse(await fs.readText('/state/sync.json')).state.rootId);
+    await s.syncNow();
+    expect((await s.getSyncStatus()).localChanges).toBe(1);
+    await s.syncNow();
+    expect((await s.getSyncStatus()).localChanges).toBe(1);
+  });
+
+  it('forgets its memory when the Root Folder is somewhere else, instead of treating the new folder as "everything deleted"', async () => {
+    fs.seed(`${ROOT}/Novel/a.md`, 'a');
+    fs.seed(`${ROOT}/Novel/b.md`, 'b');
+    fs.seed(`${ROOT}/Novel/c.md`, 'c');
+    const first = make();
+    await first.load();
+    await first.connectSync();
+    await fs.mkdir('/Elsewhere', { recursive: true });
+    const moved = make('/Elsewhere');
+    await moved.load();
+    const st = await moved.syncNow();
+    expect(st.state).toBe('idle'); // no "this would delete 3 files" prompt
+    expect(drive.read('Novel/a.md')).toBe('a'); // Drive untouched
+    expect(await fs.readText('/Elsewhere/Novel/a.md')).toBe('a'); // and the new folder is filled from it
+  });
+
+  it('signs out of Google on disconnect', async () => {
+    const s = make();
+    await s.load();
+    await s.connectSync();
+    await s.disconnectSync();
+    expect(signedOut).toBe(1);
+  });
+
+  it('knows when edits are waiting for a pass', async () => {
+    vi.useFakeTimers();
+    const s = make();
+    await s.load();
+    await s.connectSync();
+    expect(s.dirty).toBe(false);
+    s.syncSoon(1000);
+    expect(s.dirty).toBe(true);
+    await vi.advanceTimersByTimeAsync(1100);
+    expect(s.dirty).toBe(false);
   });
 });

@@ -546,3 +546,6 @@ code.path { background: var(--raised); padding: 1px 6px; border-radius: 6px; }
 .sync-block { margin: 12px 0; padding: 10px 12px; background: var(--raised); border-radius: 12px; }
 .sync-list { margin: 6px 0 0; padding-left: 18px; font-size: 13px; overflow-wrap: anywhere; }
 .sync-banner { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 8px 16px 0; }
+
+.sb-sync.s-error, .sb-sync.s-confirm { color: var(--danger); }
+.sb-sync.s-syncing { opacity: 0.75; }

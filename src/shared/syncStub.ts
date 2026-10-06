@@ -1,6 +1,6 @@
 import type { SyncApi, SyncStatus } from './api';
 
-export const syncOffStatus: SyncStatus = { connected: false, state: 'off', lastSyncAt: null, message: null, summary: null, pendingDeletes: [] };
+export const syncOffStatus: SyncStatus = { connected: false, state: 'off', lastSyncAt: null, message: null, summary: null, pendingDeletes: [], localChanges: 0 };
 
 /** `SyncApi` for platforms where sync isn't available (yet): always "off". */
 export const syncOff: SyncApi = {

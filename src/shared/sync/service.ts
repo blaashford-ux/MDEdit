@@ -24,6 +24,8 @@ export interface SyncServiceOptions {
   now?: () => Date;
   /** Called after a pass that changed local files, so the UI can refresh. */
   onLocalChanges?(report: SyncReport): void;
+  /** Forgets the Google sign-in (token) when the user disconnects. */
+  signOut?(): Promise<void>;
   /** For tests: a stand-in Drive. */
   makeDrive?(getToken: (force?: boolean) => Promise<string>): DriveApi;
 }
@@ -31,6 +33,8 @@ export interface SyncServiceOptions {
 interface Saved {
   connected: boolean;
   lastSyncAt: number | null;
+  /** The Root Folder this memory is about: if it moves, the memory is dropped and everything is re-checked. */
+  root: string;
   state: SyncState;
 }
 
@@ -43,6 +47,7 @@ const summarise = (r: SyncReport): SyncSummary => ({
   conflicts: r.conflicts,
   skipped: r.skipped,
   errors: r.errors,
+  rootCreated: r.rootCreated,
 });
 
 const friendly = (e: unknown): string => {
@@ -52,8 +57,10 @@ const friendly = (e: unknown): string => {
 }
 
 export class SyncService implements SyncApi {
-  private saved: Saved = { connected: false, lastSyncAt: null, state: emptySyncState() };
-  private status: SyncStatus = { connected: false, state: 'off', lastSyncAt: null, message: null, summary: null, pendingDeletes: [] };
+  private saved: Saved;
+  private status: SyncStatus = { connected: false, state: 'off', lastSyncAt: null, message: null, summary: null, pendingDeletes: [], localChanges: 0 };
+  /** Edits are waiting for a pass (set by `syncSoon`, cleared when a pass starts). */
+  dirty = false;
   private listeners = new Set<(s: SyncStatus) => void>();
   private running: Promise<SyncStatus> | null = null;
   private rerun = false;
@@ -65,6 +72,7 @@ export class SyncService implements SyncApi {
 
   constructor(private readonly o: SyncServiceOptions) {
     this.files = makeFiles(o.fs);
+    this.saved = { connected: false, lastSyncAt: null, root: o.root, state: emptySyncState() };
     this.store = {
       load: async () => this.saved.state,
       save: async (s) => {
@@ -78,9 +86,15 @@ export class SyncService implements SyncApi {
   async load(): Promise<void> {
     try {
       const raw = JSON.parse(await this.o.fs.readText(this.o.stateFile)) as Partial<Saved>;
-      this.saved = { connected: raw.connected === true, lastSyncAt: typeof raw.lastSyncAt === 'number' ? raw.lastSyncAt : null, state: sanitizeSyncState(raw.state) };
+      const sameRoot = raw.root === undefined || raw.root === this.o.root; // older files have no root: trust them
+      this.saved = {
+        connected: raw.connected === true,
+        lastSyncAt: typeof raw.lastSyncAt === 'number' ? raw.lastSyncAt : null,
+        root: this.o.root,
+        state: sameRoot ? sanitizeSyncState(raw.state) : emptySyncState(), // a different folder: start fresh, never treat it as "everything was deleted"
+      };
     } catch {
-      this.saved = { connected: false, lastSyncAt: null, state: emptySyncState() };
+      this.saved = { connected: false, lastSyncAt: null, root: this.o.root, state: emptySyncState() };
     }
     this.set({ connected: this.saved.connected, state: this.saved.connected ? 'idle' : 'off', lastSyncAt: this.saved.lastSyncAt });
   }
@@ -124,8 +138,9 @@ export class SyncService implements SyncApi {
   async disconnectSync(): Promise<void> {
     this.stop();
     this.token = null;
-    this.saved = { connected: false, lastSyncAt: null, state: emptySyncState() }; // forget the base state: a different account must start fresh
+    this.saved = { connected: false, lastSyncAt: null, root: this.o.root, state: emptySyncState() }; // forget the base state: a different account must start fresh
     await this.persist();
+    await this.o.signOut?.().catch(() => undefined);
     this.set({ connected: false, state: 'off', lastSyncAt: null, message: null, summary: null, pendingDeletes: [] });
   }
 
@@ -147,6 +162,7 @@ export class SyncService implements SyncApi {
       try {
         do {
           this.rerun = false;
+          this.dirty = false;
           this.set({ state: 'syncing', message: null });
           const drive = this.o.makeDrive ? this.o.makeDrive(this.getToken) : createDriveRest({ getToken: this.getToken });
           const report = await syncOnce({
@@ -161,7 +177,10 @@ export class SyncService implements SyncApi {
             lastSyncAt: this.saved.lastSyncAt, summary: summarise(report), pendingDeletes: report.pendingDeletes,
             message: confirm ? `This would delete ${report.pendingDeletes.length} files. Check it’s what you meant.` : report.errors.length > 0 ? `${report.errors.length} file${report.errors.length === 1 ? '' : 's'} couldn’t sync; they will be retried.` : null,
           });
-          if (report.changedLocal) this.o.onLocalChanges?.(report);
+          if (report.changedLocal) {
+            this.set({ localChanges: this.status.localChanges + 1 });
+            this.o.onLocalChanges?.(report);
+          }
           allowDeletes = false;
         } while (this.rerun);
       } catch (e) {
@@ -177,6 +196,7 @@ export class SyncService implements SyncApi {
   /** Runs a pass shortly from now (and coalesces repeated calls): use after the user edits a file. */
   syncSoon(delayMs = 5000): void {
     if (!this.saved.connected) return;
+    this.dirty = true;
     if (this.timer) clearTimeout(this.timer);
     this.timer = setTimeout(() => {
       this.timer = null;

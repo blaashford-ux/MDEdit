@@ -1,6 +1,6 @@
 # Mobile app and sync rules
 
-Status: **Android side built (0.3.x branch); Windows side and the cross-device test are next.** Decisions are recorded below. Built: the planner, the sync engine (tested with two simulated devices), the Drive REST client, the sync service, and Google sign-in for Android. Still to verify on real hardware: sign-in, and (section 9) that the Windows and Android clients see each other's files under `drive.file`.
+Status: **Android and Windows sides built; the cross-device test is next.** Decisions are recorded below. Built: the planner, the sync engine (tested with two simulated devices), the Drive REST client, the sync service, Google sign-in for Android (Play Services) and for Windows (browser loopback + PKCE, token encrypted with Windows DPAPI). Still to verify on real hardware: sign-in, and (section 9) that the Windows and Android clients see each other's files under `drive.file`.
 
 ## 1. Decisions
 

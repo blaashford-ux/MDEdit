@@ -66,7 +66,6 @@ async function start(): Promise<void> {
     authorize: native ? async () => (await DriveAuth.authorize()).accessToken : async () => 'preview',
     makeDrive: native ? undefined : () => previewDrive,
     trashLocal: backend.trash,
-    onLocalChanges: () => window.dispatchEvent(new CustomEvent('mdedit:synced')),
   });
   await sync.load();
 

@@ -40,6 +40,7 @@ export function installMenu(theme: ThemeHooks): void {
         { label: 'Project Settings…', click: send('project-settings') },
         { label: 'Project Progress…', click: send('project-progress') },
         { label: 'Export…\tCtrl+E', click: send('export') },
+        { label: 'Google Drive Sync…', click: send('sync') },
         { label: 'Settings…\tCtrl+,', click: send('settings') },
         { type: 'separator' },
         { label: 'Save\tCtrl+S', click: send('save') },
