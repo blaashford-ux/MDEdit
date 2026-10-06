@@ -853,6 +853,11 @@ export function App() {
                     <button aria-label="Next chapter" title="Next chapter (Ctrl+PgDn)" disabled={tab.chapter >= doc.chapters.length - 1} onClick={() => void ws.gotoChapter(1)}>
                       <Icon name="right" />
                     </button>
+                    {!caps.windowChrome && (
+                      <button aria-label="Go to line" onClick={promptGoToLine}>
+                        Line…
+                      </button>
+                    )}
                     <button aria-label="Previous scene break" title="Previous scene break (Ctrl+↑)" onClick={() => gotoScene(-1)}>
                       <Icon name="up" /> Scene
                     </button>

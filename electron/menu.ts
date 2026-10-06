@@ -65,14 +65,13 @@ export function installMenu(theme: ThemeHooks): void {
         { label: 'Find…\tCtrl+F', click: send('find') },
         { label: 'Find Next\tF3', click: send('find-next') },
         { label: 'Find Previous\tShift+F3', click: send('find-prev') },
-        { label: 'Replace…\tCtrl+H', click: send('replace') }
+        { label: 'Replace…\tCtrl+H', click: send('replace') },
+        { label: 'Go to Line…\tCtrl+G', click: send('go-to-line') }
       ]
     },
     {
       label: '&Go',
       submenu: [
-        { label: 'Go to Line…\tCtrl+G', click: send('go-to-line') },
-        { type: 'separator' },
         { label: 'Next Chapter\tCtrl+PgDn', click: send('next-chapter') },
         { label: 'Previous Chapter\tCtrl+PgUp', click: send('prev-chapter') },
         { type: 'separator' },
