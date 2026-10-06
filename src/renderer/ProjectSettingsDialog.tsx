@@ -180,9 +180,11 @@ export function ProjectSettingsDialog({ path, config, onClose, onChanged }: Prop
                 <button type="button" onClick={() => void addMissing()} disabled={!template} title={template ? '' : 'The template this project was made from no longer exists'}>
                   Add missing template folders
                 </button>
-                <button type="button" onClick={() => window.mdedit.reveal(path)}>
-                  Show in File Explorer
-                </button>
+                {window.mdedit.capabilities.folderPicker && (
+                  <button type="button" onClick={() => window.mdedit.reveal(path)}>
+                    Show in File Explorer
+                  </button>
+                )}
               </div>
             </section>
           )}

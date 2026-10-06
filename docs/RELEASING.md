@@ -1,6 +1,6 @@
 # Releasing MDEdit
 
-Pushing a version tag builds the Windows installer, tests it, and publishes it as a GitHub Release anyone can download.
+Pushing a version tag (or running the **release** workflow) builds the Windows installer and the Android APK, tests them, and publishes both as a GitHub Release anyone can download.
 
 ## Cut a release
 
@@ -13,12 +13,13 @@ git push origin HEAD --follow-tags
 
 `npm version patch | minor | major` also works. A version with a hyphen (`0.3.0-beta.1`) is published as a **pre-release**.
 
-Then watch **Actions → release**. It runs four things in order:
+Then watch **Actions → release**. It runs these in order:
 
 1. **Check the tag matches `package.json`.** A mismatch fails immediately with an explanation, so you never ship a mislabelled installer.
 2. **The same pipeline as every push** (`build.yml`): typecheck, the full test suite (including real Electron PDF layout, epubcheck and DOCX
    checks), the Windows installer build, and a **smoke test of the freshly built Windows app** (it exports an EPUB, PDF and DOCX).
-3. **Publish.** Only if everything above passed, it creates the release `MDEdit 0.2.0` with the installer, a `SHA256SUMS.txt`, install
+3. **The Android build** (`android.yml`): typecheck, unit tests, the web bundle, and a signed release APK (the signing key comes from the `ANDROID_KEYSTORE_*` secrets; without them it falls back to a temporary debug key that Google sign-in will not accept).
+4. **Publish.** Only if everything above passed, it creates the release `MDEdit 0.2.0` with the installer, the APK, a `SHA256SUMS.txt`, install
    instructions (including the SmartScreen note), and auto-generated "What's changed" notes from the commits and PRs since the last release.
 
 Everyone can then download from **https://github.com/blaashford-ux/MDEdit/releases/latest** (no GitHub account needed for public repos).

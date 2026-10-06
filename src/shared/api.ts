@@ -56,7 +56,8 @@ export type MenuAction =
   | 'next-tab'
   | 'prev-tab'
   | 'next-chapter'
-  | 'prev-chapter';
+  | 'prev-chapter'
+  | 'sync';
 
 export type ExportKind = 'epub' | 'pdf' | 'docx';
 
@@ -145,9 +146,11 @@ export type ProjectPatch = Partial<Pick<ProjectMeta, 'status' | 'notes' | 'archi
 
 export type { ProjectSummary };
 
-export interface MdeditApi {
-  /** Shows the OS folder picker. Resolves to the chosen folder or null if cancelled. */
-  pickFolder(): Promise<string | null>;
+/**
+ * What the editor, the project model and sync need. Every platform implements this: the Windows app over Node's `fs`,
+ * the Android app over the phone's storage.
+ */
+export interface CoreApi {
   /** The folder open when the app was last used, if it still exists. */
   getLastFolder(): Promise<string | null>;
   /** Scans a folder recursively for Markdown files and remembers it as the last folder. */
@@ -166,38 +169,6 @@ export interface MdeditApi {
   renameNode(path: string, newName: string): Promise<string>;
   /** Moves to the Recycle Bin. */
   trashNode(path: string): Promise<void>;
-  /** Shows the item in File Explorer. */
-  reveal(path: string): void;
-
-  /** The book's saved details, or fresh defaults if none exist yet. */
-  getBookDetails(file: string): Promise<{ details: BookDetails; exists: boolean; damaged: boolean }>;
-  saveBookDetails(file: string, details: BookDetails): Promise<void>;
-  /** Marks/unmarks a file for export (creates or updates its export-settings file). */
-  setMarked(file: string, marked: boolean): Promise<{ backedUp: boolean }>;
-  /** Attaches an orphaned export-settings file to a manuscript in the same folder. */
-  relinkSidecar(sidecar: string, markdownFile: string): Promise<void>;
-  /** Font families installed on this computer (empty if the OS can't list them). */
-  listInstalledFonts(): Promise<string[]>;
-  /** The regular face of a bundled font as a data: URL, so the form can preview it. */
-  bundledFontPreview(family: string): Promise<string | null>;
-  /** Native image picker for the EPUB cover. */
-  pickCoverImage(): Promise<string | null>;
-
-  /** Where an export would write. Pass the dialog's current (unsaved) details to preview them. */
-  planExport(file: string, details?: BookDetails): Promise<ExportPlan>;
-  /** Builds the enabled outputs from the book's saved details and the manuscript as saved on disk. */
-  runExport(file: string): Promise<ExportResult>;
-  cancelExport(): void;
-  onExportProgress(cb: (p: ExportProgress) => void): () => void;
-  /** Show / open a file the last export produced. */
-  revealOutput(path: string): void;
-  openOutput(path: string): Promise<string>;
-
-  /** Markdown files given on the command line (double-click / "Open with"); each is returned once. */
-  takeLaunchFiles(): Promise<string[]>;
-  /** Fires when another launch hands a file to this running instance. */
-  onLaunchFiles(cb: () => void): () => void;
-
   /** Chapter heading level and the template new books start from. */
   getAppDefaults(): Promise<AppDefaults>;
   /** Saves them (sanitised) and returns what was stored. */
@@ -243,6 +214,46 @@ export interface MdeditApi {
   confirmOverwrite(fileName: string): Promise<boolean>;
   confirmDelete(name: string, kind: 'file' | 'folder' | 'chapter', hasUnsaved: boolean): Promise<boolean>;
   confirmRecover(fileName: string): Promise<boolean>;
+}
+
+/** Export for KDP (EPUB, print PDF, DOCX) and the book details it needs. Desktop only. */
+export interface ExportApi {
+  /** The book's saved details, or fresh defaults if none exist yet. */
+  getBookDetails(file: string): Promise<{ details: BookDetails; exists: boolean; damaged: boolean }>;
+  saveBookDetails(file: string, details: BookDetails): Promise<void>;
+  /** Marks/unmarks a file for export (creates or updates its export-settings file). */
+  setMarked(file: string, marked: boolean): Promise<{ backedUp: boolean }>;
+  /** Attaches an orphaned export-settings file to a manuscript in the same folder. */
+  relinkSidecar(sidecar: string, markdownFile: string): Promise<void>;
+  /** Font families installed on this computer (empty if the OS can't list them). */
+  listInstalledFonts(): Promise<string[]>;
+  /** The regular face of a bundled font as a data: URL, so the form can preview it. */
+  bundledFontPreview(family: string): Promise<string | null>;
+  /** Native image picker for the EPUB cover. */
+  pickCoverImage(): Promise<string | null>;
+
+  /** Where an export would write. Pass the dialog's current (unsaved) details to preview them. */
+  planExport(file: string, details?: BookDetails): Promise<ExportPlan>;
+  /** Builds the enabled outputs from the book's saved details and the manuscript as saved on disk. */
+  runExport(file: string): Promise<ExportResult>;
+  cancelExport(): void;
+  onExportProgress(cb: (p: ExportProgress) => void): () => void;
+  /** Show / open a file the last export produced. */
+  revealOutput(path: string): void;
+  openOutput(path: string): Promise<string>;
+}
+
+/** Things that only make sense in the Windows app: its window and menu, the OS folder picker, Explorer, launch files. */
+export interface DesktopApi {
+  /** Shows the OS folder picker. Resolves to the chosen folder or null if cancelled. */
+  pickFolder(): Promise<string | null>;
+  /** Shows the item in File Explorer. */
+  reveal(path: string): void;
+
+  /** Markdown files given on the command line (double-click / "Open with"); each is returned once. */
+  takeLaunchFiles(): Promise<string[]>;
+  /** Fires when another launch hands a file to this running instance. */
+  onLaunchFiles(cb: () => void): () => void;
 
   /** Tells the main process which files have unsaved edits so closing the window can ask first. */
   setDirtyFiles(fileNames: string[]): void;
@@ -260,6 +271,84 @@ export interface MdeditApi {
   /** Native menu item clicked. Returns an unsubscribe function. */
   onMenuAction(cb: (action: MenuAction) => void): () => void;
 }
+
+export interface SyncSummary {
+  uploaded: number;
+  downloaded: number;
+  deleted: number;
+  /** Conflict copies made (prose changed on two devices). */
+  conflicts: string[];
+  /** Files left alone, with the reason. */
+  skipped: { path: string; reason: string }[];
+  errors: { path: string; message: string }[];
+  /** A new `MDEdit` folder was made in Drive because none was visible to this app. */
+  rootCreated: boolean;
+  /** How long the pass took. */
+  durationMs: number;
+}
+
+export interface SyncStatus {
+  /** Signed in to Google Drive and syncing. */
+  connected: boolean;
+  state: 'off' | 'idle' | 'syncing' | 'error' | 'confirm';
+  lastSyncAt: number | null;
+  /** A short human message for `error` (and sign-in problems). */
+  message: string | null;
+  summary: SyncSummary | null;
+  /** Files a pass wanted to delete but held back for the user's go-ahead (`state: 'confirm'`). */
+  pendingDeletes: string[];
+  /** Goes up when files on this device changed (at most every few seconds during a long pass), so the UI knows to refresh. */
+  localChanges: number;
+  /** While syncing: how many of this pass's changes are done. */
+  progress: { done: number; total: number } | null;
+}
+
+/** Keeping the Root Folder in step with Google Drive. Desktop and phone get the same engine (docs/sync-rules.md). */
+export interface SyncApi {
+  getSyncStatus(): Promise<SyncStatus>;
+  /** Signs in to Google (the first time this shows Google's screens) and runs the first sync. */
+  connectSync(): Promise<SyncStatus>;
+  syncNow(): Promise<SyncStatus>;
+  /** Runs the deletes a pass held back. */
+  confirmDeletes(): Promise<SyncStatus>;
+  /** Stops syncing and forgets this device's sync memory. Files stay where they are, here and in Drive. */
+  disconnectSync(): Promise<void>;
+  onSyncStatus(cb: (s: SyncStatus) => void): () => void;
+}
+
+/** Which optional parts of the app a platform provides, so the UI can leave out what is missing. */
+export interface Capabilities {
+  /** Export for KDP (`ExportApi`). */
+  export: boolean;
+  /** Custom title bar, in-window menu, window buttons and menu shortcuts. */
+  windowChrome: boolean;
+  /** Choosing any folder as the workspace, and showing items in the file manager. */
+  folderPicker: boolean;
+  /** Opening files handed over by double-click / "Open with". */
+  launchFiles: boolean;
+  /** Installed-font listing for exports. */
+  fonts: boolean;
+  /** Google Drive sync (`SyncApi`). */
+  sync: boolean;
+}
+
+export const DESKTOP_CAPABILITIES: Capabilities = { export: true, windowChrome: true, folderPicker: true, launchFiles: true, fonts: true, sync: true };
+/** The phone: the editor and projects, nothing desktop-specific. */
+export const MOBILE_CAPABILITIES: Capabilities = { export: false, windowChrome: false, folderPicker: false, launchFiles: false, fonts: false, sync: true };
+
+/**
+ * What `Workspace` (the editor's state and logic) needs: the core, plus a few desktop extras it uses when present
+ * (the close guard, launch files, the folder picker, Explorer, export markers). On the phone they are simply absent.
+ */
+export type WorkspaceApi = CoreApi &
+  Partial<Pick<DesktopApi, 'setDirtyFiles' | 'takeLaunchFiles' | 'pickFolder' | 'reveal'>> &
+  Partial<Pick<ExportApi, 'setMarked' | 'relinkSidecar'>>;
+
+/**
+ * The full surface the renderer talks to. On the phone the `ExportApi` / `DesktopApi` parts are inert stubs and the
+ * UI checks `capabilities` before showing anything that needs them.
+ */
+export type MdeditApi = CoreApi & ExportApi & DesktopApi & SyncApi & { capabilities: Capabilities };
 
 declare global {
   interface Window {

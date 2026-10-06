@@ -499,3 +499,53 @@ code.path { background: var(--raised); padding: 1px 6px; border-radius: 6px; }
 .ms-badge { display: inline-flex; color: var(--gold); flex: none; }
 .card-ms { color: var(--muted); font-size: 12px; margin-top: -4px; }
 .ms-name { color: var(--gold); font-weight: 600; }
+
+/* ---- phone layout: used when the platform has no window chrome (Android) ---- */
+.frame.mobile { height: 100dvh; position: relative; }
+.mobilebar { display: flex; align-items: center; gap: 6px; flex: none; padding: max(6px, env(safe-area-inset-top)) 8px 6px; background: var(--shell); }
+.mobilebar .tb-logo { margin: 0 6px 0 4px; }
+.mobilebar .mb-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; font-size: 15px; }
+.mb-btn { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; padding: 0 10px; background: transparent; color: var(--fg); border-radius: 12px; }
+.mb-btn.text { font-size: 14px; }
+.mb-btn.primary:not(:disabled) { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.mb-btn:disabled { opacity: 0.4; }
+
+.frame.mobile .app { display: block !important; position: relative; overflow: hidden; }
+.frame.mobile .splitter { display: none; }
+.frame.mobile .content { margin: 0; height: 100%; border-radius: 0; box-shadow: none; }
+.frame.mobile .sidebar { position: absolute; z-index: 30; top: 0; bottom: 0; left: 0; width: min(88vw, 380px); padding-top: 8px; background: var(--panel); box-shadow: var(--shadow-pop); transform: translateX(-104%); transition: transform 0.18s ease-out; visibility: hidden; }
+.frame.mobile.drawer-open .sidebar { transform: none; visibility: visible; }
+.drawer-backdrop { position: absolute; inset: 0; z-index: 20; background: rgba(0, 0, 0, 0.45); }
+.frame.mobile .toolbar button, .frame.mobile .modal-actions button { min-height: 40px; }
+.frame.mobile .filter { min-height: 40px; }
+.frame.mobile .tabs { padding-top: 6px; }
+.frame.mobile .statusbar { flex-wrap: wrap; gap: 4px 14px; padding: 4px 12px max(6px, env(safe-area-inset-bottom)); }
+.frame.mobile .modal { width: min(92vw, 420px); }
+.frame.mobile .app-home { padding-bottom: env(safe-area-inset-bottom); }
+.frame.mobile .home-head { flex-direction: column; align-items: stretch; gap: 10px; }
+.frame.mobile .editor-head { padding: 8px 0 6px; }
+.frame.mobile .pane { padding: 0 8px 24px; }
+.frame.mobile .pane-top { margin: 0 -8px; padding: 0 12px; }
+.frame.mobile .head-actions .save-btn { display: none; } /* the top bar has Save */
+.frame.mobile .head-actions button { padding: 8px 10px; }
+.frame.mobile .editor-head h2 { font-size: 17px; }
+.frame.mobile .editor .milkdown .ProseMirror { padding: 24px 16px 40px; }
+.frame.mobile .editor-head { flex-wrap: wrap; row-gap: 4px; }
+.frame.mobile .head-actions { flex-wrap: wrap; }
+
+/* ---- Google Drive sync ---- */
+.sync-btn { position: relative; }
+.sync-btn.s-error, .sync-btn.s-confirm { color: var(--danger); }
+.sync-btn .sync-dot { position: absolute; top: 8px; right: 8px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+.sync-btn.s-syncing .sync-dot { animation: sync-pulse 1s ease-in-out infinite; }
+.sync-btn.s-error .sync-dot, .sync-btn.s-confirm .sync-dot { background: var(--danger); }
+@keyframes sync-pulse { 50% { opacity: 0.25; } }
+.sync-dialog { max-height: 86dvh; overflow-y: auto; }
+.sync-line { margin: 0 0 8px; font-weight: 600; }
+.sync-line.s-error { color: var(--danger); }
+.sync-block { margin: 12px 0; padding: 10px 12px; background: var(--raised); border-radius: 12px; }
+.sync-list { margin: 6px 0 0; padding-left: 18px; font-size: 13px; overflow-wrap: anywhere; }
+.sync-banner { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 8px 16px 0; }
+
+.sb-sync.s-error, .sb-sync.s-confirm { color: var(--danger); }
+.sb-sync.s-syncing { opacity: 0.75; }

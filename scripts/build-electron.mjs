@@ -1,0 +1,22 @@
+// Bundles the Electron main process and preload (what `esbuild ... ` did in package.json), and bakes in the Google Desktop
+// OAuth client secret from the environment so it never lives in the repository. Without it the app still builds; Google
+// sign-in then says it isn't set up in this build.
+import { build } from 'esbuild';
+import { rmSync } from 'node:fs';
+
+rmSync('dist-electron', { recursive: true, force: true });
+
+await build({
+  entryPoints: ['electron/main.ts', 'electron/preload.ts'],
+  bundle: true,
+  platform: 'node',
+  target: 'node20',
+  format: 'cjs',
+  external: ['electron'],
+  outdir: 'dist-electron/electron',
+  sourcemap: true,
+  define: { 'process.env.MDEDIT_GOOGLE_CLIENT_SECRET_BUILD': JSON.stringify(process.env.MDEDIT_GOOGLE_CLIENT_SECRET ?? '') },
+  logLevel: 'info',
+});
+
+if (!process.env.MDEDIT_GOOGLE_CLIENT_SECRET) console.warn('Note: MDEDIT_GOOGLE_CLIENT_SECRET is not set, so Google Drive sync is not configured in this build.');

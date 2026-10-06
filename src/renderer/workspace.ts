@@ -1,4 +1,4 @@
-import type { DirNode, DraftRecord, EditorMode, FileStamp, MdeditApi, Session } from '../shared/api';
+import type { DirNode, DraftRecord, EditorMode, FileStamp, Session, WorkspaceApi } from '../shared/api';
 import {
   chapterBody,
   clampLevel,
@@ -125,7 +125,7 @@ export class Workspace {
   private readonly sessionDelay: number;
 
   constructor(
-    private readonly api: MdeditApi,
+    private readonly api: WorkspaceApi,
     opts: WorkspaceOptions = {}
   ) {
     this.draftDelay = opts.draftDelayMs ?? 1000;
@@ -152,7 +152,7 @@ export class Workspace {
     const key = dirty.join('\u0000');
     if (key !== this.lastDirty) {
       this.lastDirty = key;
-      this.api.setDirtyFiles(dirty);
+      this.api.setDirtyFiles?.(dirty);
     }
     this.scheduleSession();
   }
@@ -426,7 +426,7 @@ export class Workspace {
   async openLaunchFiles(): Promise<void> {
     let files: string[];
     try {
-      files = await this.api.takeLaunchFiles();
+      files = (await this.api.takeLaunchFiles?.()) ?? [];
     } catch {
       return;
     }
@@ -436,7 +436,7 @@ export class Workspace {
   async openFolder(): Promise<void> {
     if (!(await this.resolveDirtyTabs())) return;
     try {
-      const folder = await this.api.pickFolder();
+      const folder = (await this.api.pickFolder?.()) ?? null;
       if (folder) await this.openPath(folder, true);
     } catch (e) {
       this.set({ error: String(e) });
@@ -856,6 +856,7 @@ export class Workspace {
 
   /** Marks/unmarks a file for export. The tree is refreshed so its badge appears. */
   async setMarked(file: string, marked: boolean): Promise<boolean> {
+    if (!this.api.setMarked) return false;
     try {
       const { backedUp } = await this.api.setMarked(file, marked);
       await this.refresh();
@@ -878,6 +879,7 @@ export class Workspace {
   }
 
   async relinkSidecar(sidecar: string, markdownFile: string): Promise<boolean> {
+    if (!this.api.relinkSidecar) return false;
     try {
       await this.api.relinkSidecar(sidecar, markdownFile);
       await this.refresh();
@@ -956,7 +958,7 @@ export class Workspace {
   }
 
   reveal(path: string): void {
-    this.api.reveal(path);
+    this.api.reveal?.(path);
   }
 
   // ---- chapter structure ----------------------------------------------------------------
