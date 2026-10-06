@@ -1,6 +1,7 @@
 import { relativeTo } from '../shared/projects';
 import { dirname } from '../shared/paths';
 import { beforeEach, describe, expect, it } from 'vitest';
+import type { WorkspaceApi } from '../shared/api';
 import { FakeApi } from './testing/fakeApi';
 import { Workspace } from './workspace';
 
@@ -1041,5 +1042,33 @@ describe('projects in the workspace', () => {
     expect(state().project?.meta.activeManuscript).toBe(relativeTo(PROJ, dirname(B) + '/Renamed.md'));
     expect(await ws.setActiveManuscript(null)).toBe(true);
     expect(state().project?.meta.activeManuscript).toBeNull();
+  });
+});
+
+describe('a core-only API (the phone)', () => {
+  /** FakeApi with every desktop-only method removed, as the Android app provides it. */
+  const phoneApi = (fake: FakeApi): WorkspaceApi => {
+    const desktopOnly = new Set(['setDirtyFiles', 'takeLaunchFiles', 'pickFolder', 'reveal', 'setMarked', 'relinkSidecar']);
+    return new Proxy(fake, { get: (target, prop, recv) => (desktopOnly.has(String(prop)) ? undefined : Reflect.get(target, prop, recv)) }) as unknown as WorkspaceApi;
+  };
+
+  it('opens, edits and saves without any desktop method', async () => {
+    const phone = new Workspace(phoneApi(api), { draftDelayMs: 5, sessionDelayMs: 5 });
+    await phone.openPath(ROOT);
+    await phone.openChapter(A, 0);
+    const tab = phone.getState().tabs[0];
+    phone.setDraft(tab.id, '# One\nEDITED ON THE PHONE');
+    expect(await phone.save()).toBe(true);
+    expect(api.files.get(A)!.text).toContain('EDITED ON THE PHONE');
+  });
+
+  it('treats the missing desktop calls as "not available" instead of throwing', async () => {
+    const phone = new Workspace(phoneApi(api), { draftDelayMs: 5, sessionDelayMs: 5 });
+    await phone.openPath(ROOT);
+    await expect(phone.openLaunchFiles()).resolves.toBeUndefined();
+    await expect(phone.openFolder()).resolves.toBeUndefined();
+    expect(await phone.setMarked(A, true)).toBe(false);
+    expect(await phone.relinkSidecar('x.export.json', A)).toBe(false);
+    expect(() => phone.reveal(A)).not.toThrow();
   });
 });

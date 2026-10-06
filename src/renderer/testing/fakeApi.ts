@@ -3,21 +3,23 @@ import { emptyProgress, recordSnapshot, type Progress } from '../../shared/progr
 import { bookFromDefaults, defaultAppDefaults, type AppDefaults } from '../../shared/appDefaults';
 import type { BookDetails } from '../../shared/export/model';
 import { defaultBookDetails } from '../../shared/export/model';
-import type {
-  DirNode,
-  DraftRecord,
-  FileStamp,
-  MdeditApi,
-  MenuAction,
-  Prefs,
-  Session,
-  TreeNode,
-  UnsavedChoice
+import {
+  DESKTOP_CAPABILITIES,
+  type DirNode,
+  type DraftRecord,
+  type FileStamp,
+  type MdeditApi,
+  type MenuAction,
+  type Prefs,
+  type Session,
+  type TreeNode,
+  type UnsavedChoice
 } from '../../shared/api';
 import { basename, dirname, isInside } from '../../shared/paths';
 
 /** In-memory stand-in for the Electron bridge, with scripted dialog answers. */
 export class FakeApi implements MdeditApi {
+  capabilities = DESKTOP_CAPABILITIES;
   files = new Map<string, { text: string; mtime: number }>();
   /** Folders that exist on disk (like a real file system, they survive deleting their files). */
   dirs = new Set<string>();

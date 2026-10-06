@@ -1,7 +1,8 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { ExportProgress, MdeditApi, MenuAction, WindowInfo } from '../src/shared/api';
+import { DESKTOP_CAPABILITIES, type ExportProgress, type MdeditApi, type MenuAction, type WindowInfo } from '../src/shared/api';
 
 const api: MdeditApi = {
+  capabilities: DESKTOP_CAPABILITIES,
   pickFolder: () => ipcRenderer.invoke('dialog:pickFolder'),
   getLastFolder: () => ipcRenderer.invoke('settings:getLastFolder'),
   scanFolder: (root) => ipcRenderer.invoke('fs:scanFolder', root),
