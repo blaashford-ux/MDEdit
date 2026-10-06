@@ -271,6 +271,42 @@ export interface DesktopApi {
   onMenuAction(cb: (action: MenuAction) => void): () => void;
 }
 
+export interface SyncSummary {
+  uploaded: number;
+  downloaded: number;
+  deleted: number;
+  /** Conflict copies made (prose changed on two devices). */
+  conflicts: string[];
+  /** Files left alone, with the reason. */
+  skipped: { path: string; reason: string }[];
+  errors: { path: string; message: string }[];
+}
+
+export interface SyncStatus {
+  /** Signed in to Google Drive and syncing. */
+  connected: boolean;
+  state: 'off' | 'idle' | 'syncing' | 'error' | 'confirm';
+  lastSyncAt: number | null;
+  /** A short human message for `error` (and sign-in problems). */
+  message: string | null;
+  summary: SyncSummary | null;
+  /** Files a pass wanted to delete but held back for the user's go-ahead (`state: 'confirm'`). */
+  pendingDeletes: string[];
+}
+
+/** Keeping the Root Folder in step with Google Drive. Desktop and phone get the same engine (docs/sync-rules.md). */
+export interface SyncApi {
+  getSyncStatus(): Promise<SyncStatus>;
+  /** Signs in to Google (the first time this shows Google's screens) and runs the first sync. */
+  connectSync(): Promise<SyncStatus>;
+  syncNow(): Promise<SyncStatus>;
+  /** Runs the deletes a pass held back. */
+  confirmDeletes(): Promise<SyncStatus>;
+  /** Stops syncing and forgets this device's sync memory. Files stay where they are, here and in Drive. */
+  disconnectSync(): Promise<void>;
+  onSyncStatus(cb: (s: SyncStatus) => void): () => void;
+}
+
 /** Which optional parts of the app a platform provides, so the UI can leave out what is missing. */
 export interface Capabilities {
   /** Export for KDP (`ExportApi`). */
@@ -283,11 +319,13 @@ export interface Capabilities {
   launchFiles: boolean;
   /** Installed-font listing for exports. */
   fonts: boolean;
+  /** Google Drive sync (`SyncApi`). */
+  sync: boolean;
 }
 
-export const DESKTOP_CAPABILITIES: Capabilities = { export: true, windowChrome: true, folderPicker: true, launchFiles: true, fonts: true };
+export const DESKTOP_CAPABILITIES: Capabilities = { export: true, windowChrome: true, folderPicker: true, launchFiles: true, fonts: true, sync: false };
 /** The phone: the editor and projects, nothing desktop-specific. */
-export const MOBILE_CAPABILITIES: Capabilities = { export: false, windowChrome: false, folderPicker: false, launchFiles: false, fonts: false };
+export const MOBILE_CAPABILITIES: Capabilities = { export: false, windowChrome: false, folderPicker: false, launchFiles: false, fonts: false, sync: true };
 
 /**
  * What `Workspace` (the editor's state and logic) needs: the core, plus a few desktop extras it uses when present
@@ -301,7 +339,7 @@ export type WorkspaceApi = CoreApi &
  * The full surface the renderer talks to. On the phone the `ExportApi` / `DesktopApi` parts are inert stubs and the
  * UI checks `capabilities` before showing anything that needs them.
  */
-export type MdeditApi = CoreApi & ExportApi & DesktopApi & { capabilities: Capabilities };
+export type MdeditApi = CoreApi & ExportApi & DesktopApi & SyncApi & { capabilities: Capabilities };
 
 declare global {
   interface Window {

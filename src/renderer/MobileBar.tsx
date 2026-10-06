@@ -11,10 +11,12 @@ interface Props {
   onHome?(): void;
   onSave(): void;
   canSave: boolean;
+  /** The Google Drive button (absent where sync isn't available). */
+  sync?: { state: 'off' | 'idle' | 'syncing' | 'error' | 'confirm'; onOpen(): void };
 }
 
 /** The phone's top bar: file list, the open chapter, and Save (there are no menus or window buttons). */
-export function MobileBar({ title, dirty, showFiles, onFiles, onHome, onSave, canSave }: Props) {
+export function MobileBar({ title, dirty, showFiles, onFiles, onHome, onSave, canSave, sync }: Props) {
   return (
     <header className="mobilebar">
       {showFiles ? (
@@ -28,6 +30,15 @@ export function MobileBar({ title, dirty, showFiles, onFiles, onHome, onSave, ca
         {showFiles ? title : 'MDEdit'}
         {dirty && <span className="dirty" aria-label="unsaved changes"> ●</span>}
       </div>
+      {sync && (
+        <button type="button" className={`mb-btn sync-btn s-${sync.state}`} aria-label={`Google Drive sync: ${sync.state === 'off' ? 'not connected' : sync.state}`} onClick={sync.onOpen}>
+          <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M7 18a4 4 0 0 1-.6-7.96A6 6 0 0 1 18 9.5a4.25 4.25 0 0 1-.5 8.5H7Z" />
+            {sync.state === 'off' && <path d="m4 4 16 16" />}
+          </svg>
+          {sync.state !== 'off' && sync.state !== 'idle' && <span className="sync-dot" aria-hidden />}
+        </button>
+      )}
       {onHome && (
         <button type="button" className="mb-btn text" onClick={onHome}>
           Projects

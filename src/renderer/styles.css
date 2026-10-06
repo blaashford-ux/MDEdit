@@ -532,3 +532,17 @@ code.path { background: var(--raised); padding: 1px 6px; border-radius: 6px; }
 .frame.mobile .editor .milkdown .ProseMirror { padding: 24px 16px 40px; }
 .frame.mobile .editor-head { flex-wrap: wrap; row-gap: 4px; }
 .frame.mobile .head-actions { flex-wrap: wrap; }
+
+/* ---- Google Drive sync ---- */
+.sync-btn { position: relative; }
+.sync-btn.s-error, .sync-btn.s-confirm { color: var(--danger); }
+.sync-btn .sync-dot { position: absolute; top: 8px; right: 8px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+.sync-btn.s-syncing .sync-dot { animation: sync-pulse 1s ease-in-out infinite; }
+.sync-btn.s-error .sync-dot, .sync-btn.s-confirm .sync-dot { background: var(--danger); }
+@keyframes sync-pulse { 50% { opacity: 0.25; } }
+.sync-dialog { max-height: 86dvh; overflow-y: auto; }
+.sync-line { margin: 0 0 8px; font-weight: 600; }
+.sync-line.s-error { color: var(--danger); }
+.sync-block { margin: 12px 0; padding: 10px 12px; background: var(--raised); border-radius: 12px; }
+.sync-list { margin: 6px 0 0; padding-left: 18px; font-size: 13px; overflow-wrap: anywhere; }
+.sync-banner { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 8px 16px 0; }

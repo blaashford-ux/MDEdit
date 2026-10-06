@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { MenuAction } from '../shared/api';
+import type { MenuAction, SyncStatus } from '../shared/api';
 import { basename, dirname, validateName } from '../shared/paths';
 import { collectFiles, collectOrphans, findNode } from '../shared/tree';
 import { countWords } from '../shared/words';
@@ -26,6 +26,7 @@ import type { SceneNav } from './sceneNav';
 import { SourceEditor } from './SourceEditor';
 import { StatusBar } from './StatusBar';
 import { MobileBar } from './MobileBar';
+import { SyncDialog } from './SyncDialog';
 import { TitleBar } from './TitleBar';
 import { Tabs } from './Tabs';
 import { Tree } from './Tree';
@@ -69,6 +70,8 @@ export function App() {
   const [showProgress, setShowProgress] = useState(false);
   const [welcome, setWelcome] = useState<{ lastFolder: string | null } | null>(null);
   const [started, setStarted] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
+  const [showSync, setShowSync] = useState(false);
 
   const activeTab = s.tabs.find((t) => t.id === s.activeId);
   const activeDoc = activeTab ? s.docs.get(activeTab.file) : undefined;
@@ -125,6 +128,14 @@ export function App() {
     };
   }, [ws]);
 
+  // Google Drive sync status (phone): the button's state, and a refresh whenever a sync changed local files.
+  useEffect(() => {
+    if (!caps.sync) return;
+    void window.mdedit.getSyncStatus().then(setSyncStatus);
+    const stop = window.mdedit.onSyncStatus(setSyncStatus);
+    return stop;
+  }, [caps.sync]);
+
   // Notice edits made outside the app (Dropbox sync, another editor, git checkout...).
   useEffect(() => {
     const check = () => void ws.checkAllOpenFiles();
@@ -157,6 +168,15 @@ export function App() {
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
   }, [atHome, showQuick, showNewProject, reloadListing]);
+  // A sync that changed files: refresh the tree (open files reload through the usual external-change check) and the project list.
+  useEffect(() => {
+    const onSynced = () => {
+      void ws.refresh();
+      void reloadListing();
+    };
+    window.addEventListener('mdedit:synced', onSynced);
+    return () => window.removeEventListener('mdedit:synced', onSynced);
+  }, [ws, reloadListing]);
   // The switcher in the sidebar needs the list too.
   useEffect(() => {
     if (s.project) void reloadListing();
@@ -593,13 +613,27 @@ export function App() {
     {caps.windowChrome ? (
       <TitleBar title={titleText} dirty={activeDirty} />
     ) : (
-      <MobileBar title={titleText} dirty={activeDirty} showFiles={!!s.root} onFiles={() => setDrawer((d) => !d)} onHome={s.root ? () => void goHome() : undefined} onSave={() => void ws.save()} canSave={activeDirty} />
+      <MobileBar
+        title={titleText}
+        dirty={activeDirty}
+        showFiles={!!s.root}
+        onFiles={() => setDrawer((d) => !d)}
+        onHome={s.root ? () => void goHome() : undefined}
+        onSave={() => void ws.save()}
+        canSave={activeDirty}
+        sync={caps.sync && syncStatus ? { state: syncStatus.state, onOpen: () => setShowSync(true) } : undefined}
+      />
     )}
     {!s.root ? (
       <div className="app-home">
         {s.error && (
           <div className="banner error" role="alert">
             {s.error} <button onClick={() => ws.setError(null)}>Dismiss</button>
+          </div>
+        )}
+        {caps.sync && syncStatus && !syncStatus.connected && started && !welcome && (
+          <div className="banner info sync-banner" role="status">
+            <span>Keep your projects in sync with Google Drive.</span> <button onClick={() => setShowSync(true)}>Set up sync</button>
           </div>
         )}
         {started && !welcome && <ProjectsHome {...homeProps} />}
@@ -888,6 +922,7 @@ export function App() {
       )}
     </div>
     )}
+    {showSync && syncStatus && <SyncDialog status={syncStatus} onClose={() => setShowSync(false)} />}
     {showSettings && <SettingsDialog
         onSave={async (d) => {
           const ok = await ws.applyAppDefaults(d);

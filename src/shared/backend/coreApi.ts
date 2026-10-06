@@ -42,6 +42,8 @@ export interface CoreBackend {
   load(): Promise<void>;
   /** Resolves once settings and drafts are on disk. */
   flush(): Promise<void>;
+  /** Moves a file or folder into the app's trash (what delete does), for sync to use when Drive removes something. */
+  trash(path: string): Promise<void>;
 }
 
 export function createCoreApi(o: CoreApiOptions): CoreBackend {
@@ -192,5 +194,5 @@ export function createCoreApi(o: CoreApiOptions): CoreBackend {
     confirmRecover: (n) => o.dialogs.confirmRecover(n),
   };
 
-  return { api, load: () => settings.load(), flush: () => settings.flush() };
+  return { api, load: () => settings.load(), flush: () => settings.flush(), trash };
 }
