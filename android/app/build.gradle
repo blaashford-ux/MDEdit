@@ -1,0 +1,75 @@
+apply plugin: 'com.android.application'
+
+// Version comes from the repo's package.json, so the APK and the Windows installer agree.
+def appVersion = new groovy.json.JsonSlurper().parse(file('../../package.json')).version
+def (major, minor, patch) = appVersion.tokenize('.').collect { it.replaceAll(/\D.*/, '').toInteger() }
+
+// Signing: CI passes the keystore through the environment. Without it the build is signed with Android's debug key.
+def keystorePath = System.getenv('MDEDIT_KEYSTORE')
+
+android {
+    namespace = "com.blaashford.mdedit"
+    compileSdk = rootProject.ext.compileSdkVersion
+    defaultConfig {
+        applicationId "com.blaashford.mdedit"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode System.getenv("MDEDIT_VERSION_CODE") ? System.getenv("MDEDIT_VERSION_CODE").toInteger() : major * 10000 + minor * 100 + patch
+        versionName appVersion
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    signingConfigs {
+        if (keystorePath) {
+            mdedit {
+                storeFile file(keystorePath)
+                storePassword System.getenv('MDEDIT_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('MDEDIT_KEY_ALIAS')
+                keyPassword System.getenv('MDEDIT_KEY_PASSWORD')
+            }
+        }
+    }
+    buildTypes {
+        debug {
+            if (keystorePath) signingConfig signingConfigs.mdedit
+        }
+        release {
+            if (keystorePath) signingConfig signingConfigs.mdedit
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+}
+
+apply from: 'capacitor.build.gradle'
+
+try {
+    def servicesJSON = file('google-services.json')
+    if (servicesJSON.text) {
+        apply plugin: 'com.google.gms.google-services'
+    }
+} catch(Exception e) {
+    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}

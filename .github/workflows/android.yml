@@ -1,0 +1,103 @@
+name: android
+
+on:
+  push:
+    branches: ['**']
+    paths: ['android/**', 'src/**', 'capacitor.config.ts', 'vite.mobile.config.ts', 'package.json', 'package-lock.json', '.github/workflows/android.yml']
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Also publish the APK as the "android-latest" pre-release (a direct download link for your phone)'
+        type: boolean
+        default: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+permissions:
+  contents: read
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # only used to publish the pre-release when asked
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 21 }
+      - uses: android-actions/setup-android@v3
+      - name: Android SDK platform and build tools
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+
+      - run: npm ci
+      - run: npm run typecheck
+      - name: Unit tests that need no desktop tooling
+        run: npx vitest run src
+      - name: Build the web bundle and sync it into the Android project
+        run: npm run android:sync
+
+      - name: Signing key
+        id: key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/mdedit.keystore"
+            {
+              echo "MDEDIT_KEYSTORE=$RUNNER_TEMP/mdedit.keystore"
+              echo "MDEDIT_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD"
+              echo "MDEDIT_KEY_ALIAS=$KEY_ALIAS"
+              echo "MDEDIT_KEY_PASSWORD=${KEY_PASSWORD:-$KEYSTORE_PASSWORD}"
+            } >> "$GITHUB_ENV"
+            echo "task=assembleRelease" >> "$GITHUB_OUTPUT"
+            echo "apk=android/app/build/outputs/apk/release/app-release.apk" >> "$GITHUB_OUTPUT"
+            echo "mode=your keystore (from the repository secrets)" >> "$GITHUB_OUTPUT"
+            keytool -list -v -keystore "$RUNNER_TEMP/mdedit.keystore" -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" 2>/dev/null | grep -E 'SHA1|SHA-1' | head -1 | sed 's/^ *//' > "$RUNNER_TEMP/sha1.txt" || echo "SHA1: (could not read the keystore; check the secrets)" > "$RUNNER_TEMP/sha1.txt"
+          else
+            # No secrets: Android's debug key, created fresh on this runner. It changes on every run, so Google sign-in
+            # will not work with it. Add the four ANDROID_KEYSTORE_* secrets for a stable key.
+            keytool -genkeypair -keystore "$HOME/.android/debug.keystore" -storepass android -keypass android -alias androiddebugkey -dname "CN=Android Debug,O=Android,C=US" -keyalg RSA -keysize 2048 -validity 10000 2>/dev/null || true
+            echo "task=assembleDebug" >> "$GITHUB_OUTPUT"
+            echo "apk=android/app/build/outputs/apk/debug/app-debug.apk" >> "$GITHUB_OUTPUT"
+            echo "mode=a temporary debug key (no keystore secrets set)" >> "$GITHUB_OUTPUT"
+            keytool -list -v -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey 2>/dev/null | grep -E 'SHA1|SHA-1' | head -1 | sed 's/^ *//' > "$RUNNER_TEMP/sha1.txt" || true
+          fi
+
+      - name: Build the APK
+        working-directory: android
+        run: ./gradlew ${{ steps.key.outputs.task }} --no-daemon --stacktrace
+
+      - name: Report
+        run: |
+          APK="${{ steps.key.outputs.apk }}"
+          ls -l "$APK"
+          {
+            echo "### MDEdit Android build"
+            echo "- Signed with: ${{ steps.key.outputs.mode }}"
+            echo "- Certificate $(cat "$RUNNER_TEMP/sha1.txt")"
+            echo "- Registered with Google for sign-in should be: \`EF:45:1A:10:EA:9B:61:87:93:99:68:51:86:E6:4E:2B:D4:89:44:EB\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+          cp "$APK" MDEdit-android.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MDEdit-android-apk
+          path: MDEdit-android.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish the "android-latest" pre-release
+        if: github.event_name == 'workflow_dispatch' && inputs.publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete android-latest --yes --cleanup-tag 2>/dev/null || true
+          gh release create android-latest MDEdit-android.apk --prerelease --target "$GITHUB_SHA" \
+            --title "MDEdit Android (latest build)" \
+            --notes "Debug/test build of the Android app from commit $GITHUB_SHA. Install by opening this file on your phone and allowing installs from your browser."
