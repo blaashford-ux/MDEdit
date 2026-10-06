@@ -9,6 +9,7 @@ const dialogs = {
   confirmOverwrite: async () => true,
   confirmDelete: async () => true,
   confirmRecover: async () => true,
+  confirmMarkEdited: async () => false,
 };
 
 let fs: MemoryFs;

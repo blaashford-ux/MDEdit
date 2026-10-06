@@ -1072,3 +1072,85 @@ describe('a core-only API (the phone)', () => {
     expect(() => phone.reveal(A)).not.toThrow();
   });
 });
+
+describe('edited chapters (Editing stage)', () => {
+  const PROJ = ROOT;
+  const edited = () => state().project!.meta.editedChapters;
+  const openEditing = async (patch: Record<string, unknown> = { status: 'editing' }) => {
+    api.addProject(PROJ, patch as never);
+    await ws.openPath(PROJ);
+  };
+  const saveChapter = async (file: string, md: string) => {
+    ws.setDraft(tabOf(file).id, md);
+    await ws.save(tabOf(file).id);
+  };
+
+  it('leaving a saved chapter offers to mark it; yes marks it and it is kept in the project', async () => {
+    await openEditing();
+    await ws.openChapter(A, 0);
+    await saveChapter(A, '# One\nfirst, polished');
+    api.markEditedAnswers = [true];
+    await ws.openChapter(A, 1);
+    expect(api.markEditedAsked).toEqual(['One']);
+    expect(edited()).toEqual({ 'a.md': ['One'] });
+    expect(ws.isChapterEdited(A, 0)).toBe(true);
+    expect(api.projectMetas.get(PROJ)!.editedChapters).toEqual({ 'a.md': ['One'] });
+  });
+
+  it('no means not marked, and a chapter already marked is not asked about again', async () => {
+    await openEditing();
+    await ws.openChapter(A, 0);
+    await saveChapter(A, '# One\nx');
+    await ws.openChapter(A, 1); // default answer: no
+    expect(edited()).toEqual({});
+    await ws.setChapterEdited(A, 0, true);
+    await ws.openChapter(A, 0);
+    await saveChapter(A, '# One\ny');
+    await ws.openChapter(A, 2);
+    expect(api.markEditedAsked).toEqual(['One']);
+  });
+
+  it('only chapters you saved are offered, and only in the Editing stage', async () => {
+    await openEditing();
+    await ws.openChapter(A, 0);
+    await ws.openChapter(A, 1); // just browsing
+    expect(api.markEditedAsked).toEqual([]);
+    await ws.closeProject();
+    await openEditing({ status: 'drafting' });
+    await ws.openChapter(A, 0);
+    await saveChapter(A, '# One\nz');
+    await ws.openChapter(A, 1);
+    expect(api.markEditedAsked).toEqual([]);
+  });
+
+  it('closing a saved chapter’s tab offers too', async () => {
+    await openEditing();
+    await ws.openChapter(A, 1);
+    await saveChapter(A, '# Two\nbetter');
+    api.markEditedAnswers = [true];
+    await ws.closeTab(tabOf(A).id);
+    expect(edited()).toEqual({ 'a.md': ['Two'] });
+  });
+
+  it('marks stay with a chapter that moves, is retitled, or whose file is renamed, and survive a status change', async () => {
+    await openEditing();
+    await ws.openChapter(A, 1);
+    await ws.setChapterEdited(A, 1, true); // "Two"
+    await ws.moveChapter(A, 1, -1);
+    expect(ws.isChapterEdited(A, 0)).toBe(true);
+    await ws.openChapter(A, 0);
+    await saveChapter(A, '# Second\nsecond');
+    expect(edited()).toEqual({ 'a.md': ['Second'] });
+    await ws.renameNode(A, 'renamed.md');
+    expect(edited()).toEqual({ 'renamed.md': ['Second'] });
+    await ws.updateProjectMeta({ ...state().project!.meta, status: 'drafting' });
+    expect(edited()).toEqual({ 'renamed.md': ['Second'] });
+  });
+
+  it('Unmark Edited removes the mark', async () => {
+    await openEditing();
+    await ws.setChapterEdited(A, 2, true);
+    await ws.setChapterEdited(A, 2, false);
+    expect(edited()).toEqual({});
+  });
+});

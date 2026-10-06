@@ -141,7 +141,7 @@ export interface DraftRecord {
 }
 
 /** Fields of a project's metadata that can be changed after it is created. */
-export type ProjectPatch = Partial<Pick<ProjectMeta, 'status' | 'notes' | 'archived' | 'goal' | 'activeManuscript' | 'manuscriptGoals' | 'excludedFolders'>> & {
+export type ProjectPatch = Partial<Pick<ProjectMeta, 'status' | 'notes' | 'archived' | 'goal' | 'activeManuscript' | 'manuscriptGoals' | 'excludedFolders' | 'editedChapters'>> & {
   overrides?: Partial<ProjectMeta['overrides']>;
 };
 
@@ -215,6 +215,8 @@ export interface CoreApi {
   confirmOverwrite(fileName: string): Promise<boolean>;
   confirmDelete(name: string, kind: 'file' | 'folder' | 'chapter', hasUnsaved: boolean): Promise<boolean>;
   confirmRecover(fileName: string): Promise<boolean>;
+  /** Editing stage: asks whether the chapter just left should be marked as edited. */
+  confirmMarkEdited(chapterTitle: string): Promise<boolean>;
 }
 
 /** Export for KDP (EPUB, print PDF, DOCX) and the book details it needs. Desktop only. */

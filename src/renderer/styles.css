@@ -562,3 +562,7 @@ code.path { background: var(--raised); padding: 1px 6px; border-radius: 6px; }
 .frame.mobile .line-gutter { width: 24px; font-size: 9.5px; }
 .frame.mobile .source-editor { padding-left: 30px; }
 .frame.mobile .editor .milkdown .ProseMirror { padding-left: 30px; }
+
+/* ---- Editing stage: a dot before each chapter (empty red = not yet edited, filled green = edited) ---- */
+.edit-dot { flex: none; box-sizing: border-box; width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid var(--danger); background: transparent; }
+.edit-dot.done { border-color: #3fb27f; background: #3fb27f; }

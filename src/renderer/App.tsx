@@ -93,8 +93,11 @@ export function App() {
   }, [caps.windowChrome, s.root, s.activeId]);
 
   const rows = useMemo(
-    () => (s.root ? buildRows(s.root, s.expanded, s.docs, filter) : []),
-    [s.root, s.expanded, s.docs, filter]
+    () =>
+      s.root
+        ? buildRows(s.root, s.expanded, s.docs, filter, s.project?.meta.status === 'editing' ? (file) => s.project!.meta.editedChapters[relativeTo(s.project!.path, file)] ?? [] : null)
+        : [],
+    [s.root, s.expanded, s.docs, filter, s.project]
   );
   const orphan = useMemo(
     () => (s.root ? collectOrphans(s.root).find((o) => !ignoredOrphans.has(o)) : undefined),
@@ -349,6 +352,13 @@ export function App() {
     const real = !doc?.chapters[i]?.isPreamble;
     return [
       { label: 'New Chapter Below…', onClick: () => promptNewChapter(row.path, i) },
+      ...(s.project
+        ? [
+            ws.isChapterEdited(row.path, i)
+              ? { label: 'Unmark Edited', onClick: () => void ws.setChapterEdited(row.path, i, false) }
+              : { label: 'Mark Edited', onClick: () => void ws.setChapterEdited(row.path, i, true) }
+          ]
+        : []),
       { label: 'Move Up', hint: 'Alt+↑', disabled: !real || i <= first, onClick: () => void moveRow(row, -1) },
       {
         label: 'Move Down',

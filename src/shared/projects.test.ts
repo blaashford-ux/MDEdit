@@ -198,3 +198,25 @@ describe('active manuscript', () => {
     expect(relativeTo('/r/P', '/r/P/a/b.md')).toBe('a/b.md');
   });
 });
+
+import { chapterIds, isChapterEdited, withChapterEdited } from './projects';
+
+describe('edited chapters', () => {
+  it('ids follow titles, telling repeated titles apart', () => {
+    expect(chapterIds([{ title: '' }, { title: 'One' }, { title: 'Two' }, { title: 'One' }])).toEqual(['', 'One', 'Two', 'One\u00012']);
+  });
+  it('marks and unmarks without touching the input, dropping empty files', () => {
+    const a = withChapterEdited({}, 'Book.md', 'One', true);
+    expect(a).toEqual({ 'Book.md': ['One'] });
+    expect(withChapterEdited(a, 'Book.md', 'One', true)).toEqual(a);
+    expect(withChapterEdited(a, 'Book.md', 'One', false)).toEqual({});
+    expect(a).toEqual({ 'Book.md': ['One'] });
+    expect(isChapterEdited({ editedChapters: a }, 'Book.md', 'One')).toBe(true);
+    expect(isChapterEdited({ editedChapters: a }, 'Book.md', 'Two')).toBe(false);
+  });
+  it('is sanitised and kept in the project metadata', () => {
+    const m = sanitizeProjectMeta({ editedChapters: { 'A/b.md': ['One', 'One', 5], '../x.md': ['Y'], 'C.md': 'no' } }, 'S', '2026-10-05');
+    expect(m.editedChapters).toEqual({ 'A/b.md': ['One'] });
+    expect(sanitizeProjectMeta({}, 'S', '2026-10-05').editedChapters).toEqual({});
+  });
+});

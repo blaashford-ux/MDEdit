@@ -46,6 +46,8 @@ export class FakeApi implements MdeditApi {
   overwriteAnswers: boolean[] = [];
   deleteAnswers: boolean[] = [];
   recoverAnswers: boolean[] = [];
+  markEditedAnswers: boolean[] = [];
+  markEditedAsked: string[] = [];
   unsavedAsked: string[] = [];
   pickResult: string | null = null;
   failTrash = false;
@@ -246,6 +248,10 @@ export class FakeApi implements MdeditApi {
   confirmOverwrite = async () => this.overwriteAnswers.shift() ?? true;
   confirmDelete = async () => this.deleteAnswers.shift() ?? true;
   confirmRecover = async () => this.recoverAnswers.shift() ?? true;
+  confirmMarkEdited = async (title: string) => {
+    this.markEditedAsked.push(title);
+    return this.markEditedAnswers.shift() ?? false;
+  };
 
   setDirtyFiles = (names: string[]) => void this.dirtyReports.push(names);
   onCloseRequested = () => () => undefined;

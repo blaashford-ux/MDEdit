@@ -15,7 +15,7 @@ import { sidecarPathFor } from '../src/shared/export/sidecar';
 import { promises as fsp } from 'node:fs';
 import { installMenu } from './menu';
 import { chromeOptions, registerWindowChrome, shellColor, watchWindow } from './windowChrome';
-import { confirmDelete, confirmOverwrite, confirmRecover, confirmUnsaved } from './prompts';
+import { confirmDelete, confirmMarkEdited, confirmOverwrite, confirmRecover, confirmUnsaved } from './prompts';
 import { scanFolder } from './scan';
 import { bundledFont } from '../src/shared/export/fonts';
 import { listInstalledFonts } from './fonts';
@@ -354,6 +354,7 @@ function registerIpc(): void {
     confirmDelete(winOf(e), name, kind, unsaved)
   );
   handle('dialog:confirmRecover', (e, name: string) => confirmRecover(winOf(e), name));
+  handle('dialog:confirmMarkEdited', (e, title: string) => confirmMarkEdited(winOf(e), title));
   // --- Google Drive sync ---
   handle('sync:status', async () => (await ensureSync()).getSyncStatus());
   handle('sync:connect', async () => (await ensureSync()).connectSync());
