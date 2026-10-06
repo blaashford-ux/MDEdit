@@ -566,3 +566,8 @@ code.path { background: var(--raised); padding: 1px 6px; border-radius: 6px; }
 /* ---- Editing stage: a dot before each chapter (empty red = not yet edited, filled green = edited) ---- */
 .edit-dot { flex: none; box-sizing: border-box; width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid var(--danger); background: transparent; }
 .edit-dot.done { border-color: #3fb27f; background: #3fb27f; }
+
+/* Project/template settings: the inherited app values are shown, but can't be changed until Override is ticked */
+.defaults-fields { border: 0; margin: 0; padding: 0; min-width: 0; }
+.defaults-fields.readonly { opacity: 0.6; }
+.defaults-fields.readonly input, .defaults-fields.readonly select, .defaults-fields.readonly textarea, .defaults-fields.readonly button { cursor: not-allowed; }
