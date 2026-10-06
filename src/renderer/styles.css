@@ -513,9 +513,10 @@ code.path { background: var(--raised); padding: 1px 6px; border-radius: 6px; }
 .frame.mobile .app { display: block !important; position: relative; overflow: hidden; }
 .frame.mobile .splitter { display: none; }
 .frame.mobile .content { margin: 0; height: 100%; border-radius: 0; box-shadow: none; }
-.frame.mobile .sidebar { position: absolute; z-index: 30; top: 0; bottom: 0; left: 0; width: min(88vw, 380px); padding-top: 8px; background: var(--panel); box-shadow: var(--shadow-pop); transform: translateX(-104%); transition: transform 0.18s ease-out; visibility: hidden; }
+/* above the sticky .pane-top (z-index 30), which otherwise paints over the drawer */
+.frame.mobile .sidebar { position: absolute; z-index: 36; top: 0; bottom: 0; left: 0; width: min(88vw, 380px); padding-top: 8px; background: var(--panel); box-shadow: var(--shadow-pop); transform: translateX(-104%); transition: transform 0.18s ease-out; visibility: hidden; }
 .frame.mobile.drawer-open .sidebar { transform: none; visibility: visible; }
-.drawer-backdrop { position: absolute; inset: 0; z-index: 20; background: rgba(0, 0, 0, 0.45); }
+.drawer-backdrop { position: absolute; inset: 0; z-index: 34; background: rgba(0, 0, 0, 0.45); }
 .frame.mobile .toolbar button, .frame.mobile .modal-actions button { min-height: 40px; }
 .frame.mobile .filter { min-height: 40px; }
 .frame.mobile .tabs { padding-top: 6px; }
