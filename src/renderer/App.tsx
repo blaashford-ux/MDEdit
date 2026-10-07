@@ -27,6 +27,8 @@ import { SourceEditor } from './SourceEditor';
 import { StatusBar } from './StatusBar';
 import { MobileBar } from './MobileBar';
 import { SyncDialog } from './SyncDialog';
+import { ReviewPanel } from './ReviewPanel';
+import { loadIdentity, saveIdentity, useReview } from './useReview';
 import { TitleBar } from './TitleBar';
 import { Tabs } from './Tabs';
 import { Tree } from './Tree';
@@ -76,6 +78,21 @@ export function App() {
   const activeTab = s.tabs.find((t) => t.id === s.activeId);
   const activeDoc = activeTab ? s.docs.get(activeTab.file) : undefined;
   const activeChapter = activeDoc?.chapters[activeTab?.chapter ?? 0];
+
+  // Comments and suggestions on the open file (stored per reviewer inside the project).
+  const [showReview, setShowReview] = useState(false);
+  const [me, setMe] = useState(loadIdentity);
+  const projectPath = s.project?.path ?? null;
+  const reviewFile = projectPath && activeTab ? activeTab.file.replace(/\\/g, '/').slice(projectPath.replace(/\\/g, '/').replace(/\/+$/, '').length + 1) : null;
+  const review = useReview(
+    window.mdedit,
+    projectPath,
+    reviewFile,
+    s.activeId ? navs.current.get(s.activeId)?.review : undefined,
+    me,
+    activeTab ? `${activeTab.id}@${activeTab.chapter}@${activeTab.reloadKey}@${navVersion}` : ''
+  );
+  const openNotes = review.items.filter((i) => i.status === 'open').length;
   const activeKey = activeTab ? chapterKey(activeTab.file, activeTab.chapter) : null;
   useEffect(() => setDrawer(false), [activeKey]);
   // On the phone, a project with nothing open starts with its file list showing.
@@ -809,6 +826,16 @@ export function App() {
                     <button aria-label="Next scene break" title="Next scene break (Ctrl+↓)" onClick={() => gotoScene(1)}>
                       <Icon name="down" /> Scene
                     </button>
+                    {tab.mode === 'visual' && projectPath && (
+                      <button
+                        aria-label="Comments and suggestions"
+                        aria-pressed={showReview}
+                        title="Comments and suggestions"
+                        onClick={() => setShowReview((v) => !v)}
+                      >
+                        Notes{openNotes > 0 ? ` (${openNotes})` : ''}
+                      </button>
+                    )}
                     <button
                       onClick={() => ws.setMode(tab.id, tab.mode === 'visual' ? 'source' : 'visual')}
                       title="Switch between formatted and raw Markdown (Ctrl+Shift+M)"
@@ -890,6 +917,19 @@ export function App() {
         )}
       </main>
 
+      {showReview && projectPath && activeTab?.mode === 'visual' && (
+        <ReviewPanel
+          state={review}
+          me={me}
+          role="owner"
+          onRename={(name) => {
+            const next = { ...me, name };
+            setMe(next);
+            saveIdentity(next);
+          }}
+          onClose={() => setShowReview(false)}
+        />
+      )}
       {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItems(menu.row)} onClose={() => setMenu(null)} />}
       {prompt && <PromptDialog spec={prompt} onClose={() => setPrompt(null)} />}
       {relink && (

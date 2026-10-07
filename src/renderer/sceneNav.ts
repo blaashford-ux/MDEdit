@@ -1,4 +1,5 @@
 import type { FindOptions, FindStatus } from '../shared/find';
+import type { ReviewApi } from './reviewPlugin';
 
 /** Which match to land on when a search is (re)run. */
 export type FindJump = 'caret' | 'first' | 'last' | 'keep';
@@ -26,4 +27,6 @@ export interface FindApi {
 export interface SceneNav {
   go(dir: 1 | -1): boolean;
   find: FindApi;
+  /** Comments and suggestions in this chapter. Only the formatted editor has it. */
+  review?: ReviewApi;
 }

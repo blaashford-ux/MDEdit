@@ -199,6 +199,10 @@ export interface CoreApi {
   /** Remembers which project is open (so it can be reopened at startup). */
   setLastProject(path: string | null): void;
 
+  /** Review files (comments and suggestions), one per reviewer, kept inside the project. */
+  listReviews(project: string): Promise<{ id: string; text: string }[]>;
+  saveReview(project: string, reviewerId: string, text: string): Promise<void>;
+
   getPrefs(): Promise<Prefs>;
   setPrefs(patch: Partial<Prefs>): void;
   getSession(folder: string): Promise<Session | null>;

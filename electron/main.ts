@@ -17,6 +17,8 @@ import { installMenu } from './menu';
 import { chromeOptions, registerWindowChrome, shellColor, watchWindow } from './windowChrome';
 import { confirmDelete, confirmOverwrite, confirmRecover, confirmUnsaved } from './prompts';
 import { scanFolder } from './scan';
+import { makeReviews } from '../src/shared/backend/reviews';
+import { nodeFs } from './nodeFs';
 import { bundledFont } from '../src/shared/export/fonts';
 import { listInstalledFonts } from './fonts';
 import { sanitizeAppDefaults, type AppDefaults } from '../src/shared/appDefaults';
@@ -172,6 +174,9 @@ function registerIpc(): void {
     return tree;
   });
   handle('fs:readFile', (_e, p: string) => readWithStamp(inRoot(p)));
+  const reviews = makeReviews(nodeFs);
+  handle('review:list', (_e, project: string) => reviews.list(inRoot(project, { allowRoot: true })));
+  handle('review:save', (_e, project: string, id: string, text: string) => reviews.save(inRoot(project, { allowRoot: true }), id, text));
   handle('fs:statFile', (_e, p: string) => statStamp(inRoot(p)));
   handle('fs:writeFile', (_e, p: string, content: string) => {
     const full = inRoot(p);

@@ -549,3 +549,39 @@ code.path { background: var(--raised); padding: 1px 6px; border-radius: 6px; }
 
 .sb-sync.s-error, .sb-sync.s-confirm { color: var(--danger); }
 .sb-sync.s-syncing { opacity: 0.75; }
+
+/* ---- comments and suggestions ---- */
+.review-mark { background: color-mix(in srgb, var(--gold) 28%, transparent); border-bottom: 2px solid var(--gold); cursor: pointer; }
+.review-mark.review-suggestion { background: color-mix(in srgb, var(--accent) 22%, transparent); border-bottom-color: var(--accent); }
+.review-mark.review-active { background: color-mix(in srgb, var(--gold) 50%, transparent); }
+.review-panel { position: fixed; z-index: 35; top: 96px; right: 16px; bottom: 56px; width: 340px; max-width: calc(100vw - 32px); display: flex; flex-direction: column; gap: 8px; padding: 14px; overflow: hidden; background: var(--panel); border-radius: 16px; box-shadow: var(--shadow-pop); }
+.review-head { display: flex; align-items: center; justify-content: space-between; }
+.review-head h3 { margin: 0; font-size: 15px; }
+.review-head button { background: transparent; color: var(--muted); padding: 2px 8px; font-size: 18px; }
+.review-begin .primary { width: 100%; }
+.review-msg { margin: 6px 0 0; font-size: 12px; color: var(--gold); }
+.review-compose { display: flex; flex-direction: column; gap: 8px; }
+.review-compose blockquote { margin: 0; padding: 6px 10px; font-size: 12px; color: var(--muted); border-left: 3px solid var(--gold); background: var(--raised); border-radius: 6px; }
+.review-compose label { display: block; font-size: 12px; color: var(--muted); }
+.review-compose textarea, .review-replybox textarea { display: block; width: 100%; margin-top: 4px; padding: 8px 10px; font: inherit; color: var(--fg); background: var(--raised); border: 0; border-radius: 8px; resize: vertical; }
+.review-kinds { display: flex; gap: 14px; }
+.review-kinds input { display: inline; width: auto; margin: 0 4px 0 0; }
+.review-list { flex: 1; min-height: 0; margin: 0; padding: 0; overflow: auto; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.review-empty { padding: 12px 4px; font-size: 13px; color: var(--muted); }
+.review-item { padding: 10px; background: var(--raised); border-radius: 12px; font-size: 13px; }
+.review-item.s-resolved, .review-item.s-accepted, .review-item.s-rejected { opacity: 0.6; }
+.review-item.detached { outline: 1px dashed var(--faint); }
+.review-quote { display: block; width: 100%; padding: 0 0 4px; text-align: left; background: transparent; color: var(--muted); font-style: italic; }
+.review-meta { font-size: 11px; color: var(--muted); }
+.review-lost { color: var(--danger); }
+.review-diff { margin-top: 4px; }
+.review-diff del { color: var(--danger); }
+.review-diff ins { color: var(--accent); text-decoration: none; font-weight: 600; }
+.review-body, .review-reply { margin: 6px 0 0; white-space: pre-wrap; }
+.review-reply { padding-left: 10px; border-left: 2px solid var(--faint); color: var(--muted); }
+.review-actions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+.review-actions button { padding: 3px 9px; font-size: 12px; background: var(--panel); }
+.review-replybox { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; align-items: flex-end; }
+.review-foot { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--muted); }
+.review-name input { display: inline-block; width: 140px; margin-left: 6px; padding: 3px 8px; background: var(--raised); }
+.frame.mobile .review-panel { top: auto; left: 8px; right: 8px; bottom: 8px; width: auto; max-height: 62dvh; }

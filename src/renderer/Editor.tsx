@@ -7,6 +7,7 @@ import '@milkdown/crepe/theme/common/style.css';
 import '@milkdown/crepe/theme/classic.css';
 import { pickScene } from '../shared/sceneBreaks';
 import { findApiFor, findPlugin } from './findPlugin';
+import { reviewApiFor, reviewPlugin } from './reviewPlugin';
 import type { SceneNav } from './sceneNav';
 
 interface Props {
@@ -64,6 +65,7 @@ export function Editor({ initial, restore, onChange, saved, onNav }: Props) {
       });
     });
     crepe.editor.use($prose(() => findPlugin)); // highlights for Find & Replace
+    crepe.editor.use($prose(() => reviewPlugin)); // highlights for comments and suggestions
     const getView = () => (crepeRef.current ? crepeRef.current.editor.action((ctx) => ctx.get(editorViewCtx)) : null);
     void crepe.create().then(() => {
       if (disposed) return;
@@ -74,6 +76,7 @@ export function Editor({ initial, restore, onChange, saved, onNav }: Props) {
       // Only now can the parent drive the editor (scene jumps, find & replace).
       onNavRef.current?.({
         find: findApiFor(getView),
+        review: reviewApiFor(getView),
         go: (dir) => {
           const view = getView();
           if (!view) return false;

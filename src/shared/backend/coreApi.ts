@@ -6,6 +6,7 @@
 import type { CoreApi, UnsavedChoice } from '../api';
 import { defaultAppDefaults, sanitizeAppDefaults } from '../appDefaults';
 import type { FsPort } from '../fsPort';
+import { makeReviews } from './reviews';
 import { basename, isInside, joinPath, isMarkdownName } from '../paths';
 import { sanitizeProjectsSettings } from '../projects';
 import { DraftStore } from './drafts';
@@ -54,6 +55,7 @@ export function createCoreApi(o: CoreApiOptions): CoreBackend {
   const sidecars = makeSidecars(fs);
   const settings = new SettingsStore(o.settingsFile, fs);
   const drafts = new DraftStore(o.draftsDir, fs);
+  const reviews = makeReviews(fs);
   const root = o.rootFolder.replace(/[\\/]+$/, '');
   let openRoot: string | null = null;
 
@@ -92,6 +94,8 @@ export function createCoreApi(o: CoreApiOptions): CoreBackend {
       });
       return tree;
     },
+    listReviews: async (project) => reviews.list(inRoot(project, { allowRoot: true })),
+    saveReview: async (project, id, text) => reviews.save(inRoot(project, { allowRoot: true }), id, text),
     readFile: async (p) => files.readWithStamp(inRoot(p)),
     statFile: async (p) => files.statStamp(inRoot(p)),
     async writeFile(p, content) {

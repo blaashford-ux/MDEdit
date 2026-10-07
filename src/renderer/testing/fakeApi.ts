@@ -185,6 +185,12 @@ export class FakeApi implements MdeditApi {
     if (!f) throw new Error(`ENOENT: ${p}`);
     return { text: f.text, stamp: this.stampOf(p)! };
   };
+  reviews = new Map<string, string>();
+  listReviews = async (project: string) =>
+    [...this.reviews].filter(([k]) => k.startsWith(`${project}|`)).map(([k, text]) => ({ id: k.slice(project.length + 1), text }));
+  saveReview = async (project: string, id: string, text: string) => {
+    this.reviews.set(`${project}|${id}`, text);
+  };
   statFile = async (p: string) => this.stampOf(p);
   writeFile = async (p: string, content: string) => {
     this.writes.push(p);
