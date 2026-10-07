@@ -42,7 +42,7 @@ function offsetTop(ta: HTMLTextAreaElement, offset: number): number {
 }
 
 /** Top of every line's first row, measured on a hidden copy of the textarea (lines wrap, so this is not index * lineHeight). */
-function lineTops(ta: HTMLTextAreaElement): { tops: number[]; heights: number[]; lineHeight: number } {
+function lineTops(ta: HTMLTextAreaElement): { tops: number[]; lineHeight: number } {
   const cs = getComputedStyle(ta);
   const mirror = document.createElement('div');
   for (const prop of ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'paddingLeft', 'paddingRight', 'paddingTop', 'borderLeftWidth', 'borderRightWidth', 'tabSize'] as const) {
@@ -65,9 +65,8 @@ function lineTops(ta: HTMLTextAreaElement): { tops: number[]; heights: number[];
   document.body.appendChild(mirror);
   const tops = markers.map((m) => m.offsetTop);
   const lineHeight = parseFloat(cs.lineHeight) || 20;
-  const heights = tops.map((top, i) => (i + 1 < tops.length ? tops[i + 1] - top : lineHeight));
   mirror.remove();
-  return { tops, heights, lineHeight };
+  return { tops, lineHeight };
 }
 
 export function SourceEditor({ raw, draft, onChange, savedVersion, onNav, firstLine }: Props) {
@@ -93,8 +92,8 @@ export function SourceEditor({ raw, draft, onChange, savedVersion, onNav, firstL
   const measure = () => {
     const t = ref.current;
     if (!t) return;
-    const { tops, heights, lineHeight } = lineTops(t);
-    setMarks(tops.map((top, i) => ({ line: firstLineRef.current + i, end: firstLineRef.current + i, top, height: heights[i], lineHeight })));
+    const { tops, lineHeight } = lineTops(t);
+    setMarks(tops.map((top, i) => ({ line: firstLineRef.current + i, top, lineHeight })));
   };
   useEffect(() => {
     const t = ref.current;

@@ -7,7 +7,7 @@ import '@milkdown/crepe/theme/common/style.css';
 import '@milkdown/crepe/theme/classic.css';
 import { blockLines } from '../shared/lines';
 import { pickScene } from '../shared/sceneBreaks';
-import { LineGutter, type LineMark } from './LineGutter';
+import { LineGutter, lineMarksFromBlocks, type LineMark, type PlacedBlock } from './LineGutter';
 import { findApiFor, findPlugin } from './findPlugin';
 import type { SceneNav } from './sceneNav';
 
@@ -40,7 +40,7 @@ export function Editor({ initial, restore, onChange, saved, onNav, firstLine }: 
   const wrap = useRef<HTMLDivElement>(null);
   const host = useRef<HTMLDivElement>(null);
   const [marks, setMarks] = useState<LineMark[]>([]);
-  const blockPos = useRef<number[]>([]);
+  const blockPos = useRef<{ start: number; end: number; pos: number }[]>([]);
   const marksRef = useRef<LineMark[]>([]);
   const measureRef = useRef<() => void>(() => {});
   const firstLineRef = useRef(firstLine);
@@ -105,18 +105,20 @@ export function Editor({ initial, restore, onChange, saved, onNav, firstLine }: 
         return;
       }
       const top0 = wrap.current.getBoundingClientRect().top;
-      const next: LineMark[] = [];
-      const pos: number[] = [];
+      const placed: PlacedBlock[] = [];
+      const spans: { start: number; end: number; pos: number }[] = [];
       view.state.doc.forEach((node, offset, i) => {
         if (i >= blocks.length) return;
         const el = view.nodeDOM(offset);
         if (!(el instanceof HTMLElement)) return;
         const r = el.getBoundingClientRect();
         const lh = parseFloat(getComputedStyle(el).lineHeight) || 24;
-        pos.push(offset);
-        next.push({ line: firstLineRef.current + blocks[i].start - 1, end: firstLineRef.current + blocks[i].end - 1, top: r.top - top0, height: r.height, lineHeight: lh });
+        placed.push({ ...blocks[i], top: r.top - top0, height: r.height, lineHeight: lh });
+        spans.push({ ...blocks[i], pos: offset });
       });
-      blockPos.current = pos;
+      // every line of the file gets a number, blank lines too (those sit in the gaps between blocks)
+      const next = lineMarksFromBlocks(placed, firstLineRef.current);
+      blockPos.current = spans;
       marksRef.current = next;
       setMarks(next);
     };
@@ -132,11 +134,12 @@ export function Editor({ initial, restore, onChange, saved, onNav, firstLine }: 
       onNavRef.current?.({
         goToLine: (line) => {
           const view = getView();
-          const ms = marksRef.current;
-          if (!view || !ms.length) return false;
-          let i = ms.findIndex((m) => line <= m.end);
-          if (i === -1) i = ms.length - 1;
-          const target = blockPos.current[i];
+          const spans = blockPos.current;
+          if (!view || !spans.length) return false;
+          const rel = line - firstLineRef.current + 1; // the line within this chapter
+          let i = spans.findIndex((s) => rel <= s.end); // a blank line goes to the block after it
+          if (i === -1) i = spans.length - 1;
+          const target = spans[i].pos;
           view.dispatch(view.state.tr.setSelection(Selection.near(view.state.doc.resolve(target), 1)).scrollIntoView());
           view.focus();
           const el = view.nodeDOM(target);

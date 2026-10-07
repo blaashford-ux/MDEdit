@@ -1,50 +1,45 @@
-import { useEffect, useMemo, useState, type RefObject } from 'react';
+import { memo, useEffect, useState, type RefObject } from 'react';
+import type { BlockLines } from '../shared/lines';
 
-/** One numbered stretch of an editor: a source line, or a block of the formatted view. */
+/** One numbered line of the file, and where it sits in the editor. */
 export interface LineMark {
-  /** First file line (1-based) and last file line this mark covers. */
+  /** The file line (1-based). */
   line: number;
-  end: number;
-  /** Position in the editor's content, in px, and the height of the first text line (for alignment). */
+  /** Vertical position in the editor's content (px) and the height of one text line, for alignment. */
+  top: number;
+  lineHeight: number;
+}
+
+/** A block of the formatted editor: the file lines it covers and where it is drawn. */
+export interface PlacedBlock extends BlockLines {
   top: number;
   height: number;
   lineHeight: number;
 }
 
-/** A faint, always-visible number: a multiple of 10, placed where that line sits. */
-export interface Ten {
-  n: number;
-  top: number;
-  lineHeight: number;
-}
-
 /**
- * Where each multiple of 10 goes. A tenth line that is inside a block sits at that block's top; one that is a blank
- * line between two blocks sits in the gap between them, so the number lines up with where that line really is.
+ * A position for every line of the file, blank lines included, from where the formatted editor draws its blocks.
+ * Lines of a block share its height; the blank lines between two blocks share the space between them.
+ * `firstLine` is the file line that line 1 of the blocks' own numbering is.
  */
-export function tensFor(marks: LineMark[]): Ten[] {
-  const out: Ten[] = [];
-  if (!marks.length) return out;
-  let i = 0;
-  const last = marks[marks.length - 1].end;
-  for (let n = Math.ceil(marks[0].line / 10) * 10; n <= last; n += 10) {
-    while (i < marks.length - 1 && marks[i + 1].line <= n) i++;
-    const m = marks[i];
-    if (n <= m.end) {
-      out.push({ n, top: m.top, lineHeight: m.lineHeight });
-      continue;
-    }
-    const next = marks[i + 1];
-    if (!next) break;
-    const blanks = next.line - m.end - 1; // blank lines between the two blocks
-    const bottom = m.top + m.height;
-    const share = (next.top - bottom) / Math.max(1, blanks);
-    out.push({ n, top: bottom + share * (n - m.end - 1) + (share - m.lineHeight) / 2, lineHeight: m.lineHeight });
-  }
+export function lineMarksFromBlocks(blocks: PlacedBlock[], firstLine: number): LineMark[] {
+  const out: LineMark[] = [];
+  const at = (n: number) => firstLine + n - 1;
+  blocks.forEach((b, i) => {
+    const n = b.end - b.start + 1;
+    for (let k = 0; k < n; k++) out.push({ line: at(b.start + k), top: b.top + (b.height / n) * k, lineHeight: b.lineHeight });
+    const next = blocks[i + 1];
+    if (!next) return;
+    const blanks = next.start - b.end - 1;
+    if (blanks <= 0) return;
+    const bottom = b.top + b.height;
+    const share = (next.top - bottom) / blanks;
+    for (let k = 0; k < blanks; k++) out.push({ line: at(b.end + 1 + k), top: bottom + share * k + (share - b.lineHeight) / 2, lineHeight: b.lineHeight });
+  });
   return out;
 }
 
-/** Index of the mark at vertical position `y` (the last one starting at or above it), or -1. */
+/** Index of the line at vertical position `y` (the last one starting at or above it), or -1. */
 export function markAt(marks: LineMark[], y: number): number {
   let lo = 0;
   let hi = marks.length - 1;
@@ -56,7 +51,7 @@ export function markAt(marks: LineMark[], y: number): number {
       lo = mid + 1;
     } else hi = mid - 1;
   }
-  if (found >= 0 && y > marks[found].top + marks[found].height + 40) return -1; // below the last block
+  if (found >= 0 && found === marks.length - 1 && y > marks[found].top + marks[found].lineHeight * 2) return -1; // well below the last line
   return found;
 }
 
@@ -68,18 +63,39 @@ interface Props {
   host: RefObject<HTMLElement>;
 }
 
+/** Every line's number, drawn once. Multiples of 10 are always visible; the rest fade in while the pointer is over the editor. */
+const Numbers = memo(function Numbers({ marks }: { marks: LineMark[] }) {
+  return (
+    <>
+      {marks.map((m) => (
+        <span key={m.line} className={`line-no${m.line % 10 === 0 ? ' ten' : ''}`} style={{ top: m.top, height: m.lineHeight, lineHeight: `${m.lineHeight}px` }}>
+          {m.line}
+        </span>
+      ))}
+    </>
+  );
+});
+
 /**
- * Line numbers in the left margin: every tenth line in a faint colour, and the number of whichever
- * line the pointer is over. Purely visual: it never takes pointer events.
+ * Line numbers in the right-hand margin, outside the text. Every line has its number; every tenth is always shown,
+ * the others appear while the pointer is over the editor, and the line under the pointer is picked out. Purely
+ * visual: it never takes pointer events.
  */
 export function LineGutter({ marks, scroll, host }: Props) {
   const [hover, setHover] = useState(-1);
+  const [over, setOver] = useState(false);
 
   useEffect(() => {
     const el = host.current;
     if (!el) return;
-    const move = (e: MouseEvent) => setHover(markAt(marks, e.clientY - el.getBoundingClientRect().top + scroll));
-    const leave = () => setHover(-1);
+    const move = (e: MouseEvent) => {
+      setOver(true);
+      setHover(markAt(marks, e.clientY - el.getBoundingClientRect().top + scroll));
+    };
+    const leave = () => {
+      setOver(false);
+      setHover(-1);
+    };
     el.addEventListener('mousemove', move);
     el.addEventListener('mouseleave', leave);
     return () => {
@@ -88,25 +104,16 @@ export function LineGutter({ marks, scroll, host }: Props) {
     };
   }, [host, marks, scroll]);
 
-  const label = (m: LineMark, n: number, cls: string) => (
-    <span key={`${cls}${n}`} className={`line-no ${cls}`} style={{ top: m.top, height: m.lineHeight, lineHeight: `${m.lineHeight}px` }}>
-      {n}
-    </span>
-  );
   const hovered = hover >= 0 ? marks[hover] : undefined;
-  const tens = useMemo(() => tensFor(marks), [marks]);
-
   return (
-    <div className="line-gutter" aria-hidden="true">
+    <div className={`line-gutter${over ? ' all' : ''}`} aria-hidden="true">
       <div style={{ transform: `translateY(${-scroll}px)` }}>
-        {tens.map((x) =>
-          hovered && Math.abs(x.top - hovered.top) < hovered.lineHeight ? null : (
-            <span key={`t${x.n}`} className="line-no ten" style={{ top: x.top, height: x.lineHeight, lineHeight: `${x.lineHeight}px` }}>
-              {x.n}
-            </span>
-          )
+        <Numbers marks={marks} />
+        {hovered && (
+          <span className="line-no one" style={{ top: hovered.top, height: hovered.lineHeight, lineHeight: `${hovered.lineHeight}px` }}>
+            {hovered.line}
+          </span>
         )}
-        {hovered && label(hovered, hovered.line, 'one')}
       </div>
     </div>
   );

@@ -128,7 +128,7 @@ automatically. See [docs/RELEASING.md](docs/RELEASING.md).
 
 ### 0.4.1 — 2026-10-07
 **New**
-- **Line numbers**: every tenth line is numbered in a faint colour, and the line under the pointer shows its own number. Numbers count the lines of the whole file, so they mean the same in every chapter. Source mode numbers each line; the formatted editor numbers each paragraph or block.
+- **Line numbers** in the right margin, outside the text: every line of the file has a number, blank lines included, and every tenth is always visible in a faint colour. The rest appear while the pointer is over the editor, with the line under the pointer picked out. Numbers count the whole file, so they mean the same in every chapter.
 - **Go to Line** (Ctrl+G, Edit → Go to Line…, and a **Line…** button on the phone): jumps to a line number anywhere in the file, opening another chapter if needed and asking about unsaved changes first.
 - **Editing stage**: while a project's status is *Editing*, every chapter in the file list has a red empty circle. Leaving a chapter you saved asks whether to mark it edited, which turns the dot into a filled green one; *Mark Edited* / *Unmark Edited* are also on the chapter's right-click menu. Marks stay with a chapter when it is moved, retitled or its file is renamed, and stay when the status changes.
 - Edited marks are kept in their own file (`.mdedit/edited.json`) and **merge between devices** when syncing, chapter by chapter, so marks made on your phone and your PC both survive.

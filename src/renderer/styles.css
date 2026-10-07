@@ -558,8 +558,10 @@ code.path { background: var(--raised); padding: 1px 6px; border-radius: 6px; }
 .line-gutter { position: absolute; left: calc(100% + 8px); top: 0; bottom: 0; width: 44px; overflow: hidden; pointer-events: none; font: 12px 'Cascadia Mono', Consolas, monospace; font-variant-numeric: tabular-nums; }
 .line-gutter > div { position: relative; }
 .line-no { position: absolute; left: 0; display: block; text-align: left; white-space: nowrap; }
-.line-no.ten { color: var(--faint); }
-.line-no.one { color: var(--muted); }
+/* every line has a number: the tens are always there, the rest appear while the pointer is over the editor */
+.line-no { color: var(--faint); opacity: 0; transition: opacity 0.12s; }
+.line-no.ten, .line-gutter.all .line-no { opacity: 1; }
+.line-no.one { color: var(--fg); opacity: 1; }
 .frame.mobile .line-gutter { left: calc(100% + 3px); width: 26px; font-size: 10px; }
 
 /* ---- Editing stage: a dot before each chapter (empty red = not yet edited, filled green = edited) ---- */
