@@ -20,7 +20,8 @@ export interface Reply {
   body: string
 }
 
-export type ItemStatus = 'open' | 'resolved' | 'accepted' | 'rejected'
+/** `deleted` is kept (not removed) so the deletion travels to the other side when files are merged. */
+export type ItemStatus = 'open' | 'resolved' | 'accepted' | 'rejected' | 'deleted'
 
 export interface ReviewItem {
   id: string

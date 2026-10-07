@@ -22,9 +22,21 @@ export interface DriveApi {
   download(id: string): Promise<string>;
   /** Renames and/or moves (`move.from` is the current parent). */
   rename(id: string, name: string, move?: { from: string | null; to: string }): Promise<DriveFile>;
+  /** One file by id (null when it is gone or this app has not been given access to it). */
+  getFile(id: string): Promise<DriveFile | null>;
+  /**
+   * Lets anyone who has the link open the file: `reader` to view, `writer` to also change its content. Writers can't
+   * re-share it. Calling again changes the role.
+   */
+  shareByLink(id: string, role: 'reader' | 'writer'): Promise<void>;
+  /** Stops link sharing (the owner keeps the file). */
+  unshare(id: string): Promise<void>;
   /** Moves to Drive's trash (recoverable there); trashing a folder trashes what is inside. */
   trash(id: string): Promise<void>;
 }
 
 /** The folder in Drive that holds every project (it mirrors the Root Folder). */
 export const DRIVE_ROOT_NAME = 'MDEdit';
+
+/** Folder (beside the sync root, so it never syncs into the Root Folder) that holds files shared for review. */
+export const DRIVE_REVIEWS_NAME = 'MDEdit Reviews';

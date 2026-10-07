@@ -97,7 +97,7 @@ export function useReview(
 
   const items = useMemo<ShownItem[]>(() => {
     const out: ShownItem[] = [];
-    for (const [id, f] of files) for (const i of f.items) if (i.file === file) out.push({ ...i, reviewerId: id, reviewerName: f.reviewer.name });
+    for (const [id, f] of files) for (const i of f.items) if (i.file === file && i.status !== 'deleted') out.push({ ...i, reviewerId: id, reviewerName: f.reviewer.name });
     return out.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   }, [files, file]);
 
@@ -154,10 +154,7 @@ export function useReview(
     setStatus: (id, status) => edit(id, (i) => touch(i, { status })),
     reply: (id, body) =>
       edit(id, (i) => touch(i, { replies: [...i.replies, { id: uid(), author: me.name, createdAt: new Date().toISOString(), body }] })),
-    async remove(id) {
-      const owner = ownerOf(id);
-      if (owner) await write(owner, (f) => ({ ...f, items: f.items.filter((i) => i.id !== id) }));
-    },
+    remove: (id) => edit(id, (i) => touch(i, { status: 'deleted' })),
     async accept(id) {
       const item = items.find((i) => i.id === id);
       if (!item || item.kind !== 'suggestion' || item.replacement === undefined) return 'That is not a suggestion.';

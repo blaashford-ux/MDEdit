@@ -16,6 +16,9 @@ export type FileClass =
 const MARKDOWN = /\.(md|markdown)$/i;
 
 /** Temp and backup files that atomic writes leave behind, and OS litter. Never synced. */
+/** Local folder (inside the Root) for projects other people shared for review. */
+export const SHARED_WITH_ME = 'Shared With Me';
+
 const JUNK = [/\.tmp$/i, /\.bak$/i, /\.partial$/i, /^~/, /^\.~lock\./, /^thumbs\.db$/i, /^desktop\.ini$/i, /^\.ds_store$/i, /\.mdedit-\d+\.tmp$/i];
 
 /** Output folders that are large and regenerable (Exports/ directly inside a project). */
@@ -27,6 +30,7 @@ const isExportsFolder = (segments: string[]) => segments.length >= 3 && segments
  */
 export function classify(rel: string, opts: { includeExports?: boolean } = {}): FileClass | null {
   const segments = rel.split('/');
+  if (segments[0] === SHARED_WITH_ME) return null; // other people's projects never go into your own Drive
   const name = segments[segments.length - 1];
   if (JUNK.some((re) => re.test(name))) return null;
   if (!opts.includeExports && isExportsFolder(segments)) return null;
