@@ -26,6 +26,8 @@ export interface LinkItem {
 export interface TitleItem {
   title: string;
   url: string;
+  /** Optional short description shown under the title. */
+  blurb: string;
 }
 
 export interface CopyrightDetails {
@@ -243,7 +245,7 @@ export function sanitizeBookDetails(raw: unknown, seed: { title?: string; author
       alsoBy: {
         enabled: bool(also.enabled, false),
         heading: str(also.heading, '', 300),
-        items: list(also.items, (x) => ({ title: str(x.title, '', 300), url: str(x.url, '', 2000) }))
+        items: list(also.items, (x) => ({ title: str(x.title, '', 300), url: str(x.url, '', 2000), blurb: str(x.blurb, '') }))
       },
       about: { enabled: bool(about.enabled, false), heading: str(about.heading, d.back.about.heading, 300), text: str(about.text, '') },
       custom: { enabled: bool(custom.enabled, false), heading: str(custom.heading, '', 300), text: str(custom.text, '') }

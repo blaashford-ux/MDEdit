@@ -109,6 +109,7 @@ export function buildBackMatter(d: BookDetails, warnings: string[]): MatterPage[
       if (!it.title.trim()) continue;
       const url = checked(it.url, it.title);
       blocks.push(url ? { t: 'link', label: it.title.trim(), url } : { t: 'line', text: it.title.trim() });
+      for (const p of paragraphsKeepBreaks(it.blurb ?? '')) blocks.push({ t: 'para', text: p });
     }
     pages.push({ id: 'alsoBy', heading, blocks });
   }

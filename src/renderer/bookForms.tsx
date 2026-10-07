@@ -140,13 +140,14 @@ export function BackMatterForm(props: BookFormProps) {
                     <ListEditor
                       items={details.back.alsoBy.items}
                       path="back.alsoBy.items" onChange={(items) => setBack('alsoBy', { items })}
-                      blank={() => ({ title: '', url: '' })}
+                      blank={() => ({ title: '', url: '', blurb: '' })}
                       addLabel="Add a book"
                       row={(it, update) => (
                         <>
                           <input aria-label="Book title" placeholder="Book title" value={it.title} onChange={(e) => update({ ...it, title: e.target.value })} />
                           <input aria-label="Book link" placeholder="https://… (optional)" value={it.url} onChange={(e) => update({ ...it, url: e.target.value })} />
                           {urlHint(it.url)}
+                          <textarea aria-label="Book blurb" placeholder="Blurb (optional)" rows={4} value={it.blurb} onChange={(e) => update({ ...it, blurb: e.target.value })} />
                         </>
                       )}
                     />
