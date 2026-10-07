@@ -1,4 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, nativeTheme, safeStorage, screen, shell } from 'electron';
+import { spawn } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import type { DraftRecord, Prefs, Session, ThemeSource } from '../src/shared/api';
@@ -23,6 +24,8 @@ import { sanitizeAppDefaults, type AppDefaults } from '../src/shared/appDefaults
 import { defaultRootFolder, effectiveDefaults, sanitizeProjectsSettings, type ProjectsConfig } from '../src/shared/projects';
 import * as projects from './projects';
 import { existingFolder, SettingsStore, type WindowState } from './settings';
+import { downloadInstaller } from './update';
+import { fetchLatestRelease, type UpdateInfo } from '../src/shared/update';
 import type { SyncService } from '../src/shared/sync/service';
 import { createDesktopSync } from './syncHost';
 
@@ -31,6 +34,8 @@ let drafts: DraftStore;
 let mainWindow: BrowserWindow | null = null;
 let smokeMode = false;
 const pendingFiles: string[] = [];
+/** A downloaded installer to start once the app has exited (see `update:install`). */
+let installerToRun: string | null = null;
 
 function queueFile(file: string): void {
   if (!pendingFiles.includes(file)) pendingFiles.push(file);
@@ -372,6 +377,22 @@ function registerIpc(): void {
   handle('dialog:confirmRecover', (e, name: string) => confirmRecover(winOf(e), name));
   handle('dialog:confirmMarkEdited', (e, title: string) => confirmMarkEdited(winOf(e), title));
   // --- Google Drive sync ---
+  // ---- Updating from the latest GitHub release ----
+  handle('update:version', () => app.getVersion());
+  handle('update:check', () => fetchLatestRelease(fetch, 'windows', app.getVersion()));
+  handle('update:install', async (e, info: UpdateInfo) => {
+    const file = await downloadInstaller(info, {
+      fetchFn: fetch,
+      dir: path.join(os.tmpdir(), 'mdedit-update'),
+      onProgress: (p) => {
+        if (!e.sender.isDestroyed()) e.sender.send('update:progress', p);
+      }
+    });
+    // Start the installer only after we have exited (so no file is in use). Quitting goes through the usual
+    // unsaved-changes prompt; if the user cancels that, `guardClose` clears this again.
+    installerToRun = file;
+    app.quit();
+  });
   handle('sync:status', async () => (await ensureSync()).getSyncStatus());
   handle('sync:connect', async () => (await ensureSync()).connectSync());
   handle('sync:now', async () => (await ensureSync()).syncNow());
@@ -395,6 +416,7 @@ function guardClose(win: BrowserWindow): void {
     waiting = true;
     ipcMain.once('app:closeDecision', (_e, ok: boolean) => {
       waiting = false;
+      if (ok !== true) installerToRun = null; // the user backed out of closing, so an update in progress is off
       if (ok === true) {
         confirmed = true;
         win.close();
@@ -519,6 +541,11 @@ if (!firstInstance) {
     app.exit(1);
   });
 }
+
+app.on('quit', () => {
+  if (!installerToRun) return;
+  spawn(installerToRun, [], { detached: true, stdio: 'ignore' }).unref();
+});
 
 let finalSyncStarted = false;
 app.on('before-quit', (e) => {

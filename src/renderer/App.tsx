@@ -31,6 +31,7 @@ import type { SceneNav } from './sceneNav';
 import { SourceEditor } from './SourceEditor';
 import { StatusBar } from './StatusBar';
 import { MobileBar } from './MobileBar';
+import { AboutDialog } from './AboutDialog';
 import { SyncDialog } from './SyncDialog';
 import { TitleBar } from './TitleBar';
 import { Tabs } from './Tabs';
@@ -79,6 +80,7 @@ export function App() {
   const [started, setStarted] = useState(false);
   const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
   const [showSync, setShowSync] = useState(false);
+  const [showAbout, setShowAbout] = useState(false);
 
   const activeTab = s.tabs.find((t) => t.id === s.activeId);
 
@@ -569,6 +571,7 @@ export function App() {
     'new-project': () => setShowNewProject(true),
     'projects-home': () => void goHome(),
     sync: () => caps.sync && setShowSync(true),
+    about: () => setShowAbout(true),
     'switch-project': () => setShowQuick(true),
     'project-settings': () => s.project && setProjectSettings(s.project.path),
     'project-progress': () => s.project && setShowProgress(true),
@@ -709,6 +712,7 @@ export function App() {
         canSave={activeDirty}
         find={activeTab ? { open: find.open, onToggle: () => (find.open ? closeFind() : openFind(false)) } : undefined}
         sync={caps.sync && syncStatus ? { state: syncStatus.state, onOpen: () => setShowSync(true) } : undefined}
+        onAbout={() => setShowAbout(true)}
       />
     )}
     {!s.root ? (
@@ -1018,6 +1022,7 @@ export function App() {
       )}
     </div>
     )}
+    {showAbout && <AboutDialog onClose={() => setShowAbout(false)} />}
     {showSync && syncStatus && <SyncDialog status={syncStatus} onClose={() => setShowSync(false)} />}
     {showSettings && <SettingsDialog
         onSave={async (d) => {

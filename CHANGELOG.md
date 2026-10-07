@@ -1,5 +1,9 @@
 # Changelog
 
+### Unreleased
+**New**
+- **Update from About.** Help → About MDEdit (the ⓘ button on the phone) has a **Check for updates** button. If the latest GitHub release is newer, **Update** downloads the file for your device (the Windows installer, or the Android app), checks it against the release's checksums, then closes MDEdit and runs the installer (Windows) or opens Android's installer. The first time on Android you are sent to allow MDEdit to install apps. Android only accepts the update if the release was signed with the same key as the installed app.
+
 ### 0.4.3 — 2026-10-07
 **New**
 - **Phone: Find and Replace.** A magnifier button in the top bar opens the find bar (next / previous, match case, whole word, regular expressions, replace) for the open file.
