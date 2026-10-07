@@ -73,6 +73,13 @@ describe('back matter', () => {
     expect(buildBackMatter(base(), [])).toEqual([]);
   });
 
+  it('keeps typed line breaks inside a back-matter paragraph', () => {
+    const d = base();
+    d.back.about = { enabled: true, heading: '', text: 'Line one\nLine two\n\nSecond para' };
+    const blocks = buildBackMatter(d, [])[0].blocks;
+    expect(blocks.slice(1)).toEqual([{ t: 'para', text: 'Line one\nLine two' }, { t: 'para', text: 'Second para' }]);
+  });
+
   it('builds each enabled page with its heading (also used for the contents list)', () => {
     const d = base();
     d.back.links = { enabled: true, heading: '', intro: 'Join us.', items: [{ label: 'Newsletter', url: 'https://example.com/n' }, { label: 'Plain', url: '' }] };
