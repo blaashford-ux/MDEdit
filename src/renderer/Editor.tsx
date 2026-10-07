@@ -1,5 +1,5 @@
 import { Crepe, CrepeFeature } from '@milkdown/crepe';
-import { editorViewCtx } from '@milkdown/kit/core';
+import { editorViewCtx, editorViewOptionsCtx } from '@milkdown/kit/core';
 import { Selection } from '@milkdown/kit/prose/state';
 import { $prose, replaceAll } from '@milkdown/kit/utils';
 import { useEffect, useRef } from 'react';
@@ -29,17 +29,19 @@ interface Props {
    * Anything typed while the save was in flight stays dirty.
    */
   saved: { version: number; markdown: string } | null;
+  /** Reviewers read the chapter and annotate it, but can't change it. */
+  readOnly?: boolean;
   /** Hands the parent a way to jump between scene breaks (null on unmount). */
   onNav?(nav: SceneNav | null): void;
 }
 
-export function Editor({ initial, restore, onChange, saved, onNav }: Props) {
+export function Editor({ initial, restore, onChange, saved, onNav, readOnly }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const crepeRef = useRef<Crepe | null>(null);
   const baseline = useRef<string | null>(null);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
-  const mountProps = useRef({ initial, restore });
+  const mountProps = useRef({ initial, restore, readOnly: readOnly === true });
   const onNavRef = useRef(onNav);
   onNavRef.current = onNav;
 
@@ -64,6 +66,7 @@ export function Editor({ initial, restore, onChange, saved, onNav }: Props) {
         onChangeRef.current(md === baseline.current ? null : md);
       });
     });
+    if (mountProps.current.readOnly) crepe.editor.config((ctx) => ctx.update(editorViewOptionsCtx, (prev) => ({ ...prev, editable: () => false })));
     crepe.editor.use($prose(() => findPlugin)); // highlights for Find & Replace
     crepe.editor.use($prose(() => reviewPlugin)); // highlights for comments and suggestions
     const getView = () => (crepeRef.current ? crepeRef.current.editor.action((ctx) => ctx.get(editorViewCtx)) : null);

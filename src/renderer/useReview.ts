@@ -58,6 +58,8 @@ export interface ReviewState {
   /** Puts a suggestion's text into the chapter and marks it accepted; returns an error message if it can't. */
   accept(id: string): Promise<string | null>;
   focus(id: string): void;
+  /** Reads the review files again (after another device's notes arrived). */
+  reload(): void;
 }
 
 /**
@@ -74,13 +76,16 @@ export function useReview(
 ): ReviewState {
   const [files, setFiles] = useState<Map<string, ReviewFile>>(new Map());
   const [detached, setDetached] = useState<Set<string>>(new Set());
+  const [tick, setTick] = useState(0);
   const filesRef = useRef(files);
   filesRef.current = files;
 
   useEffect(() => {
     let live = true;
-    setFiles(new Map());
-    if (!project) return;
+    if (!project) {
+      setFiles(new Map());
+      return;
+    }
     void api.listReviews(project).then((list) => {
       if (!live) return;
       const m = new Map<string, ReviewFile>();
@@ -93,7 +98,9 @@ export function useReview(
     return () => {
       live = false;
     };
-  }, [api, project]);
+  }, [api, project, tick]);
+
+  useEffect(() => setFiles(new Map()), [project]);
 
   const items = useMemo<ShownItem[]>(() => {
     const out: ShownItem[] = [];
@@ -162,6 +169,7 @@ export function useReview(
       await edit(id, (i) => touch(i, { status: 'accepted' }));
       return null;
     },
-    focus: (id) => void review?.reveal(id)
+    focus: (id) => void review?.reveal(id),
+    reload: () => setTick((t) => t + 1)
   };
 }

@@ -28,6 +28,9 @@ import { StatusBar } from './StatusBar';
 import { MobileBar } from './MobileBar';
 import { SyncDialog } from './SyncDialog';
 import { ReviewPanel } from './ReviewPanel';
+import { ShareDialog } from './ShareDialog';
+import { JoinDialog } from './JoinDialog';
+import type { SharedProject } from '../shared/review/share';
 import { loadIdentity, saveIdentity, useReview } from './useReview';
 import { TitleBar } from './TitleBar';
 import { Tabs } from './Tabs';
@@ -81,17 +84,28 @@ export function App() {
 
   // Comments and suggestions on the open file (stored per reviewer inside the project).
   const [showReview, setShowReview] = useState(false);
+  const [showShare, setShowShare] = useState(false);
+  const [showJoin, setShowJoin] = useState(false);
+  const [shared, setShared] = useState<SharedProject[]>([]);
+  const [reviewNotice, setReviewNotice] = useState<string | null>(null);
   const [me, setMe] = useState(loadIdentity);
   const projectPath = s.project?.path ?? null;
+  const sameDir = (a: string, b: string) => a.replace(/\\/g, '/') === b.replace(/\\/g, '/');
+  /** Set when the open project was shared with this person: they can read and annotate it, not edit it. */
+  const sharedHere = projectPath ? shared.find((sp) => sameDir(sp.dir, projectPath)) : undefined;
+  const isReviewer = sharedHere !== undefined;
+  const meHere = { id: sharedHere?.reviewerId ?? 'owner', name: me.name };
   const reviewFile = projectPath && activeTab ? activeTab.file.replace(/\\/g, '/').slice(projectPath.replace(/\\/g, '/').replace(/\/+$/, '').length + 1) : null;
   const review = useReview(
     window.mdedit,
     projectPath,
     reviewFile,
     s.activeId ? navs.current.get(s.activeId)?.review : undefined,
-    me,
+    meHere,
     activeTab ? `${activeTab.id}@${activeTab.chapter}@${activeTab.reloadKey}@${navVersion}` : ''
   );
+  const reviewRef = useRef(review);
+  reviewRef.current = review;
   const openNotes = review.items.filter((i) => i.status === 'open').length;
   const activeKey = activeTab ? chapterKey(activeTab.file, activeTab.chapter) : null;
   useEffect(() => setDrawer(false), [activeKey]);
@@ -185,6 +199,35 @@ export function App() {
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
   }, [atHome, showQuick, showNewProject, reloadListing]);
+
+  // Projects shared with this person, and the exchange of notes with Drive for the open project.
+  const reloadShared = useCallback(() => {
+    if (caps.review) void window.mdedit.listShared().then(setShared).catch(() => undefined);
+  }, [caps.review]);
+  useEffect(reloadShared, [reloadShared, atHome]);
+
+  const exchange = useCallback(async () => {
+    if (!caps.review || !projectPath) return;
+    const r = await window.mdedit.exchangeReviews(projectPath).catch(() => null);
+    if (!r) return;
+    setReviewNotice(r.revoked ? 'The owner has stopped sharing this project with you. Your notes stay on this device.' : r.errors[0] ?? null);
+    if (r.changed) {
+      reviewRef.current.reload();
+      if (isReviewer) void ws.refresh(); // the owner's text may have changed too
+    }
+  }, [caps.review, projectPath, isReviewer, ws]);
+  useEffect(() => {
+    if (!caps.review || !projectPath) return;
+    void exchange();
+    const t = setInterval(() => void exchange(), 60_000);
+    return () => clearInterval(t);
+  }, [caps.review, projectPath, exchange]);
+  const noteStamp = review.items.map((i) => i.updatedAt).join();
+  useEffect(() => {
+    if (!caps.review || !projectPath || !noteStamp) return;
+    const t = setTimeout(() => void exchange(), 4000); // soon after a note changes
+    return () => clearTimeout(t);
+  }, [noteStamp, caps.review, projectPath, exchange]);
   // A sync that changed files: refresh the tree (open files reload through the usual external-change check) and the project list.
   const syncChanges = syncStatus?.localChanges ?? 0;
   useEffect(() => {
@@ -419,6 +462,9 @@ export function App() {
     listing,
     loading: listing_loading,
     onOpen: (p: string) => void openProject(p),
+    shared,
+    onOpenShared: (dir: string) => void openProject(dir),
+    onJoin: caps.review ? () => setShowJoin(true) : undefined,
     onNew: () => setShowNewProject(true),
     onOpenFolder: caps.folderPicker ? () => void ws.openFolder() : undefined,
     onChangeRoot: caps.folderPicker ? () => void changeRoot() : undefined,
@@ -836,12 +882,14 @@ export function App() {
                         Notes{openNotes > 0 ? ` (${openNotes})` : ''}
                       </button>
                     )}
+                    {!isReviewer && (
                     <button
                       onClick={() => ws.setMode(tab.id, tab.mode === 'visual' ? 'source' : 'visual')}
                       title="Switch between formatted and raw Markdown (Ctrl+Shift+M)"
                     >
                       {tab.mode === 'visual' ? 'Source' : 'Visual'}
                     </button>
+                    )}
                     <button className="save-btn" onClick={() => void ws.save(tab.id)} disabled={!dirty}>
                       Save (Ctrl+S)
                     </button>
@@ -872,6 +920,7 @@ export function App() {
                     onChange={(md) => ws.setDraft(tab.id, md)}
                     saved={tab.saved}
                     onNav={(n) => registerNav(tab.id, n)}
+                    readOnly={isReviewer}
                   />
                 ) : (
                   <SourceEditor
@@ -920,8 +969,10 @@ export function App() {
       {showReview && projectPath && activeTab?.mode === 'visual' && (
         <ReviewPanel
           state={review}
-          me={me}
-          role="owner"
+          me={meHere}
+          role={isReviewer ? 'reviewer' : 'owner'}
+          notice={reviewNotice}
+          onShare={caps.review && !isReviewer ? () => setShowShare(true) : undefined}
           onRename={(name) => {
             const next = { ...me, name };
             setMe(next);
@@ -961,6 +1012,29 @@ export function App() {
         />
       )}
     </div>
+    )}
+    {showShare && projectPath && (
+      <ShareDialog
+        project={projectPath}
+        projectName={s.project?.meta.name ?? ''}
+        sync={syncStatus}
+        onConnect={() => {
+          setShowShare(false);
+          setShowSync(true);
+        }}
+        onClose={() => setShowShare(false)}
+      />
+    )}
+    {showJoin && (
+      <JoinDialog
+        onJoined={(sp) => {
+          setMe(loadIdentity());
+          setShared((l) => [...l.filter((x) => x.dir !== sp.dir), sp]);
+          setShowJoin(false);
+          void openProject(sp.dir);
+        }}
+        onClose={() => setShowJoin(false)}
+      />
     )}
     {showSync && syncStatus && <SyncDialog status={syncStatus} onClose={() => setShowSync(false)} />}
     {showSettings && <SettingsDialog

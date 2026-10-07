@@ -9,12 +9,16 @@ interface Props {
   role: 'owner' | 'reviewer';
   onRename(name: string): void;
   onClose(): void;
+  /** Owner only: opens the sharing dialog. */
+  onShare?(): void;
+  /** A problem or change worth telling the user about (for example, access withdrawn). */
+  notice?: string | null;
 }
 
 const excerpt = (s: string, n = 90) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
 /** Comments and suggestions on the open chapter's file. */
-export function ReviewPanel({ state, me, role, onRename, onClose }: Props) {
+export function ReviewPanel({ state, me, role, onRename, onClose, onShare, notice }: Props) {
   const [draft, setDraft] = useState<{ anchor: Anchor; oneBlock: boolean } | null>(null);
   const [kind, setKind] = useState<'comment' | 'suggestion'>('comment');
   const [body, setBody] = useState('');
@@ -53,8 +57,11 @@ export function ReviewPanel({ state, me, role, onRename, onClose }: Props) {
     <aside className="review-panel" aria-label="Comments and suggestions">
       <div className="review-head">
         <h3>Notes</h3>
+        {onShare && <button type="button" className="review-share" onClick={onShare}>Share…</button>}
         <button type="button" aria-label="Close notes" onClick={onClose}>×</button>
       </div>
+
+      {notice && <div className="banner warn" role="alert">{notice}</div>}
 
       {draft ? (
         <div className="review-compose">

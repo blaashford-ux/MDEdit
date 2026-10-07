@@ -585,3 +585,15 @@ code.path { background: var(--raised); padding: 1px 6px; border-radius: 6px; }
 .review-foot { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--muted); }
 .review-name input { display: inline-block; width: 140px; margin-left: 6px; padding: 3px 8px; background: var(--raised); }
 .frame.mobile .review-panel { top: auto; left: 8px; right: 8px; bottom: 8px; width: auto; max-height: 62dvh; }
+
+/* ---- sharing for review ---- */
+.picker-frame { display: block; width: 100%; height: min(70vh, 560px); border: 0; border-radius: 12px; background: var(--raised); }
+.join-dialog, .share-dialog { width: 460px; }
+.share-list { margin: 8px 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.share-list li { display: flex; align-items: center; gap: 6px; padding: 6px 8px; background: var(--raised); border-radius: 10px; }
+.share-list .grow-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.share-add { display: flex; gap: 6px; margin-top: 8px; }
+.share-add input { margin-top: 0; }
+.share-note { margin: 6px 0; font-size: 12px; color: var(--accent); word-break: break-all; }
+.shared-with-me > button { margin-top: 8px; }
+.review-head .review-share { margin-left: auto; margin-right: 6px; padding: 3px 10px; font-size: 12px; background: var(--raised); color: var(--fg); }
