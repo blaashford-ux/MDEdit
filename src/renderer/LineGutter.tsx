@@ -1,4 +1,4 @@
-import { useEffect, useState, type RefObject } from 'react';
+import { useEffect, useMemo, useState, type RefObject } from 'react';
 
 /** One numbered stretch of an editor: a source line, or a block of the formatted view. */
 export interface LineMark {
@@ -11,11 +11,38 @@ export interface LineMark {
   lineHeight: number;
 }
 
-/** The multiple of 10 inside the mark's lines, if any: those are the numbers shown all the time. */
-export const tenIn = (m: LineMark): number | null => {
-  const t = Math.ceil(m.line / 10) * 10;
-  return t <= m.end ? t : null;
-};
+/** A faint, always-visible number: a multiple of 10, placed where that line sits. */
+export interface Ten {
+  n: number;
+  top: number;
+  lineHeight: number;
+}
+
+/**
+ * Where each multiple of 10 goes. A tenth line that is inside a block sits at that block's top; one that is a blank
+ * line between two blocks sits in the gap between them, so the number lines up with where that line really is.
+ */
+export function tensFor(marks: LineMark[]): Ten[] {
+  const out: Ten[] = [];
+  if (!marks.length) return out;
+  let i = 0;
+  const last = marks[marks.length - 1].end;
+  for (let n = Math.ceil(marks[0].line / 10) * 10; n <= last; n += 10) {
+    while (i < marks.length - 1 && marks[i + 1].line <= n) i++;
+    const m = marks[i];
+    if (n <= m.end) {
+      out.push({ n, top: m.top, lineHeight: m.lineHeight });
+      continue;
+    }
+    const next = marks[i + 1];
+    if (!next) break;
+    const blanks = next.line - m.end - 1; // blank lines between the two blocks
+    const bottom = m.top + m.height;
+    const share = (next.top - bottom) / Math.max(1, blanks);
+    out.push({ n, top: bottom + share * (n - m.end - 1) + (share - m.lineHeight) / 2, lineHeight: m.lineHeight });
+  }
+  return out;
+}
 
 /** Index of the mark at vertical position `y` (the last one starting at or above it), or -1. */
 export function markAt(marks: LineMark[], y: number): number {
@@ -67,14 +94,18 @@ export function LineGutter({ marks, scroll, host }: Props) {
     </span>
   );
   const hovered = hover >= 0 ? marks[hover] : undefined;
+  const tens = useMemo(() => tensFor(marks), [marks]);
 
   return (
     <div className="line-gutter" aria-hidden="true">
       <div style={{ transform: `translateY(${-scroll}px)` }}>
-        {marks.map((m) => {
-          const t = tenIn(m);
-          return t !== null && m !== hovered ? label(m, t, 'ten') : null;
-        })}
+        {tens.map((x) =>
+          hovered && Math.abs(x.top - hovered.top) < hovered.lineHeight ? null : (
+            <span key={`t${x.n}`} className="line-no ten" style={{ top: x.top, height: x.lineHeight, lineHeight: `${x.lineHeight}px` }}>
+              {x.n}
+            </span>
+          )
+        )}
         {hovered && label(hovered, hovered.line, 'one')}
       </div>
     </div>

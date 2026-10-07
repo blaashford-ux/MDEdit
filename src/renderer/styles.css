@@ -151,9 +151,9 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline-offs
 /* ---- editor area ---- */
 .panes { flex: 1; min-height: 0; position: relative; background: var(--panel); border-radius: 0 0 var(--radius-lg) var(--radius-lg); }
 .tabs + .panes { border-radius: 0 0 var(--radius-lg) var(--radius-lg); }
-.pane { position: absolute; inset: 0; overflow: auto; padding: 0 28px 28px; }
+.pane { position: absolute; inset: 0; overflow: auto; padding: 0 56px 28px 28px; }
 /* the heading row and the find bar stay visible while the chapter scrolls underneath */
-.pane-top { position: sticky; top: 0; z-index: 30; margin: 0 -28px; padding: 0 28px; background: var(--panel); box-shadow: 0 10px 14px -12px rgba(8, 4, 26, 0.5); }
+.pane-top { position: sticky; top: 0; z-index: 30; margin: 0 -56px 0 -28px; padding: 0 56px 0 28px; background: var(--panel); box-shadow: 0 10px 14px -12px rgba(8, 4, 26, 0.5); }
 .editor-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0 10px; }
 .editor-head h2 { margin: 0; font-size: 19px; font-weight: 650; letter-spacing: -0.01em; }
 .head-actions { display: flex; gap: 6px; }
@@ -164,7 +164,7 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline-offs
 .editor { margin-top: 10px; max-width: 880px; margin-left: auto; margin-right: auto; }
 .editor-wrap, .source-wrap { position: relative; max-width: 880px; margin: 10px auto 0; }
 .editor-wrap > .editor { margin: 0; max-width: none; }
-.source-editor { display: block; width: 100%; margin: 0; min-height: 60vh; resize: vertical; padding: 18px 20px 18px 52px; font: 13px/1.6 'Cascadia Code', 'Cascadia Mono', Consolas, monospace; color: var(--fg); background: var(--bg); border: 0; border-radius: var(--radius-lg); tab-size: 4; }
+.source-editor { display: block; width: 100%; margin: 0; min-height: 60vh; resize: vertical; padding: 18px 20px; font: 13px/1.6 'Cascadia Code', 'Cascadia Mono', Consolas, monospace; color: var(--fg); background: var(--bg); border: 0; border-radius: var(--radius-lg); tab-size: 4; }
 
 .statusbar { display: flex; gap: 18px; flex: none; padding: 6px 18px; font-size: 12px; color: var(--muted); background: transparent; }
 .statusbar .spacer { flex: 1; }
@@ -312,7 +312,7 @@ code.path { background: var(--raised); padding: 1px 6px; border-radius: 6px; }
   background: var(--bg);
   border-radius: var(--radius-lg);
 }
-.editor .milkdown .ProseMirror { padding: 36px 56px 96px 64px; line-height: 1.7; }
+.editor .milkdown .ProseMirror { padding: 36px 56px 96px; line-height: 1.7; }
 .editor .milkdown .ProseMirror h1 { font-weight: 700; letter-spacing: -0.02em; }
 .editor .milkdown .ProseMirror a { color: var(--accent); }
 .editor .milkdown .ProseMirror hr { border: 0; height: 1px; background: linear-gradient(90deg, transparent, var(--faint), transparent); margin: 2em 0; }
@@ -527,8 +527,8 @@ code.path { background: var(--raised); padding: 1px 6px; border-radius: 6px; }
 .frame.mobile .app-home { padding-bottom: env(safe-area-inset-bottom); }
 .frame.mobile .home-head { flex-direction: column; align-items: stretch; gap: 10px; }
 .frame.mobile .editor-head { padding: 8px 0 6px; }
-.frame.mobile .pane { padding: 0 8px 24px; }
-.frame.mobile .pane-top { margin: 0 -8px; padding: 0 12px; }
+.frame.mobile .pane { padding: 0 34px 24px 8px; }
+.frame.mobile .pane-top { margin: 0 -34px 0 -8px; padding: 0 38px 0 12px; }
 .frame.mobile .head-actions .save-btn { display: none; } /* the top bar has Save */
 .frame.mobile .head-actions button { padding: 8px 10px; }
 .frame.mobile .editor-head h2 { font-size: 17px; }
@@ -554,14 +554,13 @@ code.path { background: var(--raised); padding: 1px 6px; border-radius: 6px; }
 .sb-sync.s-syncing { opacity: 0.75; }
 
 /* ---- line numbers: every tenth line faint, the hovered line in full ---- */
-.line-gutter { position: absolute; left: 0; top: 0; bottom: 0; width: 44px; overflow: hidden; pointer-events: none; font: 12px 'Cascadia Mono', Consolas, monospace; font-variant-numeric: tabular-nums; }
+/* line numbers sit in the margin to the right of the editor, outside the text */
+.line-gutter { position: absolute; left: calc(100% + 8px); top: 0; bottom: 0; width: 44px; overflow: hidden; pointer-events: none; font: 12px 'Cascadia Mono', Consolas, monospace; font-variant-numeric: tabular-nums; }
 .line-gutter > div { position: relative; }
-.line-no { position: absolute; right: 0; display: block; text-align: right; white-space: nowrap; }
-.line-no.ten { color: var(--faint); opacity: 0.75; }
+.line-no { position: absolute; left: 0; display: block; text-align: left; white-space: nowrap; }
+.line-no.ten { color: var(--faint); }
 .line-no.one { color: var(--muted); }
-.frame.mobile .line-gutter { width: 24px; font-size: 9.5px; }
-.frame.mobile .source-editor { padding-left: 30px; }
-.frame.mobile .editor .milkdown .ProseMirror { padding-left: 30px; }
+.frame.mobile .line-gutter { left: calc(100% + 3px); width: 26px; font-size: 10px; }
 
 /* ---- Editing stage: a dot before each chapter (empty red = not yet edited, filled green = edited) ---- */
 .edit-dot { flex: none; box-sizing: border-box; width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid var(--danger); background: transparent; }
