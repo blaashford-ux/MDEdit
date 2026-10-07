@@ -703,6 +703,7 @@ export function App() {
         onHome={s.root ? () => void goHome() : undefined}
         onSave={() => void ws.save()}
         canSave={activeDirty}
+        find={activeTab ? { open: find.open, onToggle: () => (find.open ? closeFind() : openFind(false)) } : undefined}
         sync={caps.sync && syncStatus ? { state: syncStatus.state, onOpen: () => setShowSync(true) } : undefined}
       />
     )}
