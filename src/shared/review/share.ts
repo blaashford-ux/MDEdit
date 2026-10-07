@@ -42,6 +42,13 @@ export interface ShareStatus {
   reviewers: ReviewerRecord[];
 }
 
+/** A shared project in the owner's list. */
+export interface ShareSummary {
+  project: string;
+  reviewers: ReviewerRecord[];
+  publishedAt: string | null;
+}
+
 export interface ShareOptions {
   fs: FsPort;
   /** Drive is created on use, because the sign-in may happen after the app starts. */
@@ -86,6 +93,21 @@ export class ReviewShare {
     await this.load();
     const r = this.state.projects[project];
     return { shared: !!r && r.reviewers.length > 0, publishedAt: r?.publishedAt ?? null, reviewers: r?.reviewers ?? [] };
+  }
+
+  /** Every project that has at least one reviewer. */
+  async list(): Promise<ShareSummary[]> {
+    await this.load();
+    return Object.entries(this.state.projects)
+      .filter(([, r]) => r.reviewers.length > 0)
+      .map(([project, r]) => ({ project, reviewers: r.reviewers, publishedAt: r.publishedAt }))
+      .sort((a, b) => a.project.localeCompare(b.project, undefined, { sensitivity: 'base' }));
+  }
+
+  /** Removes every reviewer of a project (their notes are taken first and stay in the project). */
+  async revokeAll(dir: string, project: string): Promise<void> {
+    await this.load();
+    for (const r of [...(this.state.projects[project]?.reviewers ?? [])]) await this.revoke(dir, project, r.id);
   }
 
   /** The Drive folder that holds shared files, beside (not inside) the sync folder. */

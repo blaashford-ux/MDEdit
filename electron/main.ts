@@ -102,6 +102,14 @@ function ensureSync(): Promise<SyncService> {
   return syncReady;
 }
 
+/** A project in the Root Folder (so the Sharing page can reach it with no folder open) or anything inside the open folder. */
+function reviewPath(p: string): string {
+  const full = path.resolve(p);
+  const rel = path.relative(path.resolve(projectsRoot()), full);
+  if (rel && !rel.startsWith('..') && !path.isAbsolute(rel) && !rel.includes(path.sep)) return full;
+  return inRoot(p, { allowRoot: true });
+}
+
 /** Sharing for review, built on the sync service's Google sign-in. */
 async function reviewHost(): Promise<ReviewSharingApi> {
   const svc = await ensureSync();
@@ -202,8 +210,8 @@ function registerIpc(): void {
   });
   handle('fs:readFile', (_e, p: string) => readWithStamp(inRoot(p)));
   const reviews = makeReviews(nodeFs);
-  handle('review:list', (_e, project: string) => reviews.list(inRoot(project, { allowRoot: true })));
-  handle('review:save', (_e, project: string, id: string, text: string) => reviews.save(inRoot(project, { allowRoot: true }), id, text));
+  handle('review:list', (_e, project: string) => reviews.list(reviewPath(project)));
+  handle('review:save', (_e, project: string, id: string, text: string) => reviews.save(reviewPath(project), id, text));
   handle('fs:statFile', (_e, p: string) => statStamp(inRoot(p)));
   handle('fs:writeFile', (_e, p: string, content: string) => {
     const full = inRoot(p);
@@ -397,10 +405,12 @@ function registerIpc(): void {
   handle('dialog:confirmRecover', (e, name: string) => confirmRecover(winOf(e), name));
   handle('dialog:confirmMarkEdited', (e, title: string) => confirmMarkEdited(winOf(e), title));
   // --- Google Drive sync ---
-  handle('review:shareStatus', async (_e, project: string) => (await reviewHost()).getShareStatus(inRoot(project, { allowRoot: true })));
-  handle('review:invite', async (_e, project: string, name: string) => (await reviewHost()).inviteReviewer(inRoot(project, { allowRoot: true }), name));
-  handle('review:revoke', async (_e, project: string, id: string) => (await reviewHost()).revokeReviewer(inRoot(project, { allowRoot: true }), id));
-  handle('review:exchange', async (_e, project: string) => (await reviewHost()).exchangeReviews(inRoot(project, { allowRoot: true })));
+  handle('review:shareStatus', async (_e, project: string) => (await reviewHost()).getShareStatus(reviewPath(project)));
+  handle('review:invite', async (_e, project: string, name: string) => (await reviewHost()).inviteReviewer(reviewPath(project), name));
+  handle('review:revoke', async (_e, project: string, id: string) => (await reviewHost()).revokeReviewer(reviewPath(project), id));
+  handle('review:exchange', async (_e, project: string) => (await reviewHost()).exchangeReviews(reviewPath(project)));
+  handle('review:listShares', async () => (await reviewHost()).listShares());
+  handle('review:stop', async (_e, project: string) => (await reviewHost()).stopSharing(reviewPath(project)));
   handle('review:listShared', async () => (await reviewHost()).listShared());
   handle('review:pickerToken', async () => (await reviewHost()).pickerToken());
   handle('review:join', async (_e, link: string, name: string) => (await reviewHost()).joinReview(link, name));

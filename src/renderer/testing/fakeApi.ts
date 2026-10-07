@@ -30,6 +30,8 @@ export class FakeApi implements MdeditApi {
   disconnectSync = syncOff.disconnectSync;
   onSyncStatus = syncOff.onSyncStatus;
   getShareStatus = reviewOff.getShareStatus;
+  listShares = reviewOff.listShares;
+  stopSharing = reviewOff.stopSharing;
   inviteReviewer = reviewOff.inviteReviewer;
   revokeReviewer = reviewOff.revokeReviewer;
   exchangeReviews = reviewOff.exchangeReviews;

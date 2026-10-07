@@ -2,7 +2,7 @@ import type { AppDefaults } from './appDefaults';
 import type { Origin } from './export/layers';
 import type { BookDetails } from './export/model';
 import type { Progress } from './progress';
-import type { ReviewerRecord, ShareStatus, SharedProject } from './review/share';
+import type { ReviewerRecord, ShareStatus, ShareSummary, SharedProject } from './review/share';
 import type { UpdateInfo, UpdateProgress } from './update';
 import type { ProjectMeta, ProjectsConfig, ProjectsSettings, ProjectSummary, RootListing } from './projects';
 
@@ -358,6 +358,10 @@ export interface SyncApi {
 /** Sharing a project with reviewers over Google Drive, and joining projects others have shared. */
 export interface ReviewSharingApi {
   getShareStatus(project: string): Promise<ShareStatus>;
+  /** Every project that currently has reviewers. */
+  listShares(): Promise<ShareSummary[]>;
+  /** Removes every reviewer of a project (their notes stay in it). */
+  stopSharing(project: string): Promise<void>;
   /** Makes a private comments file for a new reviewer and returns their invitation link (also publishes the text). */
   inviteReviewer(project: string, name: string): Promise<ReviewerRecord>;
   /** Closes a reviewer's file; their notes stay in the project. */

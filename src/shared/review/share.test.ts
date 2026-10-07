@@ -135,4 +135,16 @@ describe('sharing a project for review', () => {
     drive.granted = new Set();
     expect(await join.sync(joined.dir)).toEqual({ changed: false, revoked: true });
   });
+
+  it('lists the shared projects and can remove every reviewer at once', async () => {
+    const { share, drive } = setup();
+    expect(await share.list()).toEqual([]);
+    const a = await share.invite('/root/Novel', 'Novel', 'Sam');
+    const b = await share.invite('/root/Novel', 'Novel', 'Alex');
+    const listed = await share.list();
+    expect(listed.map((x) => [x.project, x.reviewers.length])).toEqual([['Novel', 2]]);
+    await share.revokeAll('/root/Novel', 'Novel');
+    expect(await share.list()).toEqual([]);
+    expect(drive.links.has(a.commentsId) || drive.links.has(b.commentsId)).toBe(false);
+  });
 });

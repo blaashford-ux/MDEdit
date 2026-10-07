@@ -26,6 +26,8 @@ interface Props {
   shared?: SharedProject[];
   onOpenShared?(dir: string): void;
   onJoin?(): void;
+  /** Opens the Sharing page (where sharing is available). */
+  onSharing?(): void;
 }
 
 export function timeAgo(ms: number | null, now = Date.now()): string {
@@ -102,6 +104,11 @@ export function ProjectsHome(p: Props) {
             {p.onOpenFolder && (
               <button type="button" onClick={p.onOpenFolder} title="Open any folder of Markdown files, even outside the Root Folder (Ctrl+O)">
                 Open Folder…
+              </button>
+            )}
+            {p.onSharing && (
+              <button type="button" onClick={p.onSharing} title="Projects you've shared for review, and their links">
+                Sharing
               </button>
             )}
             <button type="button" className="primary big" onClick={p.onNew}>

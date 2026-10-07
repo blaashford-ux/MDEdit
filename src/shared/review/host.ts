@@ -31,6 +31,12 @@ export function createReviewHost(o: ReviewHostOptions): ReviewSharingApi {
 
   return {
     getShareStatus: (project) => share.status(basename(project)),
+    listShares: () => share.list(),
+
+    async stopSharing(project) {
+      need();
+      await share.revokeAll(norm(project), basename(project));
+    },
 
     async inviteReviewer(project, name) {
       need();

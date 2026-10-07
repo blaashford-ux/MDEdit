@@ -19,6 +19,8 @@ const off = async (): Promise<never> => {
 /** `ReviewSharingApi` for platforms without it. */
 export const reviewOff: ReviewSharingApi = {
   getShareStatus: async () => ({ shared: false, publishedAt: null, reviewers: [] }),
+  listShares: async () => [],
+  stopSharing: off,
   inviteReviewer: off,
   revokeReviewer: off,
   exchangeReviews: async () => ({ changed: false, revoked: false, errors: [] }),

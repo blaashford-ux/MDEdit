@@ -638,3 +638,10 @@ code.path { background: var(--raised); padding: 1px 6px; border-radius: 6px; }
 .about-update p { margin: 4px 0; }
 .about-notes summary { cursor: pointer; color: var(--muted); }
 .about-notes pre { max-height: 180px; margin: 6px 0 0; padding: 8px 10px; overflow: auto; white-space: pre-wrap; background: var(--raised); border-radius: 10px; font: inherit; font-size: 12px; }
+.share-sub { display: block; font-size: 11px; }
+.share-list li { flex-wrap: wrap; }
+.share-dialog { width: 520px; }
+.share-dialog .danger { background: var(--danger); color: #fff; }
+.frame.mobile .share-dialog, .frame.mobile .join-dialog { width: auto; }
+.share-list li .grow-text { flex: 1 1 100%; }
+.share-list li button { padding: 4px 10px; font-size: 12px; }

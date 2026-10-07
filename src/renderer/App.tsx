@@ -36,6 +36,7 @@ import { SyncDialog } from './SyncDialog';
 import { ReviewPanel } from './ReviewPanel';
 import { ShareDialog } from './ShareDialog';
 import { JoinDialog } from './JoinDialog';
+import { SharingHome } from './SharingHome';
 import type { SharedProject } from '../shared/review/share';
 import type { Anchor } from '../shared/review/comments';
 import { loadIdentity, saveIdentity, useReview } from './useReview';
@@ -99,6 +100,7 @@ export function App() {
   const [textMenu, setTextMenu] = useState<{ x: number; y: number; sel: { anchor: Anchor; oneBlock: boolean } } | null>(null);
   const [noteRequest, setNoteRequest] = useState<{ id: number; kind: 'comment' | 'suggestion'; sel: { anchor: Anchor; oneBlock: boolean } } | null>(null);
   const [showJoin, setShowJoin] = useState(false);
+  const [showSharingHome, setShowSharingHome] = useState(false);
   const [shared, setShared] = useState<SharedProject[]>([]);
   const [reviewNotice, setReviewNotice] = useState<string | null>(null);
   const [me, setMe] = useState(loadIdentity);
@@ -510,6 +512,7 @@ export function App() {
     shared,
     onOpenShared: (dir: string) => void openProject(dir),
     onJoin: caps.review ? () => setShowJoin(true) : undefined,
+    onSharing: caps.review ? () => setShowSharingHome(true) : undefined,
     onNew: () => setShowNewProject(true),
     onOpenFolder: caps.folderPicker ? () => void ws.openFolder() : undefined,
     onChangeRoot: caps.folderPicker ? () => void changeRoot() : undefined,
@@ -808,7 +811,17 @@ export function App() {
             <span>Keep your projects in sync with Google Drive.</span> <button onClick={() => setShowSync(true)}>Set up sync</button>
           </div>
         )}
-        {started && !welcome && <ProjectsHome {...homeProps} />}
+        {started && !welcome && (showSharingHome && caps.review ? (
+          <SharingHome
+            config={pConfig}
+            listing={listing}
+            sync={syncStatus}
+            onBack={() => setShowSharingHome(false)}
+            onConnect={() => setShowSync(true)}
+          />
+        ) : (
+          <ProjectsHome {...homeProps} />
+        ))}
       </div>
     ) : (
     <div className="app" style={{ gridTemplateColumns: `${s.sidebarWidth}px 6px minmax(0, 1fr)` }}>

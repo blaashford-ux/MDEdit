@@ -16,9 +16,19 @@ export function buildInviteLink(i: Invite): string {
   return `${JOIN_PAGE}#${q}`;
 }
 
-/** Reads an invitation pasted as a link (the web page address or an `mdedit:` link). Null when it isn't one. */
+/**
+ * Reads an invitation pasted as a link (the web page address or an `mdedit:` link). A whole invitation message can be
+ * pasted too: the first word in it that is an invitation link is used. Null when there is none.
+ */
 export function parseInviteLink(text: string): Invite | null {
-  const t = text.trim();
+  for (const word of text.trim().split(/\s+/)) {
+    const invite = parseOne(word);
+    if (invite) return invite;
+  }
+  return null;
+}
+
+function parseOne(t: string): Invite | null {
   const at = t.search(/[#?]/);
   if (at < 0 || !/^(https?:\/\/|mdedit:)/i.test(t)) return null;
   const q = new URLSearchParams(t.slice(at + 1));
@@ -28,4 +38,18 @@ export function parseInviteLink(text: string): Invite | null {
   const idOk = (s: string | null): s is string => !!s && /^[A-Za-z0-9_-]{2,128}$/.test(s);
   if (!idOk(packageId) || !idOk(commentsId) || !/^[A-Za-z0-9_-]{4,64}$/.test(reviewerId ?? '')) return null;
   return { packageId, commentsId, reviewerId: reviewerId!, project: (q.get('n') ?? 'Shared project').slice(0, 120) };
+}
+
+/** Where reviewers get the app. */
+export const LATEST_RELEASE = 'https://github.com/blaashford-ux/MDEdit/releases/latest';
+
+/** The invitation link wrapped in a short note for someone who doesn't have MDEdit yet. */
+export function inviteMessage(project: string, link: string, reviewerName?: string): string {
+  const hello = reviewerName?.trim() ? `Hi ${reviewerName.trim()},\n\n` : '';
+  return (
+    `${hello}I'd like your feedback on “${project}”. I'm using MDEdit, a free writing app for Windows and Android, and you can read it and leave comments and suggestions there.\n\n` +
+    `1. Get MDEdit (Windows installer or Android app): ${LATEST_RELEASE}\n` +
+    `2. Open MDEdit, go to Projects → Shared with me → Open invitation…, and paste this link:\n${link}\n\n` +
+    `Google will ask you to pick two files; that's how MDEdit is allowed to open this one project, and nothing else in your Drive.`
+  );
 }

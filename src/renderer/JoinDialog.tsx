@@ -66,7 +66,7 @@ export function JoinDialog({ onJoined, onClose }: Props) {
           />
         ) : (
           <>
-            <p className="modal-hint">Paste the link you were sent. Google will ask you to select two files; that is how MDEdit is allowed to open this one project (and nothing else in your Drive).</p>
+            <p className="modal-hint">Paste the link you were sent (or the whole message). Google will ask you to select two files; that is how MDEdit is allowed to open this one project (and nothing else in your Drive).</p>
             <label>
               Invitation link
               <input value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://…" autoFocus aria-invalid={link !== '' && !invite} />
