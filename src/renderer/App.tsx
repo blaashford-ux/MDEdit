@@ -31,6 +31,7 @@ import { ReviewPanel } from './ReviewPanel';
 import { ShareDialog } from './ShareDialog';
 import { JoinDialog } from './JoinDialog';
 import type { SharedProject } from '../shared/review/share';
+import type { Anchor } from '../shared/review/comments';
 import { loadIdentity, saveIdentity, useReview } from './useReview';
 import { TitleBar } from './TitleBar';
 import { Tabs } from './Tabs';
@@ -85,6 +86,8 @@ export function App() {
   // Comments and suggestions on the open file (stored per reviewer inside the project).
   const [showReview, setShowReview] = useState(false);
   const [showShare, setShowShare] = useState(false);
+  const [textMenu, setTextMenu] = useState<{ x: number; y: number; sel: { anchor: Anchor; oneBlock: boolean } } | null>(null);
+  const [noteRequest, setNoteRequest] = useState<{ id: number; kind: 'comment' | 'suggestion'; sel: { anchor: Anchor; oneBlock: boolean } } | null>(null);
   const [showJoin, setShowJoin] = useState(false);
   const [shared, setShared] = useState<SharedProject[]>([]);
   const [reviewNotice, setReviewNotice] = useState<string | null>(null);
@@ -106,6 +109,10 @@ export function App() {
   );
   const reviewRef = useRef(review);
   reviewRef.current = review;
+  const openNote = (kind: 'comment' | 'suggestion', sel: { anchor: Anchor; oneBlock: boolean }) => {
+    setShowReview(true);
+    setNoteRequest((r) => ({ id: (r?.id ?? 0) + 1, kind, sel }));
+  };
   const openNotes = review.items.filter((i) => i.status === 'open').length;
   const activeKey = activeTab ? chapterKey(activeTab.file, activeTab.chapter) : null;
   useEffect(() => setDrawer(false), [activeKey]);
@@ -921,6 +928,14 @@ export function App() {
                     saved={tab.saved}
                     onNav={(n) => registerNav(tab.id, n)}
                     readOnly={isReviewer}
+                    onContextMenu={
+                      projectPath
+                        ? ({ x, y }) => {
+                            const sel = navs.current.get(tab.id)?.review?.selectionAt(x, y);
+                            if (sel) setTextMenu({ x, y, sel });
+                          }
+                        : undefined
+                    }
                   />
                 ) : (
                   <SourceEditor
@@ -972,6 +987,7 @@ export function App() {
           me={meHere}
           role={isReviewer ? 'reviewer' : 'owner'}
           notice={reviewNotice}
+          request={noteRequest}
           onShare={caps.review && !isReviewer ? () => setShowShare(true) : undefined}
           onRename={(name) => {
             const next = { ...me, name };
@@ -979,6 +995,17 @@ export function App() {
             saveIdentity(next);
           }}
           onClose={() => setShowReview(false)}
+        />
+      )}
+      {textMenu && (
+        <ContextMenu
+          x={textMenu.x}
+          y={textMenu.y}
+          items={[
+            { label: 'Add comment…', onClick: () => openNote('comment', textMenu.sel) },
+            { label: 'Suggest a change…', disabled: !textMenu.sel.oneBlock, onClick: () => openNote('suggestion', textMenu.sel) }
+          ]}
+          onClose={() => setTextMenu(null)}
         />
       )}
       {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItems(menu.row)} onClose={() => setMenu(null)} />}

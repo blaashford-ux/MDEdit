@@ -29,13 +29,15 @@ interface Props {
    * Anything typed while the save was in flight stays dirty.
    */
   saved: { version: number; markdown: string } | null;
+  /** Right-click in the text (the browser's own menu is suppressed when this is given). */
+  onContextMenu?(at: { x: number; y: number }): void;
   /** Reviewers read the chapter and annotate it, but can't change it. */
   readOnly?: boolean;
   /** Hands the parent a way to jump between scene breaks (null on unmount). */
   onNav?(nav: SceneNav | null): void;
 }
 
-export function Editor({ initial, restore, onChange, saved, onNav, readOnly }: Props) {
+export function Editor({ initial, restore, onChange, saved, onNav, readOnly, onContextMenu }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const crepeRef = useRef<Crepe | null>(null);
   const baseline = useRef<string | null>(null);
@@ -118,5 +120,18 @@ export function Editor({ initial, restore, onChange, saved, onNav, readOnly }: P
     onChangeRef.current(current === saved.markdown ? null : current);
   }, [saved?.version]);
 
-  return <div className="editor" ref={host} />;
+  return (
+    <div
+      className="editor"
+      ref={host}
+      onContextMenu={
+        onContextMenu
+          ? (e) => {
+              e.preventDefault();
+              onContextMenu({ x: e.clientX, y: e.clientY });
+            }
+          : undefined
+      }
+    />
+  );
 }

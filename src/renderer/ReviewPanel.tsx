@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { Anchor } from '../shared/review/comments';
 import type { Identity, ReviewState, ShownItem } from './useReview';
 
@@ -13,12 +13,14 @@ interface Props {
   onShare?(): void;
   /** A problem or change worth telling the user about (for example, access withdrawn). */
   notice?: string | null;
+  /** Opens the composer on this selection (from the right-click menu). A new `id` is a new request. */
+  request?: { id: number; kind: 'comment' | 'suggestion'; sel: { anchor: Anchor; oneBlock: boolean } } | null;
 }
 
 const excerpt = (s: string, n = 90) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
 /** Comments and suggestions on the open chapter's file. */
-export function ReviewPanel({ state, me, role, onRename, onClose, onShare, notice }: Props) {
+export function ReviewPanel({ state, me, role, onRename, onClose, onShare, notice, request }: Props) {
   const [draft, setDraft] = useState<{ anchor: Anchor; oneBlock: boolean } | null>(null);
   const [kind, setKind] = useState<'comment' | 'suggestion'>('comment');
   const [body, setBody] = useState('');
@@ -27,6 +29,15 @@ export function ReviewPanel({ state, me, role, onRename, onClose, onShare, notic
   const [message, setMessage] = useState<string | null>(null);
   const [replyFor, setReplyFor] = useState<string | null>(null);
   const [replyText, setReplyText] = useState('');
+
+  useEffect(() => {
+    if (!request) return;
+    setMessage(null);
+    setDraft(request.sel);
+    setReplacement(request.sel.anchor.quote);
+    setKind(request.kind === 'suggestion' && request.sel.oneBlock ? 'suggestion' : 'comment');
+    setBody('');
+  }, [request?.id]);
 
   const begin = () => {
     const sel = state.selection();

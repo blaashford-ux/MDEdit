@@ -20,6 +20,11 @@ export interface ReviewApi {
   setNotes(notes: NoteMark[]): NoteStatus;
   /** The current selection as an anchor, or null when nothing is selected. `oneBlock` is false if it crosses paragraphs. */
   selection(): { anchor: Anchor; oneBlock: boolean } | null;
+  /**
+   * What a note should attach to when the user right-clicks at screen point (x, y): the selection if the click is inside it,
+   * otherwise the paragraph under the pointer (which is selected so the user can see it). Null over empty text.
+   */
+  selectionAt(x: number, y: number): { anchor: Anchor; oneBlock: boolean } | null;
   /** Scrolls to a note and highlights it (without taking focus). */
   reveal(id: string): boolean;
   /** Replaces a note's quoted text (single paragraph only); false when it can't be found. */
@@ -148,11 +153,27 @@ export function reviewApiFor(getView: () => EditorView | null): ReviewApi {
       const flat = flatten(view.state.doc);
       const a = posToOffset(flat, from);
       const b = posToOffset(flat, to);
-      if (a === null || b === null || b <= a) return null;
+      if (a === null || b === null || b <= a || !flat.text.slice(a, b).trim()) return null; // nothing but blank space
       return {
         anchor: makeAnchor(flat.text, a, b),
         oneBlock: !flat.text.slice(a, b).includes('\n')
       };
+    },
+
+    selectionAt(x, y) {
+      const view = getView();
+      if (!view) return null;
+      const at = view.posAtCoords({ left: x, top: y })?.pos;
+      const { from, to, empty } = view.state.selection;
+      if (!empty && (at === undefined || (at >= from && at <= to))) {
+        const current = this.selection();
+        if (current) return current;
+      }
+      if (at === undefined) return null;
+      const $at = view.state.doc.resolve(at);
+      if (!$at.parent.isTextblock || $at.parent.content.size === 0) return null;
+      view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, $at.start(), $at.end())));
+      return this.selection();
     },
 
     reveal(id) {
