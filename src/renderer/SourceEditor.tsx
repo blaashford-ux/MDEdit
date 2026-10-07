@@ -42,14 +42,14 @@ function offsetTop(ta: HTMLTextAreaElement, offset: number): number {
 }
 
 /** Top of every line's first row, measured on a hidden copy of the textarea (lines wrap, so this is not index * lineHeight). */
-function lineTops(ta: HTMLTextAreaElement): { tops: number[]; lineHeight: number } {
+function lineTops(ta: HTMLTextAreaElement): { tops: number[]; lineHeight: number; bottom: number } {
   const cs = getComputedStyle(ta);
   const mirror = document.createElement('div');
   for (const prop of ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'paddingLeft', 'paddingRight', 'paddingTop', 'borderLeftWidth', 'borderRightWidth', 'tabSize'] as const) {
     mirror.style[prop] = cs[prop];
   }
   mirror.style.cssText += ';position:absolute;visibility:hidden;white-space:pre-wrap;overflow-wrap:break-word;top:0;left:-9999px;';
-  mirror.style.width = `${ta.clientWidth}px`;
+  mirror.style.width = `${ta.clientWidth - parseFloat(cs.paddingLeft || '0') - parseFloat(cs.paddingRight || '0')}px`; // the text area's own width, so rows wrap exactly as in the textarea
   mirror.style.boxSizing = 'content-box';
   const text = ta.value.replace(/\r\n|\r/g, '\n');
   const markers: HTMLElement[] = [];
@@ -65,13 +65,15 @@ function lineTops(ta: HTMLTextAreaElement): { tops: number[]; lineHeight: number
   document.body.appendChild(mirror);
   const tops = markers.map((m) => m.offsetTop);
   const lineHeight = parseFloat(cs.lineHeight) || 20;
+  const bottom = mirror.offsetHeight - lineHeight; // the text ends with a newline, which adds an empty row below the last line
   mirror.remove();
-  return { tops, lineHeight };
+  return { tops, lineHeight, bottom };
 }
 
 export function SourceEditor({ raw, draft, onChange, savedVersion, onNav, firstLine }: Props) {
   const wrap = useRef<HTMLDivElement>(null);
   const [marks, setMarks] = useState<LineMark[]>([]);
+  const marksRef = useRef<LineMark[]>([]);
   const [scroll, setScroll] = useState(0);
   const firstLineRef = useRef(firstLine);
   firstLineRef.current = firstLine;
@@ -92,8 +94,17 @@ export function SourceEditor({ raw, draft, onChange, savedVersion, onNav, firstL
   const measure = () => {
     const t = ref.current;
     if (!t) return;
-    const { tops, lineHeight } = lineTops(t);
-    setMarks(tops.map((top, i) => ({ line: firstLineRef.current + i, top, lineHeight })));
+    const { tops, lineHeight, bottom } = lineTops(t);
+    // a line that wraps is several rows, each with its own number
+    const out: LineMark[] = [];
+    let n = firstLineRef.current;
+    tops.forEach((top, i) => {
+      const end = i + 1 < tops.length ? tops[i + 1] : bottom;
+      const rows = Math.max(1, Math.round((end - top) / lineHeight));
+      for (let k = 0; k < rows; k++) out.push({ line: n++, top: top + k * lineHeight, lineHeight, block: i });
+    });
+    marksRef.current = out;
+    setMarks(out);
   };
   useEffect(() => {
     const t = ref.current;
@@ -211,7 +222,9 @@ export function SourceEditor({ raw, draft, onChange, savedVersion, onNav, firstL
         const t = ref.current;
         if (!t) return false;
         const starts = lineStarts(t.value);
-        const i = Math.min(Math.max(line - firstLineRef.current, 0), starts.length - 1);
+        const ms = marksRef.current;
+        const hit = ms.find((m) => m.line >= line) ?? ms[ms.length - 1];
+        const i = Math.min(Math.max(hit?.block ?? 0, 0), starts.length - 1);
         t.focus();
         t.setSelectionRange(starts[i], starts[i]);
         t.scrollTop = Math.max(0, offsetTop(t, starts[i]) - t.clientHeight / 3);

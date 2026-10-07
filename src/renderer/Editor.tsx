@@ -117,7 +117,7 @@ export function Editor({ initial, restore, onChange, saved, onNav, firstLine }: 
         spans.push({ ...blocks[i], pos: offset });
       });
       // every line of the file gets a number, blank lines too (those sit in the gaps between blocks)
-      const next = lineMarksFromBlocks(placed, firstLineRef.current);
+      const { marks: next } = lineMarksFromBlocks(placed, firstLineRef.current);
       blockPos.current = spans;
       marksRef.current = next;
       setMarks(next);
@@ -135,11 +135,10 @@ export function Editor({ initial, restore, onChange, saved, onNav, firstLine }: 
         goToLine: (line) => {
           const view = getView();
           const spans = blockPos.current;
-          if (!view || !spans.length) return false;
-          const rel = line - firstLineRef.current + 1; // the line within this chapter
-          let i = spans.findIndex((s) => rel <= s.end); // a blank line goes to the block after it
-          if (i === -1) i = spans.length - 1;
-          const target = spans[i].pos;
+          const ms = marksRef.current;
+          if (!view || !spans.length || !ms.length) return false;
+          const hit = ms.find((m) => m.line >= line) ?? ms[ms.length - 1]; // a blank row goes to the block after it
+          const target = spans[Math.min(hit.block, spans.length - 1)].pos;
           view.dispatch(view.state.tr.setSelection(Selection.near(view.state.doc.resolve(target), 1)).scrollIntoView());
           view.focus();
           const el = view.nodeDOM(target);

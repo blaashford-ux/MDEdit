@@ -22,7 +22,9 @@ import { goalFor, relativeTo } from '../shared/projects';
 import { projectNameError, uniqueName, type ProjectStatus, type ProjectSummary, type ProjectsConfig, type RootListing } from '../shared/projects';
 import { RelinkDialog } from './RelinkDialog';
 import { SettingsDialog } from './SettingsDialog';
-import { chapterStartLine, locateLine, totalLines } from '../shared/lines';
+import type { MarkdownDoc } from '../shared/chapters';
+import { locateRow } from '../shared/rows';
+import { docRows } from './rowEnv';
 import type { SceneNav } from './sceneNav';
 import { SourceEditor } from './SourceEditor';
 import { StatusBar } from './StatusBar';
@@ -479,16 +481,18 @@ export function App() {
     const tab = activeTab;
     const doc = tab && s.docs.get(tab.file);
     if (!tab || !doc) return;
-    const total = totalLines(doc);
+    const { rows } = docRows(doc, tab.mode);
+    const total = Math.max(1, rows.reduce((a, b) => a + b, 0));
     setPrompt({
       title: 'Go to Line',
       label: `Line number (1–${total})`,
+      hint: 'Lines are the rows you see on screen, blank lines included. The total is approximate for chapters you are not in.',
       initial: '',
       confirm: 'Go',
       validate: (v) => (/^\d+$/.test(v.trim()) && Number(v) >= 1 && Number(v) <= total ? null : `Enter a line number from 1 to ${total}.`),
       onSubmit: async (v) => {
         const line = Number(v);
-        const at = locateLine(doc, line);
+        const at = locateRow(rows, line);
         if (at.chapter === tab.chapter) {
           pendingLine.current = null;
           setTimeout(() => navs.current.get(tab.id)?.goToLine(line), 80);
@@ -501,6 +505,25 @@ export function App() {
       }
     });
   };
+
+  // Row numbers depend on the width of the text, so a resized window renumbers the chapters after this one.
+  const [, setLayoutTick] = useState(0);
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>;
+    const onResize = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => setLayoutTick((n) => n + 1), 250);
+    };
+    window.addEventListener('resize', onResize);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('resize', onResize);
+    };
+  }, []);
+
+  /** The row number the chapter starts on: one more than the rows of the chapters before it (estimated for those). */
+  const firstRowOf = (doc: MarkdownDoc, chapter: number, mode: 'visual' | 'source') =>
+    1 + docRows(doc, mode).rows.slice(0, chapter).reduce((a, b) => a + b, 0);
 
   const registerNav = (id: string, n: SceneNav | null) => {
     if (n) navs.current.set(id, n);
@@ -910,7 +933,7 @@ export function App() {
                     onChange={(md) => ws.setDraft(tab.id, md)}
                     saved={tab.saved}
                     onNav={(n) => registerNav(tab.id, n)}
-                    firstLine={chapterStartLine(doc, tab.chapter)}
+                    firstLine={firstRowOf(doc, tab.chapter, 'visual')}
                   />
                 ) : (
                   <SourceEditor
@@ -920,7 +943,7 @@ export function App() {
                     onChange={(md) => ws.setDraft(tab.id, md)}
                     savedVersion={tab.saved?.version ?? 0}
                     onNav={(n) => registerNav(tab.id, n)}
-                    firstLine={chapterStartLine(doc, tab.chapter)}
+                    firstLine={firstRowOf(doc, tab.chapter, 'source')}
                   />
                 )}
               </section>

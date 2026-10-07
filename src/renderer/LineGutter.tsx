@@ -1,13 +1,15 @@
 import { memo, useEffect, useState, type RefObject } from 'react';
 import type { BlockLines } from '../shared/lines';
 
-/** One numbered line of the file, and where it sits in the editor. */
+/** One numbered row of the file, and where it sits in the editor. */
 export interface LineMark {
-  /** The file line (1-based). */
+  /** The row number (1-based, counted over the whole file). */
   line: number;
-  /** Vertical position in the editor's content (px) and the height of one text line, for alignment. */
+  /** Vertical position in the editor's content (px) and the height of one text row, for alignment. */
   top: number;
   lineHeight: number;
+  /** What it belongs to: the block (formatted editor) or the file line (source editor), so Go To can place the caret. */
+  block: number;
 }
 
 /** A block of the formatted editor: the file lines it covers and where it is drawn. */
@@ -18,25 +20,25 @@ export interface PlacedBlock extends BlockLines {
 }
 
 /**
- * A position for every line of the file, blank lines included, from where the formatted editor draws its blocks.
- * Lines of a block share its height; the blank lines between two blocks share the space between them.
- * `firstLine` is the file line that line 1 of the blocks' own numbering is.
+ * A number for every row the formatted editor shows, blank lines included. A block is as many rows as its text wraps
+ * to; the blank lines of the file between two blocks are a row each, spread through the space between them.
+ * `firstRow` is the number of the first row. `trailing` is how many blank lines follow the last block in the file.
  */
-export function lineMarksFromBlocks(blocks: PlacedBlock[], firstLine: number): LineMark[] {
+export function lineMarksFromBlocks(blocks: PlacedBlock[], firstRow: number, trailing = 0): { marks: LineMark[]; rows: number } {
   const out: LineMark[] = [];
-  const at = (n: number) => firstLine + n - 1;
+  let n = firstRow;
   blocks.forEach((b, i) => {
-    const n = b.end - b.start + 1;
-    for (let k = 0; k < n; k++) out.push({ line: at(b.start + k), top: b.top + (b.height / n) * k, lineHeight: b.lineHeight });
+    const rows = Math.max(1, Math.round(b.height / b.lineHeight));
+    for (let k = 0; k < rows; k++) out.push({ line: n++, top: b.top + (b.height / rows) * k, lineHeight: b.lineHeight, block: i });
     const next = blocks[i + 1];
     if (!next) return;
     const blanks = next.start - b.end - 1;
     if (blanks <= 0) return;
     const bottom = b.top + b.height;
     const share = (next.top - bottom) / blanks;
-    for (let k = 0; k < blanks; k++) out.push({ line: at(b.end + 1 + k), top: bottom + share * k + (share - b.lineHeight) / 2, lineHeight: b.lineHeight });
+    for (let k = 0; k < blanks; k++) out.push({ line: n++, top: bottom + share * k + (share - b.lineHeight) / 2, lineHeight: b.lineHeight, block: i + 1 });
   });
-  return out;
+  return { marks: out, rows: n - firstRow + trailing };
 }
 
 /** Index of the line at vertical position `y` (the last one starting at or above it), or -1. */
