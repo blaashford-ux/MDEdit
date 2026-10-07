@@ -1,6 +1,6 @@
 # Mobile app and sync rules
 
-Status: **Android and Windows sides built; the cross-device test is next.** Decisions are recorded below. Built: the planner, the sync engine (tested with two simulated devices), the Drive REST client, the sync service, Google sign-in for Android (Play Services) and for Windows (browser loopback + PKCE, token encrypted with Windows DPAPI). Still to verify on real hardware: sign-in, and (section 9) that the Windows and Android clients see each other's files under `drive.file`.
+Status: **Android and Windows sync built and in use; sharing for review (section 11) built, awaiting a real two-account test.** Decisions are recorded below. Built: the planner, the sync engine (tested with two simulated devices), the Drive REST client, the sync service, Google sign-in for Android (Play Services) and for Windows (browser loopback + PKCE, token encrypted with Windows DPAPI). Still to verify on real hardware: sign-in, and (section 9) that the Windows and Android clients see each other's files under `drive.file`.
 
 ## 1. Decisions
 
@@ -83,3 +83,14 @@ The narrow `drive.file` permission only sees files created (or opened) by the ap
 * Split `MdeditApi` (`src/shared/api.ts`) into a core part and a desktop-only part (export, fonts, reveal, Recycle Bin, launch files, native menu), or add capability flags, so mobile can omit the desktop-only calls.
 * Shared TypeScript sync engine (`src/shared/sync/`): state store, planner (pure, unit-tested: given local, remote and base state, produce actions), Drive adapter, executor.
 * Touch layouts for the Projects home, progress chart and settings.
+
+## 11. Sharing for review (built)
+
+Owners invite reviewers over Google Drive; reviewers read the manuscript and leave comments and suggestions. No Drive folder is shared and nothing needs the broad Drive permission.
+
+* **Owner → Notes → Share…** creates one link per reviewer. MDEdit uploads a snapshot of the project's prose (one JSON "package", readable by anyone with the link) and a private **comments file** for that reviewer (writable by anyone with *their* link, not re-shareable). Both live in a Drive folder `MDEdit Reviews`, beside (not inside) the synced `MDEdit` folder.
+* **Reviewer → Projects → Shared with me → Open invitation…** pastes the link. Google's file picker (a page published from `site/join` with GitHub Pages, shown inside the app) asks them to select the two files; that selection is what gives MDEdit access under the narrow `drive.file` scope. The project downloads into `<Root>/Shared With Me/<Name>` and opens read-only; that folder never syncs to the reviewer's own Drive.
+* **Notes** are one JSON file per reviewer (`.mdedit/review/<reviewer>.json`), so reviewers never see each other's notes and can't change the manuscript. Anchors are quoted text plus context, so they follow edits; suggestions apply to the chapter when the owner accepts them. Deleted notes are kept as `deleted` so the deletion merges. Two copies of a file merge by note id (newer wins, replies are united).
+* **Exchange** happens a few seconds after a note changes and every minute while a shared project is open. The owner's side also re-uploads the package when the text changes. Removing a reviewer takes their notes one last time, then closes their file; their notes stay in the project.
+* **Setup:** Google Cloud project needs the Picker API enabled and a browser API key restricted to the Pages origin and the Picker API (the key is in `site/join/index.html`). GitHub Pages source must be "GitHub Actions"; `.github/workflows/pages.yml` publishes `site/` when it changes on `main`.
+* **Limits:** the picker step is per invitation; invitation links grant access to whoever holds them (revoke by removing the reviewer); no live co-editing; reviewers see the text as of the owner's last upload.
