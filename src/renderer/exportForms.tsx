@@ -107,6 +107,9 @@ export function OutputsForm({ details, edit, template }: ExportFormProps) {
                         <NumberField label="Bottom margin" unit="in" min={0.25} max={2} value={e.pdf.bottomMargin} onChange={(v) => edit((d) => void (d.export.pdf.bottomMargin = v))} />
                         <NumberField label="Font size" unit="pt" min={8} max={16} step={0.5} value={e.pdf.fontSize} onChange={(v) => edit((d) => void (d.export.pdf.fontSize = v))} />
                       </div>
+                      <div className="row3">
+                        <NumberField label="Chapter drop" unit="in" min={0} max={3} step={0.05} value={e.pdf.chapterSink} onChange={(v) => edit((d) => void (d.export.pdf.chapterSink = v))} hint="Space above each chapter heading, below the top margin. 0 starts at the margin." />
+                      </div>
                       <div className="row2">
                         <Select
                           label="Running head"
