@@ -44,17 +44,18 @@ export function ProjectsHome(p: Props) {
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<Sort>('recent');
   const [showArchived, setShowArchived] = useState(false);
+  const [status, setStatus] = useState<ProjectStatus | 'all'>('all');
   const [menu, setMenu] = useState<{ x: number; y: number; project: ProjectSummary } | null>(null);
 
   const all = p.listing?.projects ?? [];
   const archivedCount = all.filter((x) => x.meta.archived).length;
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const list = all.filter((x) => x.meta.archived === showArchived && (q === '' || x.name.toLowerCase().includes(q) || x.meta.templateName.toLowerCase().includes(q)));
+    const list = all.filter((x) => x.meta.archived === showArchived && (status === 'all' || x.meta.status === status) && (q === '' || x.name.toLowerCase().includes(q) || x.meta.templateName.toLowerCase().includes(q)));
     return list.sort((a, b) =>
       sort === 'name' ? a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }) : sort === 'words' ? (b.words ?? -1) - (a.words ?? -1) : (b.lastEdited ?? 0) - (a.lastEdited ?? 0)
     );
-  }, [all, query, sort, showArchived]);
+  }, [all, query, sort, showArchived, status]);
 
   const items = (x: ProjectSummary): MenuItem[] => [
     { label: 'Open', onClick: () => p.onOpen(x.path) },
@@ -118,6 +119,14 @@ export function ProjectsHome(p: Props) {
               <option value="recent">Recently edited</option>
               <option value="name">Name</option>
               <option value="words">Most words</option>
+            </select>
+            <select value={status} onChange={(e) => setStatus(e.target.value as ProjectStatus | 'all')} aria-label="Filter by status">
+              <option value="all">All statuses</option>
+              {STATUSES.map((st) => (
+                <option key={st} value={st}>
+                  {STATUS_LABELS[st]}
+                </option>
+              ))}
             </select>
             {archivedCount > 0 && (
               <button type="button" className={showArchived ? 'on' : ''} onClick={() => setShowArchived(!showArchived)} aria-pressed={showArchived}>
@@ -200,7 +209,7 @@ export function ProjectsHome(p: Props) {
             );
           })}
         </div>
-        {all.length > 0 && shown.length === 0 && <p className="muted">{query ? `No projects match “${query}”.` : showArchived ? 'No archived projects.' : 'No active projects.'}</p>}
+        {all.length > 0 && shown.length === 0 && <p className="muted">{query ? `No projects match “${query}”.` : status !== 'all' ? `No ${STATUS_LABELS[status].toLowerCase()} projects.` : showArchived ? 'No archived projects.' : 'No active projects.'}</p>}
 
         {(p.listing?.folders.length ?? 0) > 0 && (
           <section className="other-folders">
