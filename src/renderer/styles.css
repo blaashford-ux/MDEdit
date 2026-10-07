@@ -645,3 +645,10 @@ code.path { background: var(--raised); padding: 1px 6px; border-radius: 6px; }
 .frame.mobile .share-dialog, .frame.mobile .join-dialog { width: auto; }
 .share-list li .grow-text { flex: 1 1 100%; }
 .share-list li button { padding: 4px 10px; font-size: 12px; }
+
+/* ---- find bar on the phone: wrap instead of running off the right edge, so Close is always reachable ---- */
+.frame.mobile .find-bar { margin-right: 0; max-width: 100%; box-sizing: border-box; }
+.frame.mobile .find-row { flex-wrap: wrap; row-gap: 6px; }
+.frame.mobile .find-row .find-input { flex: 1 1 calc(100% - 36px); min-width: 0; max-width: none; } /* the box takes the first line, the options wrap below */
+.frame.mobile .find-scope { order: 5; flex: 1 1 100%; max-width: 100%; }
+.frame.mobile .find-bar button { min-height: 36px; }
