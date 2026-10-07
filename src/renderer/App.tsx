@@ -123,6 +123,17 @@ export function App() {
     setShowReview(true);
     setNoteRequest((r) => ({ id: (r?.id ?? 0) + 1, kind, sel }));
   };
+  /** The phone's press-and-hold menu entries for notes: the note attaches when picked (to the selection, or the paragraph pressed). */
+  const noteItems = (tabId: string, x: number, y: number): MenuItem[] => {
+    const attach = (kind: 'comment' | 'suggestion') => {
+      const sel = navs.current.get(tabId)?.review?.selectionAt(x, y);
+      if (sel && (kind === 'comment' || sel.oneBlock)) openNote(kind, sel);
+    };
+    return [
+      { label: 'Add comment…', onClick: () => attach('comment') },
+      { label: 'Suggest a change…', onClick: () => attach('suggestion') }
+    ];
+  };
   const openNotes = review.items.filter((i) => i.status === 'open').length;
   const activeKey = activeTab ? chapterKey(activeTab.file, activeTab.chapter) : null;
   useEffect(() => setDrawer(false), [activeKey]);
@@ -933,7 +944,7 @@ export function App() {
             const active = tab.id === s.activeId;
             const dirty = tab.draft !== null;
             return (
-              <section key={tab.id} className="pane" hidden={!active} aria-label={basename(tab.file)} {...(caps.windowChrome ? {} : longPressProps((x, y, target) => setEditMenu({ x, y, items: editMenuItems(target, () => openFind(false)) }), isEditable))}>
+              <section key={tab.id} className="pane" hidden={!active} aria-label={basename(tab.file)} {...(caps.windowChrome ? {} : longPressProps((x, y, target) => setEditMenu({ x, y, items: [...editMenuItems(target, () => openFind(false)), ...(tab.mode === 'visual' && projectPath && target.closest('.ProseMirror') ? noteItems(tab.id, x, y) : [])] }), isEditable))}>
                 {tab.conflict?.kind === 'changed' && (
                   <div className="banner warn" role="alert">
                     {basename(tab.file)} was changed on disk while you have unsaved edits.{' '}
@@ -1026,7 +1037,7 @@ export function App() {
                     onNav={(n) => registerNav(tab.id, n)}
                     readOnly={isReviewer}
                     onContextMenu={
-                      projectPath
+                      projectPath && caps.windowChrome
                         ? ({ x, y }) => {
                             const sel = navs.current.get(tab.id)?.review?.selectionAt(x, y);
                             if (sel) setTextMenu({ x, y, sel });

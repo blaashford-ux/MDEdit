@@ -52,3 +52,6 @@ creates the `vX.Y.Z` tag itself, and publishes the installer.
 If a release went out from the wrong commit (say a last-minute fix landed after it), run the **release** workflow
 from the Actions tab with **recut** ticked. It deletes the existing release and its tag, then builds and publishes
 the version in `package.json` again from the commit you ran it on. Downloads of the old release disappear.
+
+## The invitation page (GitHub Pages)
+Review invitation links point at `https://blaashford-ux.github.io/MDEdit/join/`, a small page from `site/join` that also runs Google's file picker inside the app. `.github/workflows/pages.yml` publishes `site/` whenever it changes on `main` (or when run by hand). One-time setup: repository **Settings → Pages → Source: GitHub Actions**. The page contains the public Picker API key, which is restricted in Google Cloud to this site and the Picker API.

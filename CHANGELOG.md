@@ -1,7 +1,10 @@
 # Changelog
 
-### Unreleased
+### 0.5.0 — 2026-10-07
 **New**
+- **Comments and suggestions.** Select text, or right-click it (press and hold on the phone), and choose **Add comment…** or **Suggest a change…**; with nothing selected the note attaches to the paragraph. The **Notes** button on each chapter opens a panel to reply, resolve, reject, accept (a suggestion edits the chapter) and delete. Notes are highlighted in the text and follow it as you edit; a note whose text was deleted stays in the list, marked *not in this chapter*. They are stored one file per reviewer under `.mdedit/review`.
+- **Share a project for review.** Notes → **Share…** makes one link per reviewer. Reviewers open it under **Projects → Shared with me → Open invitation…**, Google's file picker gives MDEdit access to just two files, and the project opens read-only. They can read and leave notes; they can't change your text or see each other's notes. You see everyone's notes together, each labelled with who wrote it. Your text is re-uploaded automatically after you save, so reviewers always see your latest version; their notes reach you within about a minute. Removing a reviewer closes their file and keeps their notes. Needs Google Drive sync on both sides. Projects shared with you never sync into your own Drive.
+- **Invitation page.** A small web page (published with GitHub Pages) explains an invitation link and hosts Google's file picker inside the app.
 - **Update from About.** Help → About MDEdit (the ⓘ button on the phone) has a **Check for updates** button. If the latest GitHub release is newer, **Update** downloads the file for your device (the Windows installer, or the Android app), checks it against the release's checksums, then closes MDEdit and runs the installer (Windows) or opens Android's installer. The first time on Android you are sent to allow MDEdit to install apps. Android only accepts the update if the release was signed with the same key as the installed app.
 
 ### 0.4.3 — 2026-10-07

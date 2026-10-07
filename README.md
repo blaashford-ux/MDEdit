@@ -21,6 +21,9 @@ The Android app has the same editor, Projects home, goals and progress, with fin
 ## Google Drive sync
 Sign in once on each device and MDEdit keeps your projects in an `MDEdit` folder in your Google Drive. It can only see files it created there. Edits sync a few seconds after you save and when you return to the app. If two devices change the same chapter, **both versions are kept**, and nothing is deleted in bulk without asking. Don't put your Root Folder inside OneDrive, Dropbox or Google Drive for Desktop.
 
+## Review with others
+Select text (or right-click it; press and hold on the phone) and choose **Add comment…** or **Suggest a change…**. The **Notes** panel lists them, and accepting a suggestion edits your chapter. To get feedback from other people, open Notes → **Share…** and create a link for each reviewer. They open it under **Projects → Shared with me** in their own MDEdit, read your latest text and add their own notes; you see everyone's together, and they never see each other's. Sharing uses Google Drive and needs sync set up on both sides.
+
 ## Export for KDP
 1. Right-click a `.md` file and choose **Mark for Export**. Your manuscript is never modified; the book's details are saved beside it.
 2. Fill in **Book Details**: title, subtitle and author; the copyright page; dedication; epigraph; and back matter (Continue the Story, Also by the author with a blurb for each book, About the Author, and a custom page). Only links you type are ever added.
