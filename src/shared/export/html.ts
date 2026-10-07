@@ -95,7 +95,7 @@ function pageBlockHtml(b: PageBlock, medium: Medium, headingClass: string): stri
       return `<p class="crline">${b.bold ? `<strong>${esc(b.text)}</strong>` : esc(b.text)}</p>`;
     case 'para': {
       const cls = ['crpara', b.align === 'center' ? 'center' : b.align === 'right' ? 'right' : ''].filter(Boolean).join(' ');
-      let inner = esc(b.text);
+      let inner = esc(b.text).replace(/\n/g, '<br/>');
       if (b.bold) inner = `<strong>${inner}</strong>`;
       if (b.italic) inner = `<em>${inner}</em>`;
       return `<p class="${cls}">${inner}</p>`;

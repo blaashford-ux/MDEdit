@@ -5,6 +5,8 @@ import { collectFiles, collectOrphans, findNode } from '../shared/tree';
 import { countWords } from '../shared/words';
 import { BookDetailsDialog } from './BookDetailsDialog';
 import { ContextMenu, type MenuItem } from './ContextMenu';
+import { editMenuItems, isEditable } from './editMenu';
+import { longPressProps } from './longPress';
 import { Editor } from './Editor';
 import { Icon } from './Icon';
 import { ExportDialog } from './ExportDialog';
@@ -50,6 +52,8 @@ export function App() {
   const [filter, setFilter] = useState('');
   const [focusKey, setFocusKey] = useState<string | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; row: Row } | null>(null);
+  /** Cut / Copy / Paste / Select all for the editor, opened by press-and-hold or right-click on the text. */
+  const [editMenu, setEditMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
   const [prompt, setPrompt] = useState<PromptSpec | null>(null);
   const [bookFile, setBookFile] = useState<string | null>(null);
   const [relink, setRelink] = useState<string | null>(null);
@@ -703,6 +707,7 @@ export function App() {
         onHome={s.root ? () => void goHome() : undefined}
         onSave={() => void ws.save()}
         canSave={activeDirty}
+        find={activeTab ? { open: find.open, onToggle: () => (find.open ? closeFind() : openFind(false)) } : undefined}
         sync={caps.sync && syncStatus ? { state: syncStatus.state, onOpen: () => setShowSync(true) } : undefined}
       />
     )}
@@ -854,7 +859,7 @@ export function App() {
             const active = tab.id === s.activeId;
             const dirty = tab.draft !== null;
             return (
-              <section key={tab.id} className="pane" hidden={!active} aria-label={basename(tab.file)}>
+              <section key={tab.id} className="pane" hidden={!active} aria-label={basename(tab.file)} {...(caps.windowChrome ? {} : longPressProps((x, y, target) => setEditMenu({ x, y, items: editMenuItems(target, () => openFind(false)) }), isEditable))}>
                 {tab.conflict?.kind === 'changed' && (
                   <div className="banner warn" role="alert">
                     {basename(tab.file)} was changed on disk while you have unsaved edits.{' '}
@@ -981,6 +986,7 @@ export function App() {
       </main>
 
       {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItems(menu.row)} onClose={() => setMenu(null)} />}
+      {editMenu && <ContextMenu keepFocus x={editMenu.x} y={editMenu.y} items={editMenu.items} onClose={() => setEditMenu(null)} />}
       {prompt && <PromptDialog spec={prompt} onClose={() => setPrompt(null)} />}
       {relink && (
         <RelinkDialog sidecar={relink} candidates={relinkCandidates} onLink={(md) => ws.relinkSidecar(relink, md)} onClose={() => setRelink(null)} />

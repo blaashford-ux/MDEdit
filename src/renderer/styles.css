@@ -180,6 +180,8 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline-offs
 
 .context-menu { position: fixed; z-index: 40; min-width: 210px; padding: 6px; background: var(--panel); border-radius: 12px; box-shadow: var(--shadow-pop); outline: none; }
 .context-menu button { display: flex; justify-content: space-between; gap: 24px; width: 100%; text-align: left; background: none; padding: 6px 12px; border-radius: 8px; }
+/* Press-and-hold targets: no system callout or text-selection bubble on top of the app's own menu */
+.tree .row, .project-card { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
 .context-menu button.hot { background: var(--raised); }
 .context-menu button.danger { color: var(--danger); }
 .context-menu .hint { color: var(--faint); }
@@ -517,6 +519,7 @@ code.path { background: var(--raised); padding: 1px 6px; border-radius: 6px; }
 .mobilebar .mb-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; font-size: 15px; }
 .mb-btn { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; padding: 0 10px; background: transparent; color: var(--fg); border-radius: 12px; }
 .mb-btn.text { font-size: 14px; }
+.mb-btn.on { background: var(--accent); color: var(--accent-ink); }
 .mb-btn.primary:not(:disabled) { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
 .mb-btn:disabled { opacity: 0.4; }
 

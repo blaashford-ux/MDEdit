@@ -46,7 +46,7 @@ const details = (edit: (d: BookDetails) => void = () => undefined): BookDetails 
   d.dedication = { enabled: true, text: 'For everyone.' };
   d.epigraph = { enabled: true, text: 'To be or not.', attribution: 'Someone' };
   d.back.links = { enabled: true, heading: '', intro: 'More at:', items: [{ label: 'Newsletter', url: 'https://example.com/news?a=1&b=2' }, { label: 'Bad', url: 'javascript:alert(1)' }] };
-  d.back.alsoBy = { enabled: true, heading: '', items: [{ title: 'Book Two', url: '' }] };
+  d.back.alsoBy = { enabled: true, heading: '', items: [{ title: 'Book Two', url: '', blurb: '' }] };
   d.back.about = { enabled: true, heading: '', text: 'Bio.' };
   edit(d);
   return d;

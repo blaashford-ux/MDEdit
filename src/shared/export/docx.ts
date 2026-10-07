@@ -45,6 +45,8 @@ export async function buildDocx(book: BookBuild): Promise<Uint8Array> {
   const indent = s.paragraphStyle === 'indent';
   const sceneBreak = book.settings.sceneBreak;
   const margin = convertInchesToTwip(0.75);
+  /** One blank line (in twips) after every back-matter paragraph, line and link. */
+  const BACK_GAP = Math.round(size * 10 * 1.2);
 
   const run = (text: string, st: RunStyle = {}, extra: Record<string, unknown> = {}) =>
     new TextRun({ text, font: st.code ? 'Courier New' : FONT, size, bold: st.bold, italics: st.italics, ...extra });
@@ -141,7 +143,10 @@ export async function buildDocx(book: BookBuild): Promise<Uint8Array> {
   };
 
   // ---- front matter -----------------------------------------------------------------------
-  const pageBlock = (b: PageBlock, pageBreakBefore = false): Paragraph => {
+  /** Text runs for a field value; typed newlines become line breaks. */
+  const textRuns = (text: string, st: RunStyle = {}) =>
+    text.split('\n').map((l, i) => run(l, st, i > 0 ? { break: 1 } : {}));
+  const pageBlock = (b: PageBlock, pageBreakBefore = false, backMatter = false): Paragraph => {
     const pb = pageBreakBefore ? { pageBreakBefore: true } : {};
     switch (b.t) {
       case 'title':
@@ -153,15 +158,15 @@ export async function buildDocx(book: BookBuild): Promise<Uint8Array> {
       case 'heading':
         return new Paragraph({ children: [new TextRun({ text: b.text, font: FONT, size: Math.round(size * 1.4), bold: true })], alignment: AlignmentType.CENTER, spacing: { before: 0, after: 360 }, ...pb });
       case 'line':
-        return new Paragraph({ children: [run(b.text, { bold: b.bold })], alignment: AlignmentType.LEFT, spacing: { before: 0, after: 120 }, ...pb });
+        return new Paragraph({ children: textRuns(b.text, { bold: b.bold }), alignment: AlignmentType.LEFT, spacing: { before: 0, after: backMatter ? BACK_GAP : 120 }, ...pb });
       case 'para': {
         const align = b.align === 'center' ? AlignmentType.CENTER : b.align === 'right' ? AlignmentType.RIGHT : AlignmentType.LEFT;
-        return new Paragraph({ children: [run(b.text, { bold: b.bold, italics: b.italic })], alignment: align, spacing: { before: 0, after: 180 }, ...pb });
+        return new Paragraph({ children: textRuns(b.text, { bold: b.bold, italics: b.italic }), alignment: align, spacing: { before: 0, after: backMatter ? BACK_GAP : 180 }, ...pb });
       }
       case 'link':
         return new Paragraph({
           children: [new ExternalHyperlink({ link: safeUrl(b.url), children: [new TextRun({ text: b.label, font: FONT, size, color: '0563C1', underline: {} })] })],
-          spacing: { before: 0, after: 120 },
+          spacing: { before: 0, after: backMatter ? BACK_GAP : 120 },
           ...pb
         });
     }
@@ -226,7 +231,7 @@ export async function buildDocx(book: BookBuild): Promise<Uint8Array> {
             pageBreakBefore: true
           })
         );
-      } else bodyChildren.push(pageBlock(b, i === 0));
+      } else bodyChildren.push(pageBlock(b, i === 0, true));
     });
   }
 

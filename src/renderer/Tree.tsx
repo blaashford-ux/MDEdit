@@ -1,4 +1,5 @@
 import { Icon } from './Icon';
+import { justLongPressed, longPressProps } from './longPress';
 import { useEffect, useRef } from 'react';
 import { navigate, type NavKey, type Row } from './treeRows';
 
@@ -84,11 +85,8 @@ export function Tree(p: Props) {
             className={'row ' + r.kind + (active ? ' active' : '') + (r.key === p.focusKey ? ' focused' : '')}
             style={{ paddingLeft: 8 + r.depth * 14 }}
             onFocus={() => p.onFocusKey(r.key)}
-            onClick={() => p.onActivate(r)}
-            onContextMenu={(e) => {
-              e.preventDefault();
-              p.onContextMenu(r, e.clientX, e.clientY);
-            }}
+            onClick={() => !justLongPressed() && p.onActivate(r)}
+            {...longPressProps((x, y) => p.onContextMenu(r, x, y))}
           >
             {r.expandable ? (
               <span
