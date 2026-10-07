@@ -3,6 +3,13 @@ import { DESKTOP_CAPABILITIES, type ExportProgress, type MdeditApi, type MenuAct
 
 const api: MdeditApi = {
   capabilities: DESKTOP_CAPABILITIES,
+  getShareStatus: (project) => ipcRenderer.invoke('review:shareStatus', project),
+  inviteReviewer: (project, name) => ipcRenderer.invoke('review:invite', project, name),
+  revokeReviewer: (project, id) => ipcRenderer.invoke('review:revoke', project, id),
+  exchangeReviews: (project) => ipcRenderer.invoke('review:exchange', project),
+  listShared: () => ipcRenderer.invoke('review:listShared'),
+  pickerToken: () => ipcRenderer.invoke('review:pickerToken'),
+  joinReview: (link, name) => ipcRenderer.invoke('review:join', link, name),
   getSyncStatus: () => ipcRenderer.invoke('sync:status'),
   connectSync: () => ipcRenderer.invoke('sync:connect'),
   syncNow: () => ipcRenderer.invoke('sync:now'),

@@ -5,6 +5,7 @@
  * reviewer, creates a private comments file (writable by anyone with that reviewer's link). Everyone only ever writes
  * files they own or were given the link to, so reviewers can't change the manuscript or see each other's notes.
  */
+import { makeProjects } from '../backend/projects';
 import { makeReviews } from '../backend/reviews';
 import type { FsPort } from '../fsPort';
 import { md5Hex } from '../md5';
@@ -43,7 +44,8 @@ export interface ShareStatus {
 
 export interface ShareOptions {
   fs: FsPort;
-  drive: DriveApi;
+  /** Drive is created on use, because the sign-in may happen after the app starts. */
+  drive: () => DriveApi;
   /** Where this device remembers what it has shared (outside the Root Folder). */
   stateFile: string;
   now?: () => Date;
@@ -88,9 +90,9 @@ export class ReviewShare {
 
   /** The Drive folder that holds shared files, beside (not inside) the sync folder. */
   private async folder(): Promise<string> {
-    if (this.state.folderId && (await this.o.drive.getFile(this.state.folderId))) return this.state.folderId;
-    const existing = (await this.o.drive.listAll()).find((f) => f.isFolder && f.name === DRIVE_REVIEWS_NAME && f.parentId === null);
-    this.state.folderId = existing?.id ?? (await this.o.drive.createFolder(DRIVE_REVIEWS_NAME, null)).id;
+    if (this.state.folderId && (await this.o.drive().getFile(this.state.folderId))) return this.state.folderId;
+    const existing = (await this.o.drive().listAll()).find((f) => f.isFolder && f.name === DRIVE_REVIEWS_NAME && f.parentId === null);
+    this.state.folderId = existing?.id ?? (await this.o.drive().createFolder(DRIVE_REVIEWS_NAME, null)).id;
     return this.state.folderId;
   }
 
@@ -102,15 +104,15 @@ export class ReviewShare {
     const body = JSON.stringify({ ...pkg, publishedAt: '' });
     const md5 = md5Hex(body);
     let rec = this.state.projects[project];
-    const stillThere = rec ? await this.o.drive.getFile(rec.packageId) : null;
+    const stillThere = rec ? await this.o.drive().getFile(rec.packageId) : null;
     if (rec && stillThere && rec.packageMd5 === md5) return rec;
 
     const text = JSON.stringify(pkg);
     if (rec && stillThere) {
-      await this.o.drive.updateFile(rec.packageId, text);
+      await this.o.drive().updateFile(rec.packageId, text);
     } else {
-      const file = await this.o.drive.createFile(`${toCompliantName(project)}.mdedit-review.json`, await this.folder(), text);
-      await this.o.drive.shareByLink(file.id, 'reader');
+      const file = await this.o.drive().createFile(`${toCompliantName(project)}.mdedit-review.json`, await this.folder(), text);
+      await this.o.drive().shareByLink(file.id, 'reader');
       rec = { packageId: file.id, packageMd5: null, publishedAt: null, reviewers: rec?.reviewers ?? [] };
     }
     rec = { ...rec!, packageMd5: md5, publishedAt: pkg.publishedAt };
@@ -125,12 +127,12 @@ export class ReviewShare {
     const rec = await this.publish(dir, project);
     const id = this.newId();
     const name = reviewerName.trim() || 'Reviewer';
-    const file = await this.o.drive.createFile(
+    const file = await this.o.drive().createFile(
       `${toCompliantName(project)} - ${toCompliantName(name)}.comments.json`,
       await this.folder(),
       serializeReviewFile(newReviewFile(project, { id, name }))
     );
-    await this.o.drive.shareByLink(file.id, 'writer');
+    await this.o.drive().shareByLink(file.id, 'writer');
     const reviewer: ReviewerRecord = {
       id,
       name,
@@ -150,9 +152,9 @@ export class ReviewShare {
     const who = rec?.reviewers.find((r) => r.id === reviewerId);
     if (!rec || !who) return;
     await this.pull(dir, project).catch(() => undefined);
-    await this.o.drive.unshare(who.commentsId).catch(() => undefined);
+    await this.o.drive().unshare(who.commentsId).catch(() => undefined);
     const left = rec.reviewers.filter((r) => r.id !== reviewerId);
-    if (left.length === 0) await this.o.drive.unshare(rec.packageId).catch(() => undefined);
+    if (left.length === 0) await this.o.drive().unshare(rec.packageId).catch(() => undefined);
     this.state.projects[project] = { ...rec, reviewers: left };
     await this.save();
   }
@@ -167,14 +169,14 @@ export class ReviewShare {
     const local = new Map((await reviews.list(dir)).map((r) => [r.id, r.text]));
     for (const who of rec.reviewers) {
       try {
-        const remoteText = await this.o.drive.download(who.commentsId);
+        const remoteText = await this.o.drive().download(who.commentsId);
         const merged = mergeFiles(parseReviewFile(remoteText), parseReviewFile(local.get(who.id) ?? ''), project, who);
         const text = serializeReviewFile(merged);
         if (text !== local.get(who.id)) {
           await reviews.save(dir, who.id, text);
           out.changed = true;
         }
-        if (text !== remoteText) await this.o.drive.updateFile(who.commentsId, text);
+        if (text !== remoteText) await this.o.drive().updateFile(who.commentsId, text);
       } catch (e) {
         out.errors.push(`${who.name}: ${e instanceof Error ? e.message : String(e)}`);
       }
@@ -199,24 +201,28 @@ function mergeFiles(remote: ReviewFile | null, local: ReviewFile | null, project
 
 export interface JoinOptions {
   fs: FsPort;
-  drive: DriveApi;
+  drive: () => DriveApi;
   /** Local folder for projects shared with this person ("Shared With Me"). */
   sharedRoot: string;
 }
 
-export interface JoinResult {
-  /** The local folder the project now lives in. */
+/** A project somebody shared with this person, as it sits on this device. */
+export interface SharedProject {
+  /** The local folder the project lives in. */
   dir: string;
   project: string;
   reviewerId: string;
 }
+
+export type JoinResult = SharedProject;
 
 /** Reviewer side. The file picker has already given this app access to the two files by the time these run. */
 export class ReviewJoin {
   constructor(private readonly o: JoinOptions) {}
 
   async join(invite: { packageId: string; commentsId: string; reviewerId: string; project: string }, readerName: string): Promise<JoinResult> {
-    const { fs, drive } = this.o;
+    const { fs } = this.o;
+    const drive = this.o.drive();
     const pkgFile = await drive.getFile(invite.packageId);
     const commentsFile = await drive.getFile(invite.commentsId);
     if (!pkgFile || !commentsFile) throw new Error('MDEdit can’t open that project yet. Pick both files when Google asks, or ask the owner to send the link again.');
@@ -227,6 +233,8 @@ export class ReviewJoin {
     const previous = (await readMarker(fs, dir))?.files ?? [];
     const files = await writePackage(fs, dir, pkg, previous);
     await writeMarker(fs, dir, { ...invite, project: pkg.project, packageMd5: pkgFile.md5, files });
+    const projects = makeProjects(fs);
+    if (!(await projects.isProject(dir))) await projects.convertToProject(dir); // so it opens like any project
 
     const remote = parseReviewFile(await drive.download(invite.commentsId)) ?? newReviewFile(pkg.project, { id: invite.reviewerId, name: readerName });
     const named: ReviewFile = { ...remote, reviewer: { id: invite.reviewerId, name: readerName || remote.reviewer.name } };
@@ -263,7 +271,8 @@ export class ReviewJoin {
 
   /** Brings the owner's latest text down and exchanges this reviewer's notes. `revoked` when access has been withdrawn. */
   async sync(dir: string): Promise<{ changed: boolean; revoked: boolean }> {
-    const { fs, drive } = this.o;
+    const { fs } = this.o;
+    const drive = this.o.drive();
     const m = await readMarker(fs, dir);
     if (!m) throw new Error('That folder is not a shared project.');
     const pkgFile = await drive.getFile(m.packageId);

@@ -27,6 +27,8 @@ import * as projects from './projects';
 import { existingFolder, SettingsStore, type WindowState } from './settings';
 import type { SyncService } from '../src/shared/sync/service';
 import { createDesktopSync } from './syncHost';
+import { createReviewHost } from '../src/shared/review/host';
+import type { ReviewSharingApi } from '../src/shared/api';
 
 const settings = new SettingsStore(path.join(app.getPath('userData'), 'settings.json'));
 let drafts: DraftStore;
@@ -93,6 +95,19 @@ function ensureSync(): Promise<SyncService> {
     });
   }
   return syncReady;
+}
+
+/** Sharing for review, built on the sync service's Google sign-in. */
+async function reviewHost(): Promise<ReviewSharingApi> {
+  const svc = await ensureSync();
+  return createReviewHost({
+    fs: nodeFs,
+    root: projectsRoot(),
+    stateFile: path.join(app.getPath('userData'), 'shares.json'),
+    drive: () => svc.driveApi(),
+    connected: () => svc.isConnected(),
+    accessToken: () => svc.accessToken()
+  });
 }
 
 /** Something on disk changed because of the user: sync soon (does nothing unless Google Drive is connected). */
@@ -360,6 +375,13 @@ function registerIpc(): void {
   );
   handle('dialog:confirmRecover', (e, name: string) => confirmRecover(winOf(e), name));
   // --- Google Drive sync ---
+  handle('review:shareStatus', async (_e, project: string) => (await reviewHost()).getShareStatus(inRoot(project, { allowRoot: true })));
+  handle('review:invite', async (_e, project: string, name: string) => (await reviewHost()).inviteReviewer(inRoot(project, { allowRoot: true }), name));
+  handle('review:revoke', async (_e, project: string, id: string) => (await reviewHost()).revokeReviewer(inRoot(project, { allowRoot: true }), id));
+  handle('review:exchange', async (_e, project: string) => (await reviewHost()).exchangeReviews(inRoot(project, { allowRoot: true })));
+  handle('review:listShared', async () => (await reviewHost()).listShared());
+  handle('review:pickerToken', async () => (await reviewHost()).pickerToken());
+  handle('review:join', async (_e, link: string, name: string) => (await reviewHost()).joinReview(link, name));
   handle('sync:status', async () => (await ensureSync()).getSyncStatus());
   handle('sync:connect', async () => (await ensureSync()).connectSync());
   handle('sync:now', async () => (await ensureSync()).syncNow());

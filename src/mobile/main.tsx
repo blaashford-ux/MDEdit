@@ -3,6 +3,7 @@ import { Capacitor } from '@capacitor/core';
 import { Filesystem } from '@capacitor/filesystem';
 import { createRoot } from 'react-dom/client';
 import { MOBILE_CAPABILITIES, type CoreApi, type MdeditApi } from '../shared/api';
+import { createReviewHost } from '../shared/review/host';
 import { createCoreApi } from '../shared/backend/coreApi';
 import type { FsPort } from '../shared/fsPort';
 import { FakeDrive } from '../shared/sync/fakeDrive';
@@ -69,8 +70,16 @@ async function start(): Promise<void> {
   });
   await sync.load();
 
+  const reviews = createReviewHost({
+    fs,
+    root: ROOT,
+    stateFile: `${STATE}/shares.json`,
+    drive: () => sync.driveApi(),
+    connected: () => sync.isConnected(),
+    accessToken: () => sync.accessToken(),
+  });
   const core = onChange(backend.api, () => sync.syncSoon());
-  window.mdedit = { ...core, ...desktopOnlyStubs, ...bindSync(sync), capabilities: MOBILE_CAPABILITIES } satisfies MdeditApi;
+  window.mdedit = { ...core, ...desktopOnlyStubs, ...bindSync(sync), ...reviews, capabilities: MOBILE_CAPABILITIES } satisfies MdeditApi;
 
   // Keep the latest version available: on start, when the app comes back to the front, and every minute while it is open.
   const visible = () => document.visibilityState === 'visible';

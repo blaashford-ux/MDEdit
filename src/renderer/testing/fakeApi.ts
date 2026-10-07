@@ -16,7 +16,7 @@ import {
   type UnsavedChoice
 } from '../../shared/api';
 import { basename, dirname, isInside } from '../../shared/paths';
-import { syncOff } from '../../shared/syncStub';
+import { reviewOff, syncOff } from '../../shared/syncStub';
 
 /** In-memory stand-in for the Electron bridge, with scripted dialog answers. */
 export class FakeApi implements MdeditApi {
@@ -27,6 +27,13 @@ export class FakeApi implements MdeditApi {
   confirmDeletes = syncOff.confirmDeletes;
   disconnectSync = syncOff.disconnectSync;
   onSyncStatus = syncOff.onSyncStatus;
+  getShareStatus = reviewOff.getShareStatus;
+  inviteReviewer = reviewOff.inviteReviewer;
+  revokeReviewer = reviewOff.revokeReviewer;
+  exchangeReviews = reviewOff.exchangeReviews;
+  listShared = reviewOff.listShared;
+  pickerToken = reviewOff.pickerToken;
+  joinReview = reviewOff.joinReview;
   files = new Map<string, { text: string; mtime: number }>();
   /** Folders that exist on disk (like a real file system, they survive deleting their files). */
   dirs = new Set<string>();

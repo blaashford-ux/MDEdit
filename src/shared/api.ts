@@ -1,6 +1,7 @@
 import type { AppDefaults } from './appDefaults';
 import type { BookDetails } from './export/model';
 import type { Progress } from './progress';
+import type { ReviewerRecord, ShareStatus, SharedProject } from './review/share';
 import type { ProjectMeta, ProjectsConfig, ProjectsSettings, ProjectSummary, RootListing } from './projects';
 
 export interface FileNode {
@@ -320,6 +321,23 @@ export interface SyncApi {
   onSyncStatus(cb: (s: SyncStatus) => void): () => void;
 }
 
+/** Sharing a project with reviewers over Google Drive, and joining projects others have shared. */
+export interface ReviewSharingApi {
+  getShareStatus(project: string): Promise<ShareStatus>;
+  /** Makes a private comments file for a new reviewer and returns their invitation link (also publishes the text). */
+  inviteReviewer(project: string, name: string): Promise<ReviewerRecord>;
+  /** Closes a reviewer's file; their notes stay in the project. */
+  revokeReviewer(project: string, reviewerId: string): Promise<void>;
+  /** Exchanges notes (and, for the owner, the latest text) with Drive for one open project. A no-op when nothing is shared. */
+  exchangeReviews(project: string): Promise<{ changed: boolean; revoked: boolean; errors: string[] }>;
+  /** Projects other people shared with this person. */
+  listShared(): Promise<SharedProject[]>;
+  /** An access token for Google's file picker, which gives MDEdit access to the files in an invitation. */
+  pickerToken(): Promise<string>;
+  /** Downloads the shared project into "Shared With Me" (after the picker has granted access). */
+  joinReview(link: string, name: string): Promise<SharedProject>;
+}
+
 /** Which optional parts of the app a platform provides, so the UI can leave out what is missing. */
 export interface Capabilities {
   /** Export for KDP (`ExportApi`). */
@@ -334,11 +352,13 @@ export interface Capabilities {
   fonts: boolean;
   /** Google Drive sync (`SyncApi`). */
   sync: boolean;
+  /** Sharing for review (`ReviewSharingApi`); needs sync. */
+  review: boolean;
 }
 
-export const DESKTOP_CAPABILITIES: Capabilities = { export: true, windowChrome: true, folderPicker: true, launchFiles: true, fonts: true, sync: true };
+export const DESKTOP_CAPABILITIES: Capabilities = { export: true, windowChrome: true, folderPicker: true, launchFiles: true, fonts: true, sync: true, review: true };
 /** The phone: the editor and projects, nothing desktop-specific. */
-export const MOBILE_CAPABILITIES: Capabilities = { export: false, windowChrome: false, folderPicker: false, launchFiles: false, fonts: false, sync: true };
+export const MOBILE_CAPABILITIES: Capabilities = { export: false, windowChrome: false, folderPicker: false, launchFiles: false, fonts: false, sync: true, review: true };
 
 /**
  * What `Workspace` (the editor's state and logic) needs: the core, plus a few desktop extras it uses when present
@@ -352,7 +372,7 @@ export type WorkspaceApi = CoreApi &
  * The full surface the renderer talks to. On the phone the `ExportApi` / `DesktopApi` parts are inert stubs and the
  * UI checks `capabilities` before showing anything that needs them.
  */
-export type MdeditApi = CoreApi & ExportApi & DesktopApi & SyncApi & { capabilities: Capabilities };
+export type MdeditApi = CoreApi & ExportApi & DesktopApi & SyncApi & ReviewSharingApi & { capabilities: Capabilities };
 
 declare global {
   interface Window {

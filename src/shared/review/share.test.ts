@@ -19,9 +19,9 @@ function setup() {
   ownerFs.seed('/root/Novel/.mdedit/project.json', '{}');
   ownerFs.seed('/root/Novel/Exports/Book.epub', 'x');
   let n = 0;
-  const share = new ReviewShare({ fs: ownerFs, drive, stateFile: '/state/shares.json', newId: () => `rev${++n}abcdef` });
+  const share = new ReviewShare({ fs: ownerFs, drive: () => drive, stateFile: '/state/shares.json', newId: () => `rev${++n}abcdef` });
   const readerFs = new MemoryFs();
-  const join = new ReviewJoin({ fs: readerFs, drive, sharedRoot: '/root/Shared With Me' });
+  const join = new ReviewJoin({ fs: readerFs, drive: () => drive, sharedRoot: '/root/Shared With Me' });
   return { drive, ownerFs, share, readerFs, join };
 }
 
