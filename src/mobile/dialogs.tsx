@@ -61,6 +61,16 @@ export const mobileDialogs: Dialogs = {
       })) === 'yes'
     );
   },
+  async confirmMarkEdited(chapterTitle) {
+    return (
+      (await ask({
+        title: `Mark “${chapterTitle}” as edited?`,
+        detail: 'Edited chapters show a green dot in the file list.',
+        buttons: [{ label: 'Mark Edited', value: 'yes', kind: 'primary' }, { label: 'Not Yet', value: 'no' }],
+        cancel: 'no',
+      })) === 'yes'
+    );
+  },
 };
 
 export function DialogHost() {

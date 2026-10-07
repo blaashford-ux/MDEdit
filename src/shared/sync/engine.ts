@@ -7,6 +7,7 @@ import { makeFiles } from '../backend/files';
 import type { FsPort } from '../fsPort';
 import { md5Hex } from '../md5';
 import { joinParts } from '../paths';
+import { mergeMarks, sanitizeMarks } from '../editedMarks';
 import { localDate, mergeProgress, sanitizeProgress } from '../progress';
 import { DRIVE_ROOT_NAME, type DriveApi, type DriveFile } from './drive';
 import { isCompliantPath, nameKey } from './names';
@@ -281,6 +282,23 @@ export async function syncOnce(o: SyncOptions): Promise<SyncReport> {
             }
           };
           const merged = mergeProgress(parse(await fs.readText(full(a.path))), parse(await drive.download(a.id)));
+          const text = JSON.stringify(merged, null, 2) + '\n';
+          await writeLocal(a.path, text);
+          await drive.updateFile(a.id, text);
+          remember(a.path, text, a.id);
+          report.merged.push(a.path);
+          return;
+        }
+        case 'mergeMarks': {
+          if (!(await unchanged(a.path))) return skip(a.path);
+          const parse = (t: string) => {
+            try {
+              return sanitizeMarks(JSON.parse(t));
+            } catch {
+              return sanitizeMarks(null);
+            }
+          };
+          const merged = mergeMarks(parse(await fs.readText(full(a.path))), parse(await drive.download(a.id)));
           const text = JSON.stringify(merged, null, 2) + '\n';
           await writeLocal(a.path, text);
           await drive.updateFile(a.id, text);

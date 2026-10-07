@@ -87,10 +87,13 @@ p.bookauthor { text-align: center; font-weight: 700; font-size: 1.3em; margin: 2
 .copyright p.crpara { margin: 0 0 0.9em; font-size: 0.9em; }
 p.center { text-align: center; } p.right { text-align: right; }
 p.linkline { text-align: left; text-indent: 0; margin: 0 0 0.6em; overflow-wrap: anywhere; }
+/* Back matter: always a blank line between paragraphs, lines and links, whatever the body paragraph style */
+.backpage p { text-align: left; text-indent: 0; margin: 0 0 1.25em; }
+.backpage p.linkline, .backpage p.crline { margin: 0 0 1.25em; }
 p.scenebreak { text-align: center; margin: 1.2em 0; text-indent: 0; }
 
 h1 { text-align: center; font-weight: 700; }
-h1.chapter { font-size: 1.6em; margin: 0 0 2em; padding-top: 1.25in; break-after: avoid; }
+h1.chapter { font-size: 1.6em; margin: 0 0 2em; padding-top: ${fmt(s.chapterSink)}in; break-after: avoid; }
 h1.matter { font-size: 1.4em; margin: 0 0 1.5em; padding-top: 0.5in; break-after: avoid; }
 h1.toc-title { font-size: 1.4em; margin: 0 0 1.5em; padding-top: 0.5in; }
 

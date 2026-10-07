@@ -15,7 +15,7 @@ import { sidecarPathFor } from '../src/shared/export/sidecar';
 import { promises as fsp } from 'node:fs';
 import { installMenu } from './menu';
 import { chromeOptions, registerWindowChrome, shellColor, watchWindow } from './windowChrome';
-import { confirmDelete, confirmOverwrite, confirmRecover, confirmUnsaved } from './prompts';
+import { confirmDelete, confirmMarkEdited, confirmOverwrite, confirmRecover, confirmUnsaved } from './prompts';
 import { scanFolder } from './scan';
 import { makeReviews } from '../src/shared/backend/reviews';
 import { nodeFs } from './nodeFs';
@@ -151,6 +151,13 @@ async function defaultsFor(file: string): Promise<AppDefaults> {
   return effectiveDefaults(app, meta);
 }
 
+/** The book fields the enclosing project sets itself (so the book dialogs can say where each value comes from). */
+async function projectFieldsFor(file: string): Promise<string[]> {
+  const dir = await projectDirOf(file);
+  const meta = dir ? await projects.readMeta(dir) : null;
+  return meta ? Object.keys(meta.overrides.book) : [];
+}
+
 const isMarkdown = (p: string) => /\.(md|markdown)$/i.test(p);
 
 /** Files with unsaved edits in the renderer. Reported by the renderer. */
@@ -225,9 +232,18 @@ function registerIpc(): void {
     if (!isMarkdown(full)) throw new Error('Only Markdown files can be exported');
     return full;
   };
-  handle('export:getDetails', async (_e, p: string) => loadDetails(mdPath(p), await defaultsFor(mdPath(p))));
-  handle('export:saveDetails', (_e, p: string, details: unknown) => saveDetails(mdPath(p), details as never));
-  handle('export:setMarked', async (_e, p: string, marked: boolean) => setMarked(mdPath(p), marked === true, await defaultsFor(mdPath(p))));
+  handle('export:getDetails', async (_e, p: string) => loadDetails(mdPath(p), await defaultsFor(mdPath(p)), await projectFieldsFor(mdPath(p))));
+  handle('export:saveDetails', async (_e, p: string, details: unknown, overrides?: unknown) =>
+    saveDetails(
+      mdPath(p),
+      sanitizeBookDetails(details),
+      Array.isArray(overrides) ? overrides.filter((x): x is string => typeof x === 'string') : undefined,
+      await defaultsFor(mdPath(p))
+    )
+  );
+  handle('export:setMarked', async (_e, p: string, marked: boolean) =>
+    setMarked(mdPath(p), marked === true, await defaultsFor(mdPath(p)), await projectFieldsFor(mdPath(p)))
+  );
   handle('export:relink', async (_e, sidecar: string, md: string) => {
     const from = inRoot(sidecar);
     const target = sidecarPathFor(mdPath(md));
@@ -305,7 +321,7 @@ function registerIpc(): void {
   handle('projects:create', async (_e, name: string, templateId: string) => {
     const template = settings.projects().templates.find((t) => t.id === templateId);
     if (!template) throw new Error('That template no longer exists.');
-    return projects.createProject(projectsRoot(), String(name), template);
+    return projects.createProject(projectsRoot(), String(name), template, { app: settings.appDefaults() });
   });
   handle('projects:meta', (_e, p: string) => (path.isAbsolute(p) ? projects.readMeta(path.resolve(p)) : null)); // read-only, any folder
   handle('projects:update', (_e, p: string, patch: Record<string, unknown>) => projects.updateMeta(projectPath(p), patch as never));
@@ -374,6 +390,7 @@ function registerIpc(): void {
     confirmDelete(winOf(e), name, kind, unsaved)
   );
   handle('dialog:confirmRecover', (e, name: string) => confirmRecover(winOf(e), name));
+  handle('dialog:confirmMarkEdited', (e, title: string) => confirmMarkEdited(winOf(e), title));
   // --- Google Drive sync ---
   handle('review:shareStatus', async (_e, project: string) => (await reviewHost()).getShareStatus(inRoot(project, { allowRoot: true })));
   handle('review:invite', async (_e, project: string, name: string) => (await reviewHost()).inviteReviewer(inRoot(project, { allowRoot: true }), name));

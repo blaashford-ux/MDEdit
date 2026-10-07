@@ -22,6 +22,7 @@ export interface Dialogs {
   confirmOverwrite(fileName: string): Promise<boolean>;
   confirmDelete(name: string, kind: 'file' | 'folder' | 'chapter', hasUnsaved: boolean): Promise<boolean>;
   confirmRecover(fileName: string): Promise<boolean>;
+  confirmMarkEdited(chapterTitle: string): Promise<boolean>;
 }
 
 export interface CoreApiOptions {
@@ -196,6 +197,7 @@ export function createCoreApi(o: CoreApiOptions): CoreBackend {
     confirmOverwrite: (n) => o.dialogs.confirmOverwrite(n),
     confirmDelete: (n, k, u) => o.dialogs.confirmDelete(n, k, u),
     confirmRecover: (n) => o.dialogs.confirmRecover(n),
+    confirmMarkEdited: (n) => o.dialogs.confirmMarkEdited(n),
   };
 
   return { api, load: () => settings.load(), flush: () => settings.flush(), trash };

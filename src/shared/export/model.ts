@@ -26,6 +26,8 @@ export interface LinkItem {
 export interface TitleItem {
   title: string;
   url: string;
+  /** Optional short description shown under the title. */
+  blurb: string;
 }
 
 export interface CopyrightDetails {
@@ -72,6 +74,8 @@ export interface ExportSettings {
     topMargin: number;
     bottomMargin: number;
     rectoStarts: boolean;
+    /** Extra space above each chapter heading, in inches, on top of the page margin (0 = heading at the top margin). */
+    chapterSink: number;
     pageNumbers: boolean;
     runningHead: RunningHead;
     fontSize: number;
@@ -122,6 +126,7 @@ export function defaultExportSettings(): ExportSettings {
       topMargin: 0.75,
       bottomMargin: 0.75,
       rectoStarts: true,
+      chapterSink: 1.25,
       pageNumbers: true,
       runningHead: 'none',
       fontSize: 11,
@@ -240,7 +245,7 @@ export function sanitizeBookDetails(raw: unknown, seed: { title?: string; author
       alsoBy: {
         enabled: bool(also.enabled, false),
         heading: str(also.heading, '', 300),
-        items: list(also.items, (x) => ({ title: str(x.title, '', 300), url: str(x.url, '', 2000) }))
+        items: list(also.items, (x) => ({ title: str(x.title, '', 300), url: str(x.url, '', 2000), blurb: str(x.blurb, '') }))
       },
       about: { enabled: bool(about.enabled, false), heading: str(about.heading, d.back.about.heading, 300), text: str(about.text, '') },
       custom: { enabled: bool(custom.enabled, false), heading: str(custom.heading, '', 300), text: str(custom.text, '') }
@@ -270,6 +275,7 @@ export function sanitizeBookDetails(raw: unknown, seed: { title?: string; author
         topMargin: num(pd.topMargin, e.pdf.topMargin, 0.25, 2),
         bottomMargin: num(pd.bottomMargin, e.pdf.bottomMargin, 0.25, 2),
         rectoStarts: bool(pd.rectoStarts, e.pdf.rectoStarts),
+        chapterSink: num(pd.chapterSink, e.pdf.chapterSink, 0, 3),
         pageNumbers: bool(pd.pageNumbers, e.pdf.pageNumbers),
         runningHead: oneOf(pd.runningHead, ['none', 'author', 'title', 'authorTitle'] as const, e.pdf.runningHead),
         fontSize: num(pd.fontSize, e.pdf.fontSize, 8, 16),

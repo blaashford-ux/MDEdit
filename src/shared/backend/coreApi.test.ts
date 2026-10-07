@@ -9,6 +9,7 @@ const dialogs = {
   confirmOverwrite: async () => true,
   confirmDelete: async () => true,
   confirmRecover: async () => true,
+  confirmMarkEdited: async () => false,
 };
 
 let fs: MemoryFs;
@@ -64,8 +65,9 @@ describe('projects on the phone’s API', () => {
   it('records progress for a project', async () => {
     const path = await novel();
     await backend.api.createFile(`${path}/Manuscript`, 'Ch 1', '# One\nthree little words\n');
-    const r = await backend.api.recordProgress(path);
-    expect(r.total).toBeGreaterThanOrEqual(3);
+    expect((await backend.api.recordProgress(path)).total).toBeNull(); // no active manuscript
+    await backend.api.updateProject(path, { activeManuscript: 'Manuscript/Ch 1.md' });
+    expect((await backend.api.recordProgress(path)).total).toBeGreaterThanOrEqual(3);
   });
 
   it('keeps the Root Folder fixed', async () => {
@@ -148,9 +150,10 @@ describe('word counts', () => {
     let reads = 0;
     fs.readText = async (p: string) => (reads++, real(p));
     await backend.api.listProjects();
-    expect(reads).toBe(1); // only the project marker; the chapter's count came from the cache
+    expect(reads).toBe(2); // the project marker and its edited-chapter marks; the chapter's count came from the cache
     await backend.api.writeFile(`${path}/Manuscript/Ch 1.md`, '# One\nfour little words now\n');
+    await backend.api.updateProject(path, { activeManuscript: 'Manuscript/Ch 1.md' });
     const again = await backend.api.listProjects();
-    expect(again.projects[0].words).toBeGreaterThanOrEqual(4); // an edited file is counted afresh
+    expect(again.projects[0].words).toBeGreaterThanOrEqual(4); // the active manuscript is counted afresh
   });
 });

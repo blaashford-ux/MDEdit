@@ -2,10 +2,12 @@ import { Crepe, CrepeFeature } from '@milkdown/crepe';
 import { editorViewCtx, editorViewOptionsCtx } from '@milkdown/kit/core';
 import { Selection } from '@milkdown/kit/prose/state';
 import { $prose, replaceAll } from '@milkdown/kit/utils';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import '@milkdown/crepe/theme/common/style.css';
 import '@milkdown/crepe/theme/classic.css';
+import { blockLines } from '../shared/lines';
 import { pickScene } from '../shared/sceneBreaks';
+import { LineGutter, lineMarksFromBlocks, type LineMark, type PlacedBlock } from './LineGutter';
 import { findApiFor, findPlugin } from './findPlugin';
 import { reviewApiFor, reviewPlugin } from './reviewPlugin';
 import type { SceneNav } from './sceneNav';
@@ -35,10 +37,19 @@ interface Props {
   readOnly?: boolean;
   /** Hands the parent a way to jump between scene breaks (null on unmount). */
   onNav?(nav: SceneNav | null): void;
+  /** The file line this chapter starts on, so the gutter shows file-wide line numbers. */
+  firstLine: number;
 }
 
-export function Editor({ initial, restore, onChange, saved, onNav, readOnly, onContextMenu }: Props) {
+export function Editor({ initial, restore, onChange, saved, onNav, firstLine, readOnly, onContextMenu }: Props) {
+  const wrap = useRef<HTMLDivElement>(null);
   const host = useRef<HTMLDivElement>(null);
+  const [marks, setMarks] = useState<LineMark[]>([]);
+  const blockPos = useRef<{ start: number; end: number; pos: number }[]>([]);
+  const marksRef = useRef<LineMark[]>([]);
+  const measureRef = useRef<() => void>(() => {});
+  const firstLineRef = useRef(firstLine);
+  firstLineRef.current = firstLine;
   const crepeRef = useRef<Crepe | null>(null);
   const baseline = useRef<string | null>(null);
   const onChangeRef = useRef(onChange);
@@ -59,6 +70,13 @@ export function Editor({ initial, restore, onChange, saved, onNav, readOnly, onC
     });
     let disposed = false;
     baseline.current = null;
+    let frame = 0;
+    const scheduleMeasure = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => !disposed && measureRef.current());
+    };
+    const ro = new ResizeObserver(scheduleMeasure);
+    if (host.current) ro.observe(host.current);
 
     crepe.on((l) => {
       l.markdownUpdated((_ctx, md) => {
@@ -66,12 +84,52 @@ export function Editor({ initial, restore, onChange, saved, onNav, readOnly, onC
         // An update before the baseline is known is the editor normalising its input.
         if (baseline.current === null) baseline.current = md;
         onChangeRef.current(md === baseline.current ? null : md);
+        scheduleMeasure();
       });
     });
     if (mountProps.current.readOnly) crepe.editor.config((ctx) => ctx.update(editorViewOptionsCtx, (prev) => ({ ...prev, editable: () => false })));
     crepe.editor.use($prose(() => findPlugin)); // highlights for Find & Replace
     crepe.editor.use($prose(() => reviewPlugin)); // highlights for comments and suggestions
     const getView = () => (crepeRef.current ? crepeRef.current.editor.action((ctx) => ctx.get(editorViewCtx)) : null);
+    /**
+     * Gives each top-level block its source line. While the chapter is unedited that is the file's own
+     * text; once edited it is what saving would write, so the numbers match the file after a save.
+     */
+    const measure = () => {
+      const view = getView();
+      const c = crepeRef.current;
+      if (!view || !c || !wrap.current) return;
+      const md = c.getMarkdown();
+      const count = view.state.doc.childCount;
+      let blocks = blockLines(md === baseline.current ? mountProps.current.initial : md);
+      // the editor keeps an empty paragraph after a trailing rule or list; it has no source line
+      const fits = (b: typeof blocks) => b.length === count || (b.length < count && view.state.doc.child(count - 1).content.size === 0 && b.length === count - 1);
+      if (!fits(blocks)) blocks = blockLines(md);
+      if (!fits(blocks)) {
+        blockPos.current = [];
+        marksRef.current = [];
+        setMarks([]);
+        return;
+      }
+      const top0 = wrap.current.getBoundingClientRect().top;
+      const placed: PlacedBlock[] = [];
+      const spans: { start: number; end: number; pos: number }[] = [];
+      view.state.doc.forEach((node, offset, i) => {
+        if (i >= blocks.length) return;
+        const el = view.nodeDOM(offset);
+        if (!(el instanceof HTMLElement)) return;
+        const r = el.getBoundingClientRect();
+        const lh = parseFloat(getComputedStyle(el).lineHeight) || 24;
+        placed.push({ ...blocks[i], top: r.top - top0, height: r.height, lineHeight: lh });
+        spans.push({ ...blocks[i], pos: offset });
+      });
+      // every line of the file gets a number, blank lines too (those sit in the gaps between blocks)
+      const { marks: next } = lineMarksFromBlocks(placed, firstLineRef.current);
+      blockPos.current = spans;
+      marksRef.current = next;
+      setMarks(next);
+    };
+    measureRef.current = measure;
     void crepe.create().then(() => {
       if (disposed) return;
       crepeRef.current = crepe;
@@ -79,7 +137,21 @@ export function Editor({ initial, restore, onChange, saved, onNav, readOnly, onC
       const { restore: draft } = mountProps.current;
       if (draft !== null) crepe.editor.action(replaceAll(draft));
       // Only now can the parent drive the editor (scene jumps, find & replace).
+      scheduleMeasure();
       onNavRef.current?.({
+        goToLine: (line) => {
+          const view = getView();
+          const spans = blockPos.current;
+          const ms = marksRef.current;
+          if (!view || !spans.length || !ms.length) return false;
+          const hit = ms.find((m) => m.line >= line) ?? ms[ms.length - 1]; // a blank row goes to the block after it
+          const target = spans[Math.min(hit.block, spans.length - 1)].pos;
+          view.dispatch(view.state.tr.setSelection(Selection.near(view.state.doc.resolve(target), 1)).scrollIntoView());
+          view.focus();
+          const el = view.nodeDOM(target);
+          if (el instanceof HTMLElement) el.scrollIntoView({ block: 'center' });
+          return true;
+        },
         find: findApiFor(getView),
         review: reviewApiFor(getView),
         go: (dir) => {
@@ -108,6 +180,8 @@ export function Editor({ initial, restore, onChange, saved, onNav, readOnly, onC
     return () => {
       onNavRef.current?.(null);
       disposed = true;
+      cancelAnimationFrame(frame);
+      ro.disconnect();
       crepeRef.current = null;
       void crepe.destroy();
     };
@@ -120,18 +194,23 @@ export function Editor({ initial, restore, onChange, saved, onNav, readOnly, onC
     onChangeRef.current(current === saved.markdown ? null : current);
   }, [saved?.version]);
 
+  useEffect(() => measureRef.current(), [firstLine]);
+
   return (
-    <div
-      className="editor"
-      ref={host}
-      onContextMenu={
-        onContextMenu
-          ? (e) => {
-              e.preventDefault();
-              onContextMenu({ x: e.clientX, y: e.clientY });
-            }
-          : undefined
-      }
-    />
+    <div className="editor-wrap" ref={wrap}>
+      <div
+        className="editor"
+        ref={host}
+        onContextMenu={
+          onContextMenu
+            ? (e) => {
+                e.preventDefault();
+                onContextMenu({ x: e.clientX, y: e.clientY });
+              }
+            : undefined
+        }
+      />
+      <LineGutter marks={marks} scroll={0} host={wrap} />
+    </div>
   );
 }

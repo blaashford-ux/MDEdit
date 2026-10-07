@@ -38,6 +38,7 @@ Status: **Android and Windows sync built and in use; sharing for review (section
 |---|---|---|
 | `*.md` | Yes | **Keep both.** The version already on Drive keeps the name; the version arriving from the other device is saved beside it as `Name (conflict - Device - YYYY-MM-DD).md` and flagged in the app |
 | `.mdedit/progress*.json` | Yes | **Merge per day:** earliest `start` for each date, then re-record the current total after sync (the history repairs itself) |
+| `.mdedit/edited.json` | Yes | **Merge per chapter:** marks from both devices are kept (a union); where both changed the same chapter the newer change wins, so an unmark isn't undone by the other device |
 | `.mdedit/project.json`, `*.export.json` | Yes | **Last writer wins**; the older version stays in Drive revision history. A conflict copy would confuse the project scan and orphan-sidecar detection |
 | Cover images and other small non-text files | Yes | Last writer wins |
 | Portable settings (templates, defaults) | Yes, as a file in the Root | Last writer wins. Move these out of the desktop's local `settings.json` |

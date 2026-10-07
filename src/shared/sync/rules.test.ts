@@ -45,3 +45,9 @@ describe('classify', () => {
     expect(classify('Shared With Me/Novel/Book.md')).toBeNull();
   });
 });
+
+describe('edited-chapter marks', () => {
+  it('travel and are merged', () => {
+    expect(classify('Novel/.mdedit/edited.json')).toBe('marks');
+  });
+});

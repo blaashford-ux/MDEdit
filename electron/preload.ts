@@ -34,7 +34,7 @@ const api: MdeditApi = {
   trashNode: (p) => ipcRenderer.invoke('fs:trashNode', p),
   reveal: (p) => ipcRenderer.send('shell:reveal', p),
   getBookDetails: (file) => ipcRenderer.invoke('export:getDetails', file),
-  saveBookDetails: (file, details) => ipcRenderer.invoke('export:saveDetails', file, details),
+  saveBookDetails: (file, details, overrides) => ipcRenderer.invoke('export:saveDetails', file, details, overrides),
   setMarked: (file, marked) => ipcRenderer.invoke('export:setMarked', file, marked),
   relinkSidecar: (sidecar, md) => ipcRenderer.invoke('export:relink', sidecar, md),
   listInstalledFonts: () => ipcRenderer.invoke('fonts:installed'),
@@ -83,6 +83,7 @@ const api: MdeditApi = {
   confirmOverwrite: (name) => ipcRenderer.invoke('dialog:confirmOverwrite', name),
   confirmDelete: (name, kind, unsaved) => ipcRenderer.invoke('dialog:confirmDelete', name, kind, unsaved),
   confirmRecover: (name) => ipcRenderer.invoke('dialog:confirmRecover', name),
+  confirmMarkEdited: (title) => ipcRenderer.invoke('dialog:confirmMarkEdited', title),
   setDirtyFiles: (names) => ipcRenderer.send('app:setDirtyFiles', names),
   onCloseRequested: (cb) => {
     const handler = () => cb();

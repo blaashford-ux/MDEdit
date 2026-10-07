@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { STATUS_LABELS, type ProjectSummary } from '../shared/projects';
+import { STATUS_LABELS, type ProjectStatus, type ProjectSummary } from '../shared/projects';
 import { Icon } from './Icon';
 
 interface Props {
@@ -16,6 +16,9 @@ interface Props {
   onSettings(): void;
   onProgress(): void;
 }
+
+/** Switcher order: what's being edited first, then planning → drafting → revising, with published and paused last. */
+const SWITCH_ORDER: ProjectStatus[] = ['editing', 'planning', 'drafting', 'revising', 'published', 'paused'];
 
 /** The sidebar header: the open project's name, with a menu to jump to another project or back to the Projects home. */
 export function ProjectSwitcher({ name, isProject, projects, currentPath, onOpen, onHome, onNew, onOpenFolder, onSettings, onProgress }: Props) {
@@ -36,7 +39,7 @@ export function ProjectSwitcher({ name, isProject, projects, currentPath, onOpen
     };
   }, [open]);
 
-  const recent = [...projects].filter((p) => !p.meta.archived && p.path !== currentPath).sort((a, b) => (b.lastEdited ?? 0) - (a.lastEdited ?? 0)).slice(0, 6);
+  const recent = [...projects].filter((p) => !p.meta.archived && p.path !== currentPath).sort((a, b) => SWITCH_ORDER.indexOf(a.meta.status) - SWITCH_ORDER.indexOf(b.meta.status) || (b.lastEdited ?? 0) - (a.lastEdited ?? 0)).slice(0, 6);
 
   return (
     <div className="switcher" ref={root}>

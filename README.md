@@ -1,52 +1,42 @@
 # MDEdit
 
-Markdown editor for book projects, on **Windows and Android**: keep each book in a **project** (a folder with the subfolders you choose), browse its `.md` files, and edit them one chapter (Heading 1 by default) at a time. Both apps keep your projects in step through **Google Drive**.
+A Markdown editor for writing books, on **Windows and Android**. Keep each book in a **project**, edit it one chapter at a time, and export a finished **EPUB, print PDF and Word file** ready for Kindle Direct Publishing. Both apps keep your projects in step through **Google Drive**.
 
-## Develop
-```
-npm install
-npm test          # chapter engine tests
-npm run dev       # Electron + Vite
-npm run dist      # Windows installer (run on Windows / CI)
-npm run dev:mobile      # the phone UI in a browser (an in-memory demo library and a demo Drive)
-npm run android:sync    # build the phone bundle and copy it into the Android project (the APK itself is built by CI)
-```
+**Download:** the latest Windows installer and Android app are on the [Releases page](https://github.com/blaashford-ux/MDEdit/releases/latest). See what's new in the [changelog](CHANGELOG.md).
 
-Google sign-in needs the app's OAuth clients: the Windows build reads the Desktop client secret from `MDEDIT_GOOGLE_CLIENT_SECRET`
-(a repository secret `GOOGLE_DESKTOP_CLIENT_SECRET` in CI) and the Android build is signed with the keystore in the `ANDROID_KEYSTORE_*`
-repository secrets. See [docs/sync-rules.md](docs/sync-rules.md) for how sync behaves and [docs/RELEASING.md](docs/RELEASING.md) for releases.
+> The Windows installer isn't code-signed yet, so Windows SmartScreen may say "unknown publisher" the first time you run it. Choose **More info → Run anyway**.
 
-## Status
-- [x] **Android app and Google Drive sync** (0.4): the same editor on your phone (projects, chapters, goals; no export), and both apps keep the Root Folder in step through an `MDEdit` folder in your Google Drive. Edits sync a few seconds after you save and when you switch back to the app; two devices changing the same chapter keep **both** versions; nothing is deleted in bulk without asking. Details in [docs/sync-rules.md](docs/sync-rules.md)
-- [x] **Projects** (0.3): a project is a folder with a hidden `.mdedit` marker, living in your **Root Folder** (default `%USERPROFILE%\MDEdit`, chosen on first run and changeable in Settings). The Projects home shows every project as a card (status, words, goal progress); **New Project** (Ctrl+Alt+N) makes one from a **template** — folders, starter files and export defaults, all editable in Settings → Projects. Ctrl+K switches project; rename, duplicate, archive, delete (to the Recycle Bin) and status (planning → published) are on each card. Folders outside the Root still open with File → Open Folder, and can be converted to projects
-- [x] **Project settings and defaults**: each project can override the chapter-heading level and the export defaults (author, copyright page, fonts, trim size…); everything inside a project uses them. Order of precedence: built-in → app Settings → template → project → the book's own export settings
-- [x] **Goals and progress**: set a word-count goal (and deadline) per project, choose which folders count; the Progress window (status bar or switcher) shows a day-by-day bar chart with a burn-down line, the words per day needed to finish on time, and the estimated finish date at your 3-day and 5-day averages
-- [x] Scaffold (Electron, Vite, React, TypeScript, Vitest, CI Windows build)
-- [x] Chapter engine (`src/shared/chapters.ts`): lossless split/join by heading (H1 by default; the level is a setting)
-- [x] Folder picker, recursive file tree, chapters listed under each file (read-only preview)
-- [x] WYSIWYG chapter editor (Milkdown Crepe), dirty tracking, Ctrl+S atomic save
-- [x] Save / Don't Save / Cancel on chapter/file/folder switch and on window close
-- [x] External-change detection (auto-reload when clean, conflict banner when dirty, overwrite check on save)
-- [x] Reopens the last folder on startup
-- [x] Change Folder and Refresh (buttons, F5, menu); custom menu without Reload
-- [x] Tabs: one per open file, swapping never prompts, closing a tab with unsaved edits does
-- [x] Remembers folder, open tabs, expanded folders, sidebar width, window size/position and theme
-- [x] Window title and status bar (chapter n of m, word count, saved state, line endings)
-- [x] Dark mode (follows Windows; View > Theme to override)
-- [x] Chapter navigation (Ctrl+PgUp/PgDn), word counts in the tree, Source/Visual toggle per tab
-- [x] Tree: arrow-key navigation, file filter (Ctrl+P), resizable sidebar
-- [x] Empty folders are shown; New Folder (toolbar, right-click, Ctrl+Shift+N)
-- [x] New file, rename, delete (Recycle Bin), show in Explorer; new/move/delete chapter from the sidebar
-- [x] Autosaved drafts: unsaved edits survive a crash and are offered back on next start
-- [x] **Export for KDP** (milestone 6.5): mark a file for export, fill in Book Details (title page, copyright page, dedication, epigraph, back matter), then Export to **EPUB**, **print-interior PDF** and **DOCX** from one dialog
-- [x] **Custom title bar**: frameless window with the logo, the File/Edit/Go/View/Help menus (mouse, arrow keys, Alt+letter), the open chapter and file, and window buttons. On Windows the OS draws the minimise/maximise/close buttons over the bar (keeping Win 11 snap layouts); on other systems the app draws them
-- [x] **Undo Last Action** (Edit menu, Ctrl+Alt+Z / redo Ctrl+Alt+Y, or the Undo button in the status bar): reverses the last 5 delete / move / add-chapter actions and whole-file Replace All. Typing keeps its usual Ctrl+Z. Available until the file is changed again; not kept across restarts
-- [x] **Find & Replace**: Ctrl+F / Ctrl+H, F3 / Shift+F3 (also Edit menu). Highlights matches in the formatted editor, works in Source mode, with match case, whole word and regular expressions (`$1`, `$&` in the replacement). Search *this chapter* or the *whole file* (carries on into other chapters; Replace All asks first and saves to the file)
-- [x] **Fonts** for the ebook and the print PDF: three open-licence fonts ship with the app (EB Garamond, Crimson Pro, Libre Baskerville), then every font installed on your computer. Bundled fonts are embedded in the EPUB and the PDF; installed fonts are embedded in the PDF and only named in the EPUB
-- [x] **Settings** (File → Settings, Ctrl+,): choose which heading level starts a chapter (H1–H6), and set the template new books start from — author, copyright page, dedication/epigraph, back matter — plus default export choices (outputs, trim size, margins, fonts, quotes, scene-break symbol, output folder)
-- [x] Scene-break navigation: Ctrl+↑ / Ctrl+↓ (or the ↑ Scene / ↓ Scene buttons) jump between `* * *` / `---` breaks in Visual and Source mode
-- [x] Packaging (milestone 7): app icon, installer, single instance, open-with / double-click `.md`, CI build with a smoke test of the packaged app
-- [ ] Code signing (needs a certificate — see Packaging)
+## Writing
+- **Projects.** A project is a folder with the subfolders you choose, kept in your **Root Folder**. The Projects home shows each project as a card with its status, word count and goal progress. Start one with **New Project** (Ctrl+Alt+N) from a template (Novel, Series, Short story, Blank), switch with Ctrl+K, and search, sort, filter by status, archive or duplicate from the home page.
+- **Chapters.** Files open one chapter at a time (Heading 1 by default; choose the level in Settings). Edit in the formatted view or switch to raw Markdown (Ctrl+Shift+M), jump between scene breaks, and go to any line.
+- **Find and Replace.** Search a chapter or the whole file, with match case, whole word and regular expressions.
+- **Goals and progress.** Set a word-count goal and deadline for your active manuscript and follow a day-by-day chart, words per day needed, and an estimated finish date.
+- **Editing stage.** When a project's status is *Editing*, mark each chapter as edited and watch your progress through the book.
+- **Safe by default.** Autosaved drafts survive a crash, outside changes to a file are detected, and undo covers deleting, moving and adding chapters. Deleted files go to the Recycle Bin.
+- **Dark mode**, tabs, word counts, and your open tabs and window position are remembered.
+
+## On your phone
+The Android app has the same editor, Projects home, goals and progress, with find and replace, and your files stay on the phone. Press and hold a file or project for its menu, or press and hold text for Cut, Copy, Paste and Select all. It has no KDP export.
+
+## Google Drive sync
+Sign in once on each device and MDEdit keeps your projects in an `MDEdit` folder in your Google Drive. It can only see files it created there. Edits sync a few seconds after you save and when you return to the app. If two devices change the same chapter, **both versions are kept**, and nothing is deleted in bulk without asking. Don't put your Root Folder inside OneDrive, Dropbox or Google Drive for Desktop.
+
+## Export for KDP
+1. Right-click a `.md` file and choose **Mark for Export**. Your manuscript is never modified; the book's details are saved beside it.
+2. Fill in **Book Details**: title, subtitle and author; the copyright page; dedication; epigraph; and back matter (Continue the Story, Also by the author with a blurb for each book, About the Author, and a custom page). Only links you type are ever added.
+3. Choose **Export…** (Ctrl+E), check the title and author, pick your outputs and export.
+
+| Output | What you get |
+|---|---|
+| EPUB 3 | Passes the standard EPUB checker, with embedded fonts |
+| Print PDF | Exact KDP trim size (5 × 8 up to 8.5 × 11 in), mirrored margins with the right inside margin for your page count, chapters starting on right-hand pages, page numbers and a contents page |
+| DOCX | A clean Word file with a linked contents list, ready for import |
+
+Fonts: EB Garamond, Crimson Pro and Libre Baskerville come with the app, or use any font installed on your computer for the print PDF.
+
+**Settings layer.** App settings, project settings and each book's own settings are applied in that order. A book changes only the fields you edit, so updating a project default reaches every book that hasn't set that field. Each field says where its value comes from, and **Reset** hands it back.
+
+Not included: the paperback cover PDF, ISBN barcodes and uploading to KDP.
 
 ## Shortcuts
 | Key | Action |
@@ -57,128 +47,20 @@ repository secrets. See [docs/sync-rules.md](docs/sync-rules.md) for how sync be
 | Ctrl+W | Close tab |
 | Ctrl+Tab, Ctrl+Shift+Tab | Next / previous tab |
 | Ctrl+PgDn, Ctrl+PgUp | Next / previous chapter |
-| Ctrl+↓, Ctrl+↑ | Next / previous scene break (in the editor) |
+| Ctrl+↓, Ctrl+↑ | Next / previous scene break |
 | Ctrl+, | Settings |
 | Ctrl+Shift+M | Toggle Source / Visual |
 | Ctrl+Alt+Z / Ctrl+Alt+Y | Undo / redo the last chapter or file action (5 deep) |
 | Ctrl+P | Filter files |
-| Ctrl+F / Ctrl+H | Find / Find & Replace in the open chapter or file |
-| F3, Shift+F3 (or Ctrl+G) | Next / previous match |
+| Ctrl+F / Ctrl+H | Find / Find & Replace |
+| F3, Shift+F3 | Next / previous match |
+| Ctrl+G | Go to a line number |
 | Alt+C / Alt+W / Alt+R | (in the find bar) match case / whole word / regular expression |
+| Ctrl+E | Export |
 | F5 | Refresh |
-| F2 / Del / Alt+Up / Alt+Down | Rename / delete / move chapter (in the tree) |
+| F2 / Del / Alt+Up / Alt+Down | Rename / delete / move chapter (in the file list) |
 
-## Export for KDP
+## Help
+Questions, bugs or ideas: open an [issue](https://github.com/blaashford-ux/MDEdit/issues).
 
-1. Right-click a `.md` file → **Mark for Export**. It gets a 📕 badge and a `<name>.export.json` beside it (title page, copyright page,
-   back matter and your last export choices). Your manuscript is never modified.
-2. **Book Details…** (opens automatically when you mark a file): title, subtitle, author; copyright page (year, edition, publisher, ISBN, fiction
-   disclaimer, 18+ notice, content warning, extra lines — shown in a live preview in the skill's fixed order); dedication; epigraph; back matter
-   (Continue the Story, Also by, About the Author, a custom page). Only links you type are ever added.
-3. **Export…** (toolbar, File menu, Ctrl+E) → confirm the title/subtitle/author read-back → pick outputs and their variables → Export.
-
-| Output | How it is built |
-|---|---|
-| EPUB 3 | Direct XHTML + NCX + OPF following the format-for-kdp structure; passes epubcheck 5.3 with no errors or warnings |
-| Print PDF | Paged.js in an offscreen Chromium window, bundled EB Garamond (embedded), exact KDP trim size, mirrored margins with KDP's page-count gutter table (two-pass), chapters on recto pages, outer-edge page numbers counted from chapter 1, dot-leader contents |
-| DOCX | `docx` library; non-breaking-space blank paragraphs (importers strip empty ones), two sections, explicit centring, static linked contents (no page numbers) |
-
-Trim sizes offered: 5 × 8 up to 8.5 × 11 in (nothing below 5 × 8). Not included: the paperback **cover** PDF, ISBN barcodes, live KDP upload testing.
-
-### Tests
-
-`npm test` runs everything. Some suites use external tools and skip themselves if they are missing:
-
-- PDF integration (real Electron + Paged.js): needs `xvfb-run` and the Electron binary (`node node_modules/electron/install.js`).
-- epubcheck: needs Java and `pip install epubcheck`.
-- DOCX → LibreOffice round trip: needs `libreoffice-writer` (a bare `soffice` install can't open documents).
-
-## Packaging and installing (Windows 10)
-
-```
-npm ci
-npm run dist          # → release/MDEdit-Setup-<version>.exe  (run on Windows or in CI)
-```
-
-- **Installer:** NSIS, per-user (no admin rights needed), lets you choose the folder, creates Desktop and Start-menu shortcuts. Uninstalling
-  leaves your settings and drafts in `%APPDATA%\MDEdit`.
-- **Icon:** `assets/branding/app-icon-source.jpg` is the master. `python scripts/make_icons.py` (needs `pip install pillow`) regenerates
-  `build/icon.ico`, `build/icon.png` and `assets/icon.png` with rounded corners.
-- **Open with / double-click:** the installer registers MDEdit as an editor for `.md` and `.markdown` (it appears in *Open with*; Windows
-  decides the default). Opening a file starts MDEdit on that file's folder; if MDEdit is already running, the file opens as a tab in the
-  existing window instead (**one window per user**). If it is in another folder and you have unsaved edits, you get the usual
-  Save / Don't Save / Cancel prompt first.
-- **Smoke test:** `MDEdit.exe --smoke-test=result.json` exports a small book to EPUB, PDF and DOCX with the bundled fonts and layout engine
-  and exits 0 on success. CI runs it against the freshly built Windows package, which is the only way to prove the installed app can export.
-- **Code signing:** the installer is **unsigned** until you provide a certificate, so Windows SmartScreen will say "unknown publisher" the first
-  time. To sign, add the repository secrets `WIN_CSC_LINK` (a base64 `.pfx`, or a URL) and `WIN_CSC_KEY_PASSWORD`; the workflow signs automatically
-  when they exist. A standard code-signing certificate removes the "unknown publisher" name; SmartScreen reputation still builds up over time
-  unless you use an EV certificate.
-- **Not included:** auto-update, a portable build, other platforms.
-
-## Releases
-
-Download the latest Windows installer from
-[Releases](https://github.com/blaashford-ux/MDEdit/releases/latest). Pushing a version tag
-(`npm version 0.3.0 && git push origin HEAD --follow-tags`) builds, tests and publishes a release
-automatically. See [docs/RELEASING.md](docs/RELEASING.md).
-
-## Changelog
-
-### 0.4.0 — 2026-10-06
-**New**
-- **Android app** (an APK on each release): the editor, Projects home, goals and progress on your phone, with files stored on the phone. It has no KDP export, fonts or Explorer actions, and its Root Folder is fixed.
-- **Google Drive sync** on Windows (File → Google Drive Sync…, plus a status-bar chip) and Android (cloud button): sign in once per device; MDEdit keeps your projects in an `MDEdit` folder in your Drive and can only see files it created there. Passes run a few seconds after you save, when you return to the app, and every minute or two; a status screen shows progress, the last pass and any problems.
-- **Keep both versions on conflict**: a chapter changed on two devices keeps Drive's version under its name and your other version beside it as `Name (conflict - Device - date).md`. Writing history is merged day by day; project settings use the last writer. A delete beats nothing that was edited elsewhere, and a sync that would delete most of your files stops and asks first.
-- **Windows-compliant names everywhere**: new and renamed files and folders follow Windows' rules on every device (no `< > : " / \ | ? *`, reserved names, trailing dots or spaces; at most 120 characters). Names that arrive from Drive in another form are renamed to match, in Drive too.
-- Files deleted by another device go to the **Recycle Bin** on Windows and to the app's trash on Android.
-
-**Notes**
-- Only text files sync for now (`.md`, `.txt`, `.json`, `.csv`, `.html`, `.css`, `.xml`, `.yml`); images and other binaries, and each project's `Exports` folder, are left alone.
-- Sync covers the Root Folder. Don't put it inside OneDrive, Dropbox or Google Drive for Desktop, or two syncs will fight over it.
-- Sync is much faster than the first builds: transfers run in parallel, scans use the file listing instead of a lookup per file, and the Projects screen caches word counts.
-
-**Changed**
-- The Windows installer is built with the Google sign-in configured. The Android app is signed with your own key.
-
-### 0.3.0 — 2026-10-05
-**New**
-- **Projects**: a project is a folder (with subfolders) marked by a small hidden `.mdedit` folder. MDEdit works out of a **Root Folder** (default `%USERPROFILE%\MDEdit`; chosen on first run, changeable in Settings, with an offer to move your projects). A welcome screen sets this up the first time, and offers the folder you last used as a project.
-- **Projects home** with a card per project (status, word count, goal progress, last edited), search, sort, archive, and a context menu to open, rename, duplicate, change status or delete (to the Recycle Bin, after typing the name).
-- **New Project** dialog (Ctrl+Alt+N): name + template with a live preview of the folders it will create. Built-in templates: Novel, Series, Short story, Blank.
-- **Project templates** (Settings → Projects): edit the folder tree, which folders count toward word goals, starter files and the export defaults each template carries.
-- **Project switcher** in the sidebar and **Ctrl+K quick switcher**; File → Open Folder still opens any folder, and other folders in the Root can be converted to projects.
-- **Per-project overrides**: chapter-heading level and export defaults can be set per project; the template's values are copied in when the project is made.
-- **Project status** (Planning, Drafting, Revising, Editing, Published, On hold) and notes.
-- **Word-count goals and progress**: target and optional deadline; Progress window with a day-by-day bar chart, burn-down against a steady-pace line, words per day needed, and estimated completion at the 3-day and 5-day averages; running total in the status bar.
-- **Series template**: a Manuscripts folder for several books (no book files created) plus a series bible.
-- **Active Manuscript**: right-click a file → *Active Manuscript* to make word-count goals and progress follow that single file (one at a time; choosing another swaps without asking). A target marker shows on the file in the browser, the Progress chart and tiles are labelled with its filename, and each manuscript keeps its own goal and writing history.
-
-**Changed**
-- The sidebar's folder button became the project switcher; File → Change Folder is now **Open Folder**.
-
-
-### 0.2.0 — 2026-10-05
-**New**
-- **Find & Replace** (Ctrl+F / Ctrl+H, F3 / Shift+F3, Edit menu): highlights in the formatted editor, works in Source mode, match case / whole word / regular expressions (`$1`, `$&` in replacements); search this chapter or the whole file (Replace All in the file asks first).
-- **Undo Last Action** (Ctrl+Alt+Z, redo Ctrl+Alt+Y, Edit menu, status-bar button): reverses the last 5 delete / move / add-chapter actions and whole-file Replace All.
-- **Settings** (File → Settings, Ctrl+,): choose which heading level starts a chapter (H1–H6), set the template new books start from (author, copyright page, dedication, epigraph, back matter) and the default export choices.
-- **Fonts for export**: EB Garamond, Crimson Pro and Libre Baskerville (all open-licence) ship with the app and are embedded in EPUB and PDF; any font installed on your computer can be used for the print PDF.
-- **Scene-break navigation**: Ctrl+↑ / Ctrl+↓ or the ↑ Scene / ↓ Scene buttons jump between scene breaks, in Visual and Source mode.
-- **New look**: borderless, tonal, rounded design with a palette drawn from the app icon, in light and dark, with line icons.
-- **Custom title bar**: frameless window with in-window File / Edit / Go / View / Help menus (mouse, arrows, Alt+letter), the open chapter and file, and window buttons (drawn by the OS on Windows).
-- The chapter heading and toolbar stay pinned while you scroll.
-- The copyright page has an optional **Content Warning** notice (default text “Add Content Warnings here”).
-
-**Changed**
-- Export files (`<name>.export.json`) use the field names `contentWarning` / `contentWarningText`; older files are tidied automatically the first time they are read.
-- Exports record the chosen fonts; a missing font falls back to EB Garamond with a warning.
-- Clicking Undo / Cut / Copy / Paste in the menu now acts on the editor (the menu no longer takes focus).
-
-**Release pipeline**
-- Pushing a version tag, or running the *release* workflow from the Actions tab, builds, tests and publishes the Windows installer with checksums (see `docs/RELEASING.md`).
-
-### 0.1.0 — 2026-10-05
-- First release: folder browser with expandable folders and empty folders, chapter-at-a-time WYSIWYG editing (Milkdown), Save / Don't Save / Cancel prompts, external-change detection, tabs, session restore, crash-recovery drafts, dark mode, Source mode, file and chapter management.
-- **Export for KDP**: mark a file for export, fill in Book Details (title page, copyright page, dedication, epigraph, back matter), export to EPUB 3, KDP print-interior PDF (trim sizes from 5 × 8, automatic gutter) and DOCX.
-- Windows installer with app icon, single instance and `.md` file association.
+Developers: see [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).

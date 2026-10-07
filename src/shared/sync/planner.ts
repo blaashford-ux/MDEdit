@@ -26,6 +26,8 @@ export type SyncAction =
   | { type: 'keepBoth'; path: string; id: string; copyPath: string }
   /** Both sides changed a progress file: download, merge per day, write locally, upload the merge. */
   | { type: 'mergeProgress'; path: string; id: string }
+  /** Both sides changed the edited-chapter marks: download, merge chapter by chapter, write locally, upload the merge. */
+  | { type: 'mergeMarks'; path: string; id: string }
   /** Both sides already hold identical bytes: just remember that. */
   | { type: 'markSynced'; path: string; id: string; md5: string }
   /** The file is gone from both sides: drop it from the base state. */
@@ -58,7 +60,7 @@ const nameOf = (p: string) => p.slice(p.lastIndexOf('/') + 1);
 const join = (dir: string, name: string) => (dir ? `${dir}/${name}` : name);
 
 const RANK: Record<SyncAction['type'], number> = {
-  renameLocal: 0, renameRemote: 1, keepBoth: 2, mergeProgress: 3, download: 4, upload: 5, markSynced: 6, forget: 7, deleteLocal: 8, deleteRemote: 9,
+  renameLocal: 0, renameRemote: 1, keepBoth: 2, mergeProgress: 3, mergeMarks: 3, download: 4, upload: 5, markSynced: 6, forget: 7, deleteLocal: 8, deleteRemote: 9,
 };
 const actionPath = (a: SyncAction) => ('path' in a ? a.path : 'from' in a ? a.from : '');
 
@@ -140,6 +142,7 @@ export function plan(input: PlanInput): Plan {
     const cls = classify(path, opts) as FileClass;
     if (cls === 'prose') return keepBoth(path, r.id);
     if (cls === 'progress') return { type: 'mergeProgress', path, id: r.id };
+    if (cls === 'marks') return { type: 'mergeMarks', path, id: r.id };
     // Settings and small assets: the most recent write wins; Drive keeps the older version in its revision history.
     return l.modifiedMs > r.modifiedMs ? { type: 'upload', path, id: r.id } : { type: 'download', path, id: r.id };
   };

@@ -46,6 +46,11 @@ describe('printCss options', () => {
     expect(printCss(book(), layout())).toContain('section.body { break-before: right; }');
     expect(printCss(book((d) => (d.export.pdf.rectoStarts = false)), layout())).toContain('section.body { break-before: page; }');
   });
+  it('chapter headings drop by the chapter-sink setting (0 = flush with the top margin)', () => {
+    expect(printCss(book(), layout())).toContain('padding-top: 1.25in');
+    expect(printCss(book((d) => (d.export.pdf.chapterSink = 0.5)), layout())).toMatch(/h1\.chapter \{[^}]*padding-top: 0\.5in/);
+    expect(printCss(book((d) => (d.export.pdf.chapterSink = 0)), layout())).toMatch(/h1\.chapter \{[^}]*padding-top: 0in/);
+  });
   it.each([
     ['blockNoGap', 'p { margin: 0; text-indent: 0; }'],
     ['blockGap', 'p { margin: 0 0 1em 0; text-indent: 0; }'],
