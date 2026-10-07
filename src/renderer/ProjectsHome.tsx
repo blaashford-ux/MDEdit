@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { goalFor, STATUS_LABELS, STATUSES, type ProjectStatus, type ProjectSummary, type ProjectsConfig, type RootListing } from '../shared/projects';
 import { ContextMenu, type MenuItem } from './ContextMenu';
 import { Icon } from './Icon';
+import { justLongPressed, longPressProps } from './longPress';
 
 interface Props {
   config: ProjectsConfig | null;
@@ -154,16 +155,13 @@ export function ProjectsHome(p: Props) {
                 role="button"
                 tabIndex={0}
                 aria-label={`Open ${x.name}`}
-                onClick={() => p.onOpen(x.path)}
+                onClick={() => !justLongPressed() && p.onOpen(x.path)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') p.onOpen(x.path);
                   else if (e.key === 'F2') p.onRename(x);
                   else if (e.key === 'ContextMenu') setMenu({ x: 200, y: 200, project: x });
                 }}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  setMenu({ x: e.clientX, y: e.clientY, project: x });
-                }}
+                {...longPressProps((mx, my) => setMenu({ x: mx, y: my, project: x }))}
               >
                 <div className="card-top">
                   <span className="card-name">{x.name}</span>
