@@ -196,7 +196,7 @@ describe('progress recording', () => {
 describe('updateMeta / addMissingTemplateParts', () => {
   it('merges overrides without losing the other half, and sanitises', async () => {
     const a = await createProject(root, 'Alpha', novel());
-    await updateMeta(a.path, { overrides: { chapterLevel: 3, book: null } });
+    await updateMeta(a.path, { overrides: { chapterLevel: 3, book: {} } });
     const m = await updateMeta(a.path, { status: 'nonsense' as never, notes: 'hello' });
     expect(m.overrides.chapterLevel).toBe(3);
     expect(m.status).toBe('planning');

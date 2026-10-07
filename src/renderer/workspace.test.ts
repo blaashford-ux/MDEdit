@@ -964,7 +964,7 @@ describe('projects in the workspace', () => {
     api.add('lv.md', '# Book\n\n## One\na\n\n## Two\nb\n');
     api.appDefaults = { ...api.appDefaults, chapterLevel: 1 };
     await ws.init();
-    api.addProject(PROJ, { overrides: { chapterLevel: 2, book: null } });
+    api.addProject(PROJ, { overrides: { chapterLevel: 2, book: {} } });
     await ws.openPath(PROJ);
     await ws.openChapter(`${ROOT}/lv.md`, 0);
     expect(state().chapterLevel).toBe(2);
@@ -975,11 +975,11 @@ describe('projects in the workspace', () => {
   });
 
   it('changing the app level does not change a project that has its own', async () => {
-    api.addProject(PROJ, { overrides: { chapterLevel: 2, book: null } });
+    api.addProject(PROJ, { overrides: { chapterLevel: 2, book: {} } });
     await ws.openPath(PROJ);
     await ws.applyAppDefaults({ ...api.appDefaults, chapterLevel: 3 });
     expect(state().chapterLevel).toBe(2);
-    api.projectMetas.set(PROJ, { ...api.projectMetas.get(PROJ)!, overrides: { chapterLevel: null, book: null } });
+    api.projectMetas.set(PROJ, { ...api.projectMetas.get(PROJ)!, overrides: { chapterLevel: null, book: {} } });
     await ws.openPath(PROJ);
     expect(state().chapterLevel).toBe(3);
   });
@@ -991,10 +991,10 @@ describe('projects in the workspace', () => {
     await ws.openChapter(`${ROOT}/lv.md`, 0);
     ws.setDraft(tabOf(`${ROOT}/lv.md`).id, '# Book EDIT');
     api.unsavedAnswers = ['cancel'];
-    expect(await ws.updateProjectMeta({ ...meta, overrides: { chapterLevel: 2, book: null } })).toBe(false);
+    expect(await ws.updateProjectMeta({ ...meta, overrides: { chapterLevel: 2, book: {} } })).toBe(false);
     expect(state().chapterLevel).toBe(1);
     api.unsavedAnswers = ['discard'];
-    expect(await ws.updateProjectMeta({ ...meta, overrides: { chapterLevel: 2, book: null } })).toBe(true);
+    expect(await ws.updateProjectMeta({ ...meta, overrides: { chapterLevel: 2, book: {} } })).toBe(true);
     expect(state().chapterLevel).toBe(2);
     expect(state().project?.meta.overrides.chapterLevel).toBe(2);
   });

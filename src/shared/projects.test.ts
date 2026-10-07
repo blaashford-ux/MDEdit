@@ -91,9 +91,16 @@ describe('project metadata', () => {
     expect(m).toMatchObject({ name: 'The Lost King', templateId: 'novel', templateName: 'Novel', status: 'planning', archived: false, goal: null, createdAt: now.toISOString() });
     expect(m.excludedFolders).toEqual(['Characters', 'Worldbuilding', 'Research', 'Exports']);
     expect(m.overrides.chapterLevel).toBe(2);
-    expect(m.overrides.book!.author).toBe('Template Author');
-    m.overrides.book!.author = 'changed';
+    expect(m.overrides.book).toEqual({ author: 'Template Author' }); // only what the template changes
+    m.overrides.book.author = 'changed';
     expect(t.book!.author).toBe('Template Author');
+  });
+  it('project files saved before layering (a whole book, or null) become the fields they change', () => {
+    const whole = { ...defaultBookDetails({ title: '', author: 'Old Project Author' }), copyright: { ...defaultBookDetails().copyright, year: '' } };
+    const m = sanitizeProjectMeta({ overrides: { chapterLevel: 2, book: whole } }, 'P', '2026-10-05');
+    expect(m.overrides.book).toEqual({ author: 'Old Project Author' });
+    expect(sanitizeProjectMeta({ overrides: { book: null } }, 'P', '2026-10-05').overrides.book).toEqual({});
+    expect(sanitizeProjectMeta({ overrides: { book: { author: 'A', bogus: 1, 'export.epub.coverImage': 'x' } } }, 'P', '2026-10-05').overrides.book).toEqual({ author: 'A' });
   });
   it('round-trips through sanitising', () => {
     const m = newProjectMeta({ id: 'p1', name: 'X', template: novel(), now });
@@ -107,7 +114,7 @@ describe('project metadata', () => {
     expect(m.status).toBe('planning');
     expect(m.goal).toBeNull();
     expect(m.excludedFolders).toEqual(['ok']);
-    expect(m.overrides).toEqual({ chapterLevel: null, book: null });
+    expect(m.overrides).toEqual({ chapterLevel: null, book: {} });
     expect(sanitizeProjectMeta(null, 'F', '2026-10-05').name).toBe('F');
   });
 });
@@ -150,13 +157,13 @@ import { defaultAppDefaults, sanitizeAppDefaults } from './appDefaults';
 import { effectiveDefaults } from './projects';
 describe('defaults cascade', () => {
   const app = sanitizeAppDefaults({ chapterLevel: 2, book: { author: 'App Author' } });
-  const meta = (o: Partial<ReturnType<typeof newProjectMeta>['overrides']>) => ({ ...newProjectMeta({ id: 'x', name: 'x', template: defaultTemplates()[3], now: new Date() }), overrides: { chapterLevel: null, book: null, ...o } });
+  const meta = (o: Partial<ReturnType<typeof newProjectMeta>['overrides']>) => ({ ...newProjectMeta({ id: 'x', name: 'x', template: defaultTemplates()[3], now: new Date() }), overrides: { chapterLevel: null, book: {}, ...o } });
   it('outside a project, or with nothing overridden, the app defaults apply', () => {
     expect(effectiveDefaults(app, null)).toBe(app);
     expect(effectiveDefaults(app, meta({}))).toEqual(app);
   });
   it('a project’s chapter level and book defaults win independently', () => {
-    const book = sanitizeAppDefaults({ book: { author: 'Project Author' } }).book;
+    const book = { author: 'Project Author' };
     expect(effectiveDefaults(app, meta({ chapterLevel: 3 }))).toEqual({ chapterLevel: 3, book: app.book });
     const both = effectiveDefaults(app, meta({ book }));
     expect(both.chapterLevel).toBe(2);

@@ -499,3 +499,11 @@ code.path { background: var(--raised); padding: 1px 6px; border-radius: 6px; }
 .ms-badge { display: inline-flex; color: var(--gold); flex: none; }
 .card-ms { color: var(--muted); font-size: 12px; margin-top: -4px; }
 .ms-name { color: var(--gold); font-weight: 600; }
+
+/* Where a setting comes from (project / book layers) */
+.layer-tag { display: inline-flex; align-items: baseline; gap: 6px; margin-left: 8px; font-size: 11px; font-weight: 400; color: var(--muted); }
+.layer-tag.own { color: var(--accent, #2b6cb0); font-weight: 600; }
+.layer-reset { font-size: 11px; padding: 0 6px; line-height: 1.5; }
+.review-list { list-style: none; margin: 0; padding: 0; }
+.review-list li { display: grid; grid-template-columns: minmax(140px, 1fr) minmax(80px, 1fr) auto auto; gap: 8px; align-items: baseline; padding: 3px 0; border-bottom: 1px solid var(--border, rgba(128, 128, 128, 0.25)); font-size: 13px; }
+.review-list .review-value { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

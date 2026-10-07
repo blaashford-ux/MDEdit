@@ -3,7 +3,7 @@ import type { AppDefaults } from '../shared/appDefaults';
 import type { TreeNode } from '../shared/api';
 import { localDate, sanitizeGoal } from '../shared/progress';
 import { goalFor, STATUS_LABELS, STATUSES, withGoal, type ProjectMeta, type ProjectStatus, type ProjectsConfig } from '../shared/projects';
-import { DefaultsEditor } from './DefaultsEditor';
+import { ProjectDefaultsEditor } from './ProjectDefaultsEditor';
 import { Field, NumberField, TextArea, Toggle } from './formParts';
 import { useEscape } from './useEscape';
 
@@ -227,8 +227,7 @@ export function ProjectSettingsDialog({ path, config, onClose, onChanged }: Prop
           )}
 
           {tab === 'defaults' && (
-            <DefaultsEditor
-              scope="this project"
+            <ProjectDefaultsEditor
               app={{ chapterLevel: app.chapterLevel, book: app.book }}
               value={{ chapterLevel: meta.overrides.chapterLevel, book: meta.overrides.book }}
               onChange={(v) => patch({ overrides: { chapterLevel: v.chapterLevel, book: v.book } })}

@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import type { AppDefaults } from '../src/shared/appDefaults';
 import { localDate, recordSnapshot, sanitizeProgress, type Progress } from '../src/shared/progress';
 import {
   defaultTemplates, flattenFolders, newProjectMeta, PROGRESS_FILE, PROJECT_DIR, PROJECT_FILE, projectNameError, sanitizeProjectMeta,
@@ -12,6 +13,8 @@ import { writeFileAtomic } from './files';
 export interface Deps {
   now?: () => Date;
   uuid?: () => string;
+  /** The app's defaults: a template's book settings are stored as what they change relative to these. */
+  app?: AppDefaults;
   /** Test hook: called before each creation step ("folders", "files", "meta", "rename"); may throw to simulate a failure. */
   step?: (name: string) => void | Promise<void>;
 }
@@ -223,7 +226,7 @@ export async function createProject(root: string, name: string, template: Projec
       await fs.writeFile(full, f.content, { encoding: 'utf8', flag: 'wx' });
     }
     await step('meta');
-    const meta = newProjectMeta({ id: (deps.uuid ?? randomUUID)(), name: clean, template, now: now() });
+    const meta = newProjectMeta({ id: (deps.uuid ?? randomUUID)(), name: clean, template, now: now(), app: deps.app });
     await writeMeta(tmp, meta);
     starterWords = (await countProject(tmp, meta.excludedFolders)).words;
     const progress = recordSnapshot(sanitizeProgress(null), localDate(now()), starterWords);

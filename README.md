@@ -70,6 +70,11 @@ npm run dist      # Windows installer (run on Windows / CI)
    (Continue the Story, Also by, About the Author, a custom page). Only links you type are ever added.
 3. **Export…** (toolbar, File menu, Ctrl+E) → confirm the title/subtitle/author read-back → pick outputs and their variables → Export.
 
+**Where settings come from.** Settings layer: **app** (File → Settings) → **project** (Project Settings → Export defaults) → **book**
+(Book Details and Export). Each level changes only the fields you edit; every other field follows the level above, so changing a
+project default reaches every book in it that hasn't set that field. Each field is tagged *From app settings* / *From project settings*
+or *Set for this book*, and **Reset** hands it back. The Export dialog ends with a list of every setting that doesn't follow the app.
+
 | Output | How it is built |
 |---|---|
 | EPUB 3 | Direct XHTML + NCX + OPF following the format-for-kdp structure; passes epubcheck 5.3 with no errors or warnings |

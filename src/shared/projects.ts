@@ -1,5 +1,6 @@
-import type { AppDefaults } from './appDefaults';
+import { defaultAppDefaults, type AppDefaults } from './appDefaults';
 import { clampLevel } from './chapters';
+import { applyOverrides, diffOverrides, overridesFromLegacyBook, projectLayer, sanitizeOverrides, type Overrides } from './export/layers';
 import { sanitizeBookDetails, type BookDetails } from './export/model';
 import { isDate, sanitizeGoal, type Goal } from './progress';
 import { validateName } from './paths';
@@ -191,8 +192,8 @@ export function templateErrors(t: ProjectTemplate): string[] {
 export interface ProjectOverrides {
   /** null = use the app's chapter heading level. */
   chapterLevel: number | null;
-  /** null = use the app's book defaults. */
-  book: BookDetails | null;
+  /** The book fields this project sets itself (field path → value); every other field follows the app. */
+  book: Overrides;
 }
 
 export interface ProjectMeta {
@@ -216,7 +217,16 @@ export interface ProjectMeta {
   overrides: ProjectOverrides;
 }
 
-export function newProjectMeta(opts: { id: string; name: string; template: ProjectTemplate; now: Date }): ProjectMeta {
+/** What a template's book changes relative to the app. A year that is just the date it was made, or blank, isn't a choice. */
+function templateOverrides(book: BookDetails, app: AppDefaults, now: Date): Overrides {
+  const out = projectLayer(diffOverrides(app.book, book));
+  const year = book.copyright.year.trim();
+  if (year === '' || year === String(now.getFullYear())) delete out['copyright.year'];
+  return out;
+}
+
+/** `app` is what a template's book is compared with: only what the template changes becomes a project override. */
+export function newProjectMeta(opts: { id: string; name: string; template: ProjectTemplate; now: Date; app?: AppDefaults }): ProjectMeta {
   const { template: t } = opts;
   return {
     version: 1,
@@ -232,7 +242,7 @@ export function newProjectMeta(opts: { id: string; name: string; template: Proje
     activeManuscript: null,
     manuscriptGoals: {},
     excludedFolders: uncountedFolders(t.folders),
-    overrides: { chapterLevel: t.chapterLevel, book: t.book ? structuredClone(t.book) : null }
+    overrides: { chapterLevel: t.chapterLevel, book: t.book ? templateOverrides(t.book, opts.app ?? defaultAppDefaults(), opts.now) : {} }
   };
 }
 
@@ -258,7 +268,8 @@ export function sanitizeProjectMeta(raw: unknown, fallbackName: string, today: s
       : [],
     overrides: {
       chapterLevel: o.chapterLevel === null || o.chapterLevel === undefined ? null : clampLevel(o.chapterLevel),
-      book: isObj(o.book) ? sanitizeBookDetails(o.book) : null
+      // projects saved before layering held a whole book (or null for "use the app's")
+      book: isObj(o.book) ? (isObj(o.book.copyright) ? overridesFromLegacyBook(o.book) : projectLayer(sanitizeOverrides(o.book))) : {}
     }
   };
 }
@@ -400,5 +411,5 @@ export interface RootListing {
  */
 export function effectiveDefaults(app: AppDefaults, meta: ProjectMeta | null): AppDefaults {
   if (!meta) return app;
-  return { chapterLevel: meta.overrides.chapterLevel ?? app.chapterLevel, book: meta.overrides.book ?? app.book };
+  return { chapterLevel: meta.overrides.chapterLevel ?? app.chapterLevel, book: applyOverrides(app.book, meta.overrides.book) };
 }

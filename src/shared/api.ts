@@ -1,4 +1,5 @@
 import type { AppDefaults } from './appDefaults';
+import type { Origin } from './export/layers';
 import type { BookDetails } from './export/model';
 import type { Progress } from './progress';
 import type { ProjectMeta, ProjectsConfig, ProjectsSettings, ProjectSummary, RootListing } from './projects';
@@ -145,6 +146,15 @@ export type ProjectPatch = Partial<Pick<ProjectMeta, 'status' | 'notes' | 'archi
 
 export type { ProjectSummary };
 
+export interface BookDetailsResult {
+  details: BookDetails;
+  inherited: BookDetails;
+  origins: Record<string, Origin>;
+  overrides: string[];
+  exists: boolean;
+  damaged: boolean;
+}
+
 export interface MdeditApi {
   /** Shows the OS folder picker. Resolves to the chosen folder or null if cancelled. */
   pickFolder(): Promise<string | null>;
@@ -169,9 +179,14 @@ export interface MdeditApi {
   /** Shows the item in File Explorer. */
   reveal(path: string): void;
 
-  /** The book's saved details, or fresh defaults if none exist yet. */
-  getBookDetails(file: string): Promise<{ details: BookDetails; exists: boolean; damaged: boolean }>;
-  saveBookDetails(file: string, details: BookDetails): Promise<void>;
+  /**
+   * The book's details as they export (app settings, then the project's, then the book's own), or fresh defaults if none
+   * exist yet. `inherited` is the book without its own settings, `origins` says whether each inherited field comes from
+   * the project or the app, and `overrides` lists the fields the book sets itself.
+   */
+  getBookDetails(file: string): Promise<BookDetailsResult>;
+  /** `overrides` names the fields this book sets itself; the rest follow the project and the app. */
+  saveBookDetails(file: string, details: BookDetails, overrides?: string[]): Promise<void>;
   /** Marks/unmarks a file for export (creates or updates its export-settings file). */
   setMarked(file: string, marked: boolean): Promise<{ backedUp: boolean }>;
   /** Attaches an orphaned export-settings file to a manuscript in the same folder. */
