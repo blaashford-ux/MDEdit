@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { goalFor, STATUS_LABELS, STATUSES, type ProjectStatus, type ProjectSummary, type ProjectsConfig, type RootListing } from '../shared/projects';
 import { ContextMenu, type MenuItem } from './ContextMenu';
 import { Icon } from './Icon';
+import type { SharedProject } from '../shared/review/share';
 import { justLongPressed, longPressProps } from './longPress';
 
 interface Props {
@@ -21,6 +22,12 @@ interface Props {
   onStatus(p: ProjectSummary, status: ProjectStatus): void;
   onProperties(p: ProjectSummary): void;
   onReveal?(path: string): void;
+  /** Projects other people shared with this person (only where sharing is available). */
+  shared?: SharedProject[];
+  onOpenShared?(dir: string): void;
+  onJoin?(): void;
+  /** Opens the Sharing page (where sharing is available). */
+  onSharing?(): void;
 }
 
 export function timeAgo(ms: number | null, now = Date.now()): string {
@@ -97,6 +104,11 @@ export function ProjectsHome(p: Props) {
             {p.onOpenFolder && (
               <button type="button" onClick={p.onOpenFolder} title="Open any folder of Markdown files, even outside the Root Folder (Ctrl+O)">
                 Open Folder…
+              </button>
+            )}
+            {p.onSharing && (
+              <button type="button" onClick={p.onSharing} title="Projects you've shared for review, and their links">
+                Sharing
               </button>
             )}
             <button type="button" className="primary big" onClick={p.onNew}>
@@ -226,6 +238,19 @@ export function ProjectsHome(p: Props) {
                 </button>
               </div>
             ))}
+          </section>
+        )}
+        {p.onJoin && (
+          <section className="other-folders shared-with-me">
+            <h3>Shared with me</h3>
+            {(p.shared ?? []).length === 0 && <p className="muted small">Projects other people ask you to review appear here.</p>}
+            {(p.shared ?? []).map((sp) => (
+              <div className="other-folder" key={sp.dir}>
+                <Icon name="folder" size={15} className="kind-dir" /> <span className="grow-text">{sp.project}</span>
+                <button type="button" onClick={() => p.onOpenShared?.(sp.dir)}>Open</button>
+              </div>
+            ))}
+            <button type="button" onClick={p.onJoin}>Open invitation…</button>
           </section>
         )}
       </div>

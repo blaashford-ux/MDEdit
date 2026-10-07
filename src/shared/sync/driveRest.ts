@@ -110,6 +110,34 @@ export function createDriveRest(o: DriveRestOptions): DriveApi {
       return toFile(await json(`${FILES}/${encodeURIComponent(id)}?${params}`, jsonInit('PATCH', { name })));
     },
 
+    async getFile(id) {
+      try {
+        return toFile(await json(`${FILES}/${encodeURIComponent(id)}?fields=${FIELDS}`));
+      } catch (e) {
+        if (e instanceof DriveError && (e.status === 404 || e.status === 403)) return null;
+        throw e;
+      }
+    },
+
+    async shareByLink(id, role) {
+      const base = `${FILES}/${encodeURIComponent(id)}`;
+      // Writers must not be able to hand the file on (or change who has access).
+      await call(`${base}?fields=id`, jsonInit('PATCH', { writersCanShare: false, copyRequiresWriterPermission: true }));
+      const perms = (await (await call(`${base}/permissions?fields=permissions(id,type,role)`)).json()) as { permissions?: { id: string; type: string; role: string }[] };
+      const anyone = perms.permissions?.find((p) => p.type === 'anyone');
+      if (anyone) {
+        if (anyone.role !== role) await call(`${base}/permissions/${encodeURIComponent(anyone.id)}?fields=id`, jsonInit('PATCH', { role }));
+        return;
+      }
+      await call(`${base}/permissions?fields=id`, jsonInit('POST', { type: 'anyone', role, allowFileDiscovery: false }));
+    },
+
+    async unshare(id) {
+      const base = `${FILES}/${encodeURIComponent(id)}`;
+      const perms = (await (await call(`${base}/permissions?fields=permissions(id,type)`)).json()) as { permissions?: { id: string; type: string }[] };
+      for (const p of perms.permissions ?? []) if (p.type === 'anyone') await call(`${base}/permissions/${encodeURIComponent(p.id)}`, { method: 'DELETE' });
+    },
+
     async trash(id) {
       await call(`${FILES}/${encodeURIComponent(id)}?fields=id`, jsonInit('PATCH', { trashed: true }));
     },

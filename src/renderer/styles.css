@@ -564,6 +564,53 @@ code.path { background: var(--raised); padding: 1px 6px; border-radius: 6px; }
 .sb-sync.s-error, .sb-sync.s-confirm { color: var(--danger); }
 .sb-sync.s-syncing { opacity: 0.75; }
 
+/* ---- comments and suggestions ---- */
+.review-mark { background: color-mix(in srgb, var(--gold) 28%, transparent); border-bottom: 2px solid var(--gold); cursor: pointer; }
+.review-mark.review-suggestion { background: color-mix(in srgb, var(--accent) 22%, transparent); border-bottom-color: var(--accent); }
+.review-mark.review-active { background: color-mix(in srgb, var(--gold) 50%, transparent); }
+.review-panel { position: fixed; z-index: 35; top: 96px; right: 16px; bottom: 56px; width: 340px; max-width: calc(100vw - 32px); display: flex; flex-direction: column; gap: 8px; padding: 14px; overflow: hidden; background: var(--panel); border-radius: 16px; box-shadow: var(--shadow-pop); }
+.review-head { display: flex; align-items: center; justify-content: space-between; }
+.review-head h3 { margin: 0; font-size: 15px; }
+.review-head button { background: transparent; color: var(--muted); padding: 2px 8px; font-size: 18px; }
+.review-begin .primary { width: 100%; }
+.review-msg { margin: 6px 0 0; font-size: 12px; color: var(--gold); }
+.review-compose { display: flex; flex-direction: column; gap: 8px; }
+.review-compose blockquote { margin: 0; padding: 6px 10px; font-size: 12px; color: var(--muted); border-left: 3px solid var(--gold); background: var(--raised); border-radius: 6px; }
+.review-compose label { display: block; font-size: 12px; color: var(--muted); }
+.review-compose textarea, .review-replybox textarea { display: block; width: 100%; margin-top: 4px; padding: 8px 10px; font: inherit; color: var(--fg); background: var(--raised); border: 0; border-radius: 8px; resize: vertical; }
+.review-kinds { display: flex; gap: 14px; }
+.review-kinds input { display: inline; width: auto; margin: 0 4px 0 0; }
+.review-list { flex: 1; min-height: 0; margin: 0; padding: 0; overflow: auto; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.review-empty { padding: 12px 4px; font-size: 13px; color: var(--muted); }
+.review-item { padding: 10px; background: var(--raised); border-radius: 12px; font-size: 13px; }
+.review-item.s-resolved, .review-item.s-accepted, .review-item.s-rejected { opacity: 0.6; }
+.review-item.detached { outline: 1px dashed var(--faint); }
+.review-quote { display: block; width: 100%; padding: 0 0 4px; text-align: left; background: transparent; color: var(--muted); font-style: italic; }
+.review-meta { font-size: 11px; color: var(--muted); }
+.review-lost { color: var(--danger); }
+.review-diff { margin-top: 4px; }
+.review-diff del { color: var(--danger); }
+.review-diff ins { color: var(--accent); text-decoration: none; font-weight: 600; }
+.review-body, .review-reply { margin: 6px 0 0; white-space: pre-wrap; }
+.review-reply { padding-left: 10px; border-left: 2px solid var(--faint); color: var(--muted); }
+.review-actions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+.review-actions button { padding: 3px 9px; font-size: 12px; background: var(--panel); }
+.review-replybox { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; align-items: flex-end; }
+.review-foot { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--muted); }
+.review-name input { display: inline-block; width: 140px; margin-left: 6px; padding: 3px 8px; background: var(--raised); }
+.frame.mobile .review-panel { top: auto; left: 8px; right: 8px; bottom: 8px; width: auto; max-height: 62dvh; }
+
+/* ---- sharing for review ---- */
+.picker-frame { display: block; width: 100%; height: min(70vh, 560px); border: 0; border-radius: 12px; background: var(--raised); }
+.join-dialog, .share-dialog { width: 460px; }
+.share-list { margin: 8px 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.share-list li { display: flex; align-items: center; gap: 6px; padding: 6px 8px; background: var(--raised); border-radius: 10px; }
+.share-list .grow-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.share-add { display: flex; gap: 6px; margin-top: 8px; }
+.share-add input { margin-top: 0; }
+.share-note { margin: 6px 0; font-size: 12px; color: var(--accent); word-break: break-all; }
+.shared-with-me > button { margin-top: 8px; }
+.review-head .review-share { margin-left: auto; margin-right: 6px; padding: 3px 10px; font-size: 12px; background: var(--raised); color: var(--fg); }
 /* ---- line numbers: every tenth line faint, the hovered line in full ---- */
 /* line numbers sit in the margin to the right of the editor, outside the text */
 .line-gutter { position: absolute; left: calc(100% + 8px); top: 0; bottom: 0; width: 44px; overflow: hidden; pointer-events: none; font: 12px 'Cascadia Mono', Consolas, monospace; font-variant-numeric: tabular-nums; }
@@ -583,3 +630,25 @@ code.path { background: var(--raised); padding: 1px 6px; border-radius: 6px; }
 .defaults-fields { border: 0; margin: 0; padding: 0; min-width: 0; }
 .defaults-fields.readonly { opacity: 0.6; }
 .defaults-fields.readonly input, .defaults-fields.readonly select, .defaults-fields.readonly textarea, .defaults-fields.readonly button { cursor: not-allowed; }
+
+.about-head { display: flex; align-items: center; gap: 14px; margin-bottom: 8px; }
+.about-head h3 { margin: 0; }
+.about-version { color: var(--muted); font-size: 13px; }
+.about-update { margin: 12px 0 4px; font-size: 13px; }
+.about-update p { margin: 4px 0; }
+.about-notes summary { cursor: pointer; color: var(--muted); }
+.about-notes pre { max-height: 180px; margin: 6px 0 0; padding: 8px 10px; overflow: auto; white-space: pre-wrap; background: var(--raised); border-radius: 10px; font: inherit; font-size: 12px; }
+.share-sub { display: block; font-size: 11px; }
+.share-list li { flex-wrap: wrap; }
+.share-dialog { width: 520px; }
+.share-dialog .danger { background: var(--danger); color: #fff; }
+.frame.mobile .share-dialog, .frame.mobile .join-dialog { width: auto; }
+.share-list li .grow-text { flex: 1 1 100%; }
+.share-list li button { padding: 4px 10px; font-size: 12px; }
+
+/* ---- find bar on the phone: wrap instead of running off the right edge, so Close is always reachable ---- */
+.frame.mobile .find-bar { margin-right: 0; max-width: 100%; box-sizing: border-box; }
+.frame.mobile .find-row { flex-wrap: wrap; row-gap: 6px; }
+.frame.mobile .find-row .find-input { flex: 1 1 calc(100% - 36px); min-width: 0; max-width: none; } /* the box takes the first line, the options wrap below */
+.frame.mobile .find-scope { order: 5; flex: 1 1 100%; max-width: 100%; }
+.frame.mobile .find-bar button { min-height: 36px; }

@@ -16,8 +16,9 @@ import {
   type TreeNode,
   type UnsavedChoice
 } from '../../shared/api';
+import type { UpdateInfo } from '../../shared/update';
 import { basename, dirname, isInside } from '../../shared/paths';
-import { syncOff } from '../../shared/syncStub';
+import { reviewOff, syncOff } from '../../shared/syncStub';
 
 /** In-memory stand-in for the Electron bridge, with scripted dialog answers. */
 export class FakeApi implements MdeditApi {
@@ -28,6 +29,15 @@ export class FakeApi implements MdeditApi {
   confirmDeletes = syncOff.confirmDeletes;
   disconnectSync = syncOff.disconnectSync;
   onSyncStatus = syncOff.onSyncStatus;
+  getShareStatus = reviewOff.getShareStatus;
+  listShares = reviewOff.listShares;
+  stopSharing = reviewOff.stopSharing;
+  inviteReviewer = reviewOff.inviteReviewer;
+  revokeReviewer = reviewOff.revokeReviewer;
+  exchangeReviews = reviewOff.exchangeReviews;
+  listShared = reviewOff.listShared;
+  pickerToken = reviewOff.pickerToken;
+  joinReview = reviewOff.joinReview;
   files = new Map<string, { text: string; mtime: number }>();
   /** Folders that exist on disk (like a real file system, they survive deleting their files). */
   dirs = new Set<string>();
@@ -201,6 +211,12 @@ export class FakeApi implements MdeditApi {
     if (!f) throw new Error(`ENOENT: ${p}`);
     return { text: f.text, stamp: this.stampOf(p)! };
   };
+  reviews = new Map<string, string>();
+  listReviews = async (project: string) =>
+    [...this.reviews].filter(([k]) => k.startsWith(`${project}|`)).map(([k, text]) => ({ id: k.slice(project.length + 1), text }));
+  saveReview = async (project: string, id: string, text: string) => {
+    this.reviews.set(`${project}|${id}`, text);
+  };
   statFile = async (p: string) => this.stampOf(p);
   writeFile = async (p: string, content: string) => {
     this.writes.push(p);
@@ -270,5 +286,9 @@ export class FakeApi implements MdeditApi {
   setDirtyFiles = (names: string[]) => void this.dirtyReports.push(names);
   onCloseRequested = () => () => undefined;
   reportCloseDecision = () => undefined;
+  getAppVersion = async () => '0.0.0';
+  checkForUpdate = async (): Promise<UpdateInfo> => ({ current: '0.0.0', latest: '0.0.0', available: false, notes: '', pageUrl: '', asset: null, sumsUrl: null });
+  installUpdate = async () => undefined;
+  onUpdateProgress = () => () => undefined;
   onMenuAction = (_cb: (a: MenuAction) => void) => () => undefined;
 }

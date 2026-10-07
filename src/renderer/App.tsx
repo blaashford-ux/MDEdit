@@ -31,7 +31,15 @@ import type { SceneNav } from './sceneNav';
 import { SourceEditor } from './SourceEditor';
 import { StatusBar } from './StatusBar';
 import { MobileBar } from './MobileBar';
+import { AboutDialog } from './AboutDialog';
 import { SyncDialog } from './SyncDialog';
+import { ReviewPanel } from './ReviewPanel';
+import { ShareDialog } from './ShareDialog';
+import { JoinDialog } from './JoinDialog';
+import { SharingHome } from './SharingHome';
+import type { SharedProject } from '../shared/review/share';
+import type { Anchor } from '../shared/review/comments';
+import { loadIdentity, saveIdentity, useReview } from './useReview';
 import { TitleBar } from './TitleBar';
 import { Tabs } from './Tabs';
 import { Tree } from './Tree';
@@ -79,11 +87,56 @@ export function App() {
   const [started, setStarted] = useState(false);
   const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
   const [showSync, setShowSync] = useState(false);
+  const [showAbout, setShowAbout] = useState(false);
 
   const activeTab = s.tabs.find((t) => t.id === s.activeId);
 
   const activeDoc = activeTab ? s.docs.get(activeTab.file) : undefined;
   const activeChapter = activeDoc?.chapters[activeTab?.chapter ?? 0];
+
+  // Comments and suggestions on the open file (stored per reviewer inside the project).
+  const [showReview, setShowReview] = useState(false);
+  const [showShare, setShowShare] = useState(false);
+  const [textMenu, setTextMenu] = useState<{ x: number; y: number; sel: { anchor: Anchor; oneBlock: boolean } } | null>(null);
+  const [noteRequest, setNoteRequest] = useState<{ id: number; kind: 'comment' | 'suggestion'; sel: { anchor: Anchor; oneBlock: boolean } } | null>(null);
+  const [showJoin, setShowJoin] = useState(false);
+  const [showSharingHome, setShowSharingHome] = useState(false);
+  const [shared, setShared] = useState<SharedProject[]>([]);
+  const [reviewNotice, setReviewNotice] = useState<string | null>(null);
+  const [me, setMe] = useState(loadIdentity);
+  const projectPath = s.project?.path ?? null;
+  const sameDir = (a: string, b: string) => a.replace(/\\/g, '/') === b.replace(/\\/g, '/');
+  /** Set when the open project was shared with this person: they can read and annotate it, not edit it. */
+  const sharedHere = projectPath ? shared.find((sp) => sameDir(sp.dir, projectPath)) : undefined;
+  const isReviewer = sharedHere !== undefined;
+  const meHere = { id: sharedHere?.reviewerId ?? 'owner', name: me.name };
+  const reviewFile = projectPath && activeTab ? activeTab.file.replace(/\\/g, '/').slice(projectPath.replace(/\\/g, '/').replace(/\/+$/, '').length + 1) : null;
+  const review = useReview(
+    window.mdedit,
+    projectPath,
+    reviewFile,
+    s.activeId ? navs.current.get(s.activeId)?.review : undefined,
+    meHere,
+    activeTab ? `${activeTab.id}@${activeTab.chapter}@${activeTab.reloadKey}@${navVersion}` : ''
+  );
+  const reviewRef = useRef(review);
+  reviewRef.current = review;
+  const openNote = (kind: 'comment' | 'suggestion', sel: { anchor: Anchor; oneBlock: boolean }) => {
+    setShowReview(true);
+    setNoteRequest((r) => ({ id: (r?.id ?? 0) + 1, kind, sel }));
+  };
+  /** The phone's press-and-hold menu entries for notes: the note attaches when picked (to the selection, or the paragraph pressed). */
+  const noteItems = (tabId: string, x: number, y: number): MenuItem[] => {
+    const attach = (kind: 'comment' | 'suggestion') => {
+      const sel = navs.current.get(tabId)?.review?.selectionAt(x, y);
+      if (sel && (kind === 'comment' || sel.oneBlock)) openNote(kind, sel);
+    };
+    return [
+      { label: 'Add comment…', onClick: () => attach('comment') },
+      { label: 'Suggest a change…', onClick: () => attach('suggestion') }
+    ];
+  };
+  const openNotes = review.items.filter((i) => i.status === 'open').length;
   const activeKey = activeTab ? chapterKey(activeTab.file, activeTab.chapter) : null;
   useEffect(() => setDrawer(false), [activeKey]);
   // the pane element outlives a chapter change within a tab, so its scroll position would carry over: always start a chapter at the top
@@ -186,6 +239,35 @@ export function App() {
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
   }, [atHome, showQuick, showNewProject, reloadListing]);
+
+  // Projects shared with this person, and the exchange of notes with Drive for the open project.
+  const reloadShared = useCallback(() => {
+    if (caps.review) void window.mdedit.listShared().then(setShared).catch(() => undefined);
+  }, [caps.review]);
+  useEffect(reloadShared, [reloadShared, atHome]);
+
+  const exchange = useCallback(async () => {
+    if (!caps.review || !projectPath) return;
+    const r = await window.mdedit.exchangeReviews(projectPath).catch(() => null);
+    if (!r) return;
+    setReviewNotice(r.revoked ? 'The owner has stopped sharing this project with you. Your notes stay on this device.' : r.errors[0] ?? null);
+    if (r.changed) {
+      reviewRef.current.reload();
+      if (isReviewer) void ws.refresh(); // the owner's text may have changed too
+    }
+  }, [caps.review, projectPath, isReviewer, ws]);
+  useEffect(() => {
+    if (!caps.review || !projectPath) return;
+    void exchange();
+    const t = setInterval(() => void exchange(), 60_000);
+    return () => clearInterval(t);
+  }, [caps.review, projectPath, exchange]);
+  const noteStamp = review.items.map((i) => i.updatedAt).join();
+  useEffect(() => {
+    if (!caps.review || !projectPath || !noteStamp) return;
+    const t = setTimeout(() => void exchange(), 4000); // soon after a note changes
+    return () => clearTimeout(t);
+  }, [noteStamp, caps.review, projectPath, exchange]);
   // A sync that changed files: refresh the tree (open files reload through the usual external-change check) and the project list.
   const syncChanges = syncStatus?.localChanges ?? 0;
   useEffect(() => {
@@ -427,6 +509,10 @@ export function App() {
     listing,
     loading: listing_loading,
     onOpen: (p: string) => void openProject(p),
+    shared,
+    onOpenShared: (dir: string) => void openProject(dir),
+    onJoin: caps.review ? () => setShowJoin(true) : undefined,
+    onSharing: caps.review ? () => setShowSharingHome(true) : undefined,
     onNew: () => setShowNewProject(true),
     onOpenFolder: caps.folderPicker ? () => void ws.openFolder() : undefined,
     onChangeRoot: caps.folderPicker ? () => void changeRoot() : undefined,
@@ -569,6 +655,7 @@ export function App() {
     'new-project': () => setShowNewProject(true),
     'projects-home': () => void goHome(),
     sync: () => caps.sync && setShowSync(true),
+    about: () => setShowAbout(true),
     'switch-project': () => setShowQuick(true),
     'project-settings': () => s.project && setProjectSettings(s.project.path),
     'project-progress': () => s.project && setShowProgress(true),
@@ -709,6 +796,7 @@ export function App() {
         canSave={activeDirty}
         find={activeTab ? { open: find.open, onToggle: () => (find.open ? closeFind() : openFind(false)) } : undefined}
         sync={caps.sync && syncStatus ? { state: syncStatus.state, onOpen: () => setShowSync(true) } : undefined}
+        onAbout={() => setShowAbout(true)}
       />
     )}
     {!s.root ? (
@@ -723,7 +811,17 @@ export function App() {
             <span>Keep your projects in sync with Google Drive.</span> <button onClick={() => setShowSync(true)}>Set up sync</button>
           </div>
         )}
-        {started && !welcome && <ProjectsHome {...homeProps} />}
+        {started && !welcome && (showSharingHome && caps.review ? (
+          <SharingHome
+            config={pConfig}
+            listing={listing}
+            sync={syncStatus}
+            onBack={() => setShowSharingHome(false)}
+            onConnect={() => setShowSync(true)}
+          />
+        ) : (
+          <ProjectsHome {...homeProps} />
+        ))}
       </div>
     ) : (
     <div className="app" style={{ gridTemplateColumns: `${s.sidebarWidth}px 6px minmax(0, 1fr)` }}>
@@ -859,7 +957,7 @@ export function App() {
             const active = tab.id === s.activeId;
             const dirty = tab.draft !== null;
             return (
-              <section key={tab.id} className="pane" hidden={!active} aria-label={basename(tab.file)} {...(caps.windowChrome ? {} : longPressProps((x, y, target) => setEditMenu({ x, y, items: editMenuItems(target, () => openFind(false)) }), isEditable))}>
+              <section key={tab.id} className="pane" hidden={!active} aria-label={basename(tab.file)} {...(caps.windowChrome ? {} : longPressProps((x, y, target) => setEditMenu({ x, y, items: [...editMenuItems(target, () => openFind(false)), ...(tab.mode === 'visual' && projectPath && target.closest('.ProseMirror') ? noteItems(tab.id, x, y) : [])] }), isEditable))}>
                 {tab.conflict?.kind === 'changed' && (
                   <div className="banner warn" role="alert">
                     {basename(tab.file)} was changed on disk while you have unsaved edits.{' '}
@@ -902,12 +1000,24 @@ export function App() {
                     <button aria-label="Next scene break" title="Next scene break (Ctrl+↓)" onClick={() => gotoScene(1)}>
                       <Icon name="down" /> Scene
                     </button>
+                    {tab.mode === 'visual' && projectPath && (
+                      <button
+                        aria-label="Comments and suggestions"
+                        aria-pressed={showReview}
+                        title="Comments and suggestions"
+                        onClick={() => setShowReview((v) => !v)}
+                      >
+                        Notes{openNotes > 0 ? ` (${openNotes})` : ''}
+                      </button>
+                    )}
+                    {!isReviewer && (
                     <button
                       onClick={() => ws.setMode(tab.id, tab.mode === 'visual' ? 'source' : 'visual')}
                       title="Switch between formatted and raw Markdown (Ctrl+Shift+M)"
                     >
                       {tab.mode === 'visual' ? 'Source' : 'Visual'}
                     </button>
+                    )}
                     <button className="save-btn" onClick={() => void ws.save(tab.id)} disabled={!dirty}>
                       Save (Ctrl+S)
                     </button>
@@ -938,6 +1048,15 @@ export function App() {
                     onChange={(md) => ws.setDraft(tab.id, md)}
                     saved={tab.saved}
                     onNav={(n) => registerNav(tab.id, n)}
+                    readOnly={isReviewer}
+                    onContextMenu={
+                      projectPath && caps.windowChrome
+                        ? ({ x, y }) => {
+                            const sel = navs.current.get(tab.id)?.review?.selectionAt(x, y);
+                            if (sel) setTextMenu({ x, y, sel });
+                          }
+                        : undefined
+                    }
                     firstLine={firstRowOf(doc, tab.chapter, 'visual')}
                   />
                 ) : (
@@ -985,6 +1104,33 @@ export function App() {
         )}
       </main>
 
+      {showReview && projectPath && activeTab?.mode === 'visual' && (
+        <ReviewPanel
+          state={review}
+          me={meHere}
+          role={isReviewer ? 'reviewer' : 'owner'}
+          notice={reviewNotice}
+          request={noteRequest}
+          onShare={caps.review && !isReviewer ? () => setShowShare(true) : undefined}
+          onRename={(name) => {
+            const next = { ...me, name };
+            setMe(next);
+            saveIdentity(next);
+          }}
+          onClose={() => setShowReview(false)}
+        />
+      )}
+      {textMenu && (
+        <ContextMenu
+          x={textMenu.x}
+          y={textMenu.y}
+          items={[
+            { label: 'Add comment…', onClick: () => openNote('comment', textMenu.sel) },
+            { label: 'Suggest a change…', disabled: !textMenu.sel.oneBlock, onClick: () => openNote('suggestion', textMenu.sel) }
+          ]}
+          onClose={() => setTextMenu(null)}
+        />
+      )}
       {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItems(menu.row)} onClose={() => setMenu(null)} />}
       {editMenu && <ContextMenu keepFocus x={editMenu.x} y={editMenu.y} items={editMenu.items} onClose={() => setEditMenu(null)} />}
       {prompt && <PromptDialog spec={prompt} onClose={() => setPrompt(null)} />}
@@ -1018,6 +1164,30 @@ export function App() {
       )}
     </div>
     )}
+    {showShare && projectPath && (
+      <ShareDialog
+        project={projectPath}
+        projectName={s.project?.meta.name ?? ''}
+        sync={syncStatus}
+        onConnect={() => {
+          setShowShare(false);
+          setShowSync(true);
+        }}
+        onClose={() => setShowShare(false)}
+      />
+    )}
+    {showJoin && (
+      <JoinDialog
+        onJoined={(sp) => {
+          setMe(loadIdentity());
+          setShared((l) => [...l.filter((x) => x.dir !== sp.dir), sp]);
+          setShowJoin(false);
+          void openProject(sp.dir);
+        }}
+        onClose={() => setShowJoin(false)}
+      />
+    )}
+    {showAbout && <AboutDialog onClose={() => setShowAbout(false)} />}
     {showSync && syncStatus && <SyncDialog status={syncStatus} onClose={() => setShowSync(false)} />}
     {showSettings && <SettingsDialog
         onSave={async (d) => {

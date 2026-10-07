@@ -1,8 +1,18 @@
 import { contextBridge, ipcRenderer } from 'electron';
+import type { UpdateProgress } from '../src/shared/update';
 import { DESKTOP_CAPABILITIES, type ExportProgress, type MdeditApi, type MenuAction, type SyncStatus, type WindowInfo } from '../src/shared/api';
 
 const api: MdeditApi = {
   capabilities: DESKTOP_CAPABILITIES,
+  getShareStatus: (project) => ipcRenderer.invoke('review:shareStatus', project),
+  listShares: () => ipcRenderer.invoke('review:listShares'),
+  stopSharing: (project) => ipcRenderer.invoke('review:stop', project),
+  inviteReviewer: (project, name) => ipcRenderer.invoke('review:invite', project, name),
+  revokeReviewer: (project, id) => ipcRenderer.invoke('review:revoke', project, id),
+  exchangeReviews: (project) => ipcRenderer.invoke('review:exchange', project),
+  listShared: () => ipcRenderer.invoke('review:listShared'),
+  pickerToken: () => ipcRenderer.invoke('review:pickerToken'),
+  joinReview: (link, name) => ipcRenderer.invoke('review:join', link, name),
   getSyncStatus: () => ipcRenderer.invoke('sync:status'),
   connectSync: () => ipcRenderer.invoke('sync:connect'),
   syncNow: () => ipcRenderer.invoke('sync:now'),
@@ -13,10 +23,20 @@ const api: MdeditApi = {
     ipcRenderer.on('sync:status', listener);
     return () => ipcRenderer.removeListener('sync:status', listener);
   },
+  getAppVersion: () => ipcRenderer.invoke('update:version'),
+  checkForUpdate: () => ipcRenderer.invoke('update:check'),
+  installUpdate: (info) => ipcRenderer.invoke('update:install', info),
+  onUpdateProgress: (cb) => {
+    const listener = (_e: Electron.IpcRendererEvent, p: UpdateProgress) => cb(p);
+    ipcRenderer.on('update:progress', listener);
+    return () => ipcRenderer.removeListener('update:progress', listener);
+  },
   pickFolder: () => ipcRenderer.invoke('dialog:pickFolder'),
   getLastFolder: () => ipcRenderer.invoke('settings:getLastFolder'),
   scanFolder: (root) => ipcRenderer.invoke('fs:scanFolder', root),
   readFile: (p) => ipcRenderer.invoke('fs:readFile', p),
+  listReviews: (project) => ipcRenderer.invoke('review:list', project),
+  saveReview: (project, id, text) => ipcRenderer.invoke('review:save', project, id, text),
   statFile: (p) => ipcRenderer.invoke('fs:statFile', p),
   writeFile: (p, content) => ipcRenderer.invoke('fs:writeFile', p, content),
   createFile: (dir, name, content) => ipcRenderer.invoke('fs:createFile', dir, name, content),

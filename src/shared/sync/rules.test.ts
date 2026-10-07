@@ -40,6 +40,10 @@ describe('classify', () => {
     expect(classify('Novel/Exports/book.epub', { includeExports: true })).toBe('asset');
     expect(classify('Novel/Manuscript/Exports/a.md')).toBe('prose'); // only a project's own Exports folder
   });
+
+  it('never syncs projects shared with you', () => {
+    expect(classify('Shared With Me/Novel/Book.md')).toBeNull();
+  });
 });
 
 describe('edited-chapter marks', () => {

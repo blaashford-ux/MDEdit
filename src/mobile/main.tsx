@@ -2,7 +2,9 @@ import { App as CapacitorApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
 import { Filesystem } from '@capacitor/filesystem';
 import { createRoot } from 'react-dom/client';
-import { MOBILE_CAPABILITIES, type CoreApi, type MdeditApi } from '../shared/api';
+import { MOBILE_CAPABILITIES, type CoreApi, type MdeditApi, type UpdateApi } from '../shared/api';
+import { createReviewHost } from '../shared/review/host';
+import { fetchLatestRelease, type UpdateProgress } from '../shared/update';
 import { createCoreApi } from '../shared/backend/coreApi';
 import type { FsPort } from '../shared/fsPort';
 import { FakeDrive } from '../shared/sync/fakeDrive';
@@ -10,6 +12,7 @@ import { SyncService } from '../shared/sync/service';
 import { App } from '../renderer/App';
 import { createCapacitorFs, type FilesystemLike } from './capacitorFs';
 import { DialogHost, mobileDialogs } from './dialogs';
+import { AppUpdate } from './appUpdate';
 import { DriveAuth } from './driveAuth';
 import { seededPreviewFs } from './sampleProject';
 import { desktopOnlyStubs } from './stubs';
@@ -69,8 +72,16 @@ async function start(): Promise<void> {
   });
   await sync.load();
 
+  const reviews = createReviewHost({
+    fs,
+    root: ROOT,
+    stateFile: `${STATE}/shares.json`,
+    drive: () => sync.driveApi(),
+    connected: () => sync.isConnected(),
+    accessToken: () => sync.accessToken(),
+  });
   const core = onChange(backend.api, () => sync.syncSoon());
-  window.mdedit = { ...core, ...desktopOnlyStubs, ...bindSync(sync), capabilities: MOBILE_CAPABILITIES } satisfies MdeditApi;
+  window.mdedit = { ...core, ...desktopOnlyStubs, ...bindSync(sync), ...reviews, ...androidUpdates(), capabilities: MOBILE_CAPABILITIES } satisfies MdeditApi;
 
   // Keep the latest version available: on start, when the app comes back to the front, and every minute while it is open.
   const visible = () => document.visibilityState === 'visible';
@@ -88,6 +99,25 @@ async function start(): Promise<void> {
       <DialogHost />
     </>
   );
+}
+
+/** Update from the latest GitHub release. In a browser preview there is no installer, so only checking works. */
+function androidUpdates(): UpdateApi {
+  const version = async () => (native ? (await CapacitorApp.getInfo()).version : 'preview');
+  return {
+    getAppVersion: version,
+    checkForUpdate: async () => fetchLatestRelease(fetch, 'android', await version()),
+    installUpdate: async (info) => {
+      if (!native) throw new Error('Updating only works inside the Android app.');
+      if (!info.asset) throw new Error('This release has no Android app.');
+      await AppUpdate.install({ url: info.asset.url, name: info.asset.name, sumsUrl: info.sumsUrl });
+    },
+    onUpdateProgress: (cb) => {
+      if (!native) return () => undefined;
+      const handle = AppUpdate.addListener('progress', (p: UpdateProgress) => cb(p));
+      return () => void handle.then((h) => h.remove());
+    }
+  };
 }
 
 /** The service's methods as plain functions (they are passed around detached from the class). */

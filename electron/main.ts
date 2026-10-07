@@ -1,4 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, nativeTheme, safeStorage, screen, shell } from 'electron';
+import { spawn } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import type { DraftRecord, Prefs, Session, ThemeSource } from '../src/shared/api';
@@ -17,20 +18,28 @@ import { installMenu } from './menu';
 import { chromeOptions, registerWindowChrome, shellColor, watchWindow } from './windowChrome';
 import { confirmDelete, confirmMarkEdited, confirmOverwrite, confirmRecover, confirmUnsaved } from './prompts';
 import { scanFolder } from './scan';
+import { makeReviews } from '../src/shared/backend/reviews';
+import { nodeFs } from './nodeFs';
 import { bundledFont } from '../src/shared/export/fonts';
 import { listInstalledFonts } from './fonts';
 import { sanitizeAppDefaults, type AppDefaults } from '../src/shared/appDefaults';
 import { defaultRootFolder, effectiveDefaults, sanitizeProjectsSettings, type ProjectsConfig } from '../src/shared/projects';
 import * as projects from './projects';
 import { existingFolder, SettingsStore, type WindowState } from './settings';
+import { downloadInstaller } from './update';
+import { fetchLatestRelease, type UpdateInfo } from '../src/shared/update';
 import type { SyncService } from '../src/shared/sync/service';
 import { createDesktopSync } from './syncHost';
+import { createReviewHost } from '../src/shared/review/host';
+import type { ReviewSharingApi } from '../src/shared/api';
 
 const settings = new SettingsStore(path.join(app.getPath('userData'), 'settings.json'));
 let drafts: DraftStore;
 let mainWindow: BrowserWindow | null = null;
 let smokeMode = false;
 const pendingFiles: string[] = [];
+/** A downloaded installer to start once the app has exited (see `update:install`). */
+let installerToRun: string | null = null;
 
 function queueFile(file: string): void {
   if (!pendingFiles.includes(file)) pendingFiles.push(file);
@@ -91,6 +100,27 @@ function ensureSync(): Promise<SyncService> {
     });
   }
   return syncReady;
+}
+
+/** A project in the Root Folder (so the Sharing page can reach it with no folder open) or anything inside the open folder. */
+function reviewPath(p: string): string {
+  const full = path.resolve(p);
+  const rel = path.relative(path.resolve(projectsRoot()), full);
+  if (rel && !rel.startsWith('..') && !path.isAbsolute(rel) && !rel.includes(path.sep)) return full;
+  return inRoot(p, { allowRoot: true });
+}
+
+/** Sharing for review, built on the sync service's Google sign-in. */
+async function reviewHost(): Promise<ReviewSharingApi> {
+  const svc = await ensureSync();
+  return createReviewHost({
+    fs: nodeFs,
+    root: projectsRoot(),
+    stateFile: path.join(app.getPath('userData'), 'shares.json'),
+    drive: () => svc.driveApi(),
+    connected: () => svc.isConnected(),
+    accessToken: () => svc.accessToken()
+  });
 }
 
 /** Something on disk changed because of the user: sync soon (does nothing unless Google Drive is connected). */
@@ -179,6 +209,9 @@ function registerIpc(): void {
     return tree;
   });
   handle('fs:readFile', (_e, p: string) => readWithStamp(inRoot(p)));
+  const reviews = makeReviews(nodeFs);
+  handle('review:list', (_e, project: string) => reviews.list(reviewPath(project)));
+  handle('review:save', (_e, project: string, id: string, text: string) => reviews.save(reviewPath(project), id, text));
   handle('fs:statFile', (_e, p: string) => statStamp(inRoot(p)));
   handle('fs:writeFile', (_e, p: string, content: string) => {
     const full = inRoot(p);
@@ -372,6 +405,31 @@ function registerIpc(): void {
   handle('dialog:confirmRecover', (e, name: string) => confirmRecover(winOf(e), name));
   handle('dialog:confirmMarkEdited', (e, title: string) => confirmMarkEdited(winOf(e), title));
   // --- Google Drive sync ---
+  handle('review:shareStatus', async (_e, project: string) => (await reviewHost()).getShareStatus(reviewPath(project)));
+  handle('review:invite', async (_e, project: string, name: string) => (await reviewHost()).inviteReviewer(reviewPath(project), name));
+  handle('review:revoke', async (_e, project: string, id: string) => (await reviewHost()).revokeReviewer(reviewPath(project), id));
+  handle('review:exchange', async (_e, project: string) => (await reviewHost()).exchangeReviews(reviewPath(project)));
+  handle('review:listShares', async () => (await reviewHost()).listShares());
+  handle('review:stop', async (_e, project: string) => (await reviewHost()).stopSharing(reviewPath(project)));
+  handle('review:listShared', async () => (await reviewHost()).listShared());
+  handle('review:pickerToken', async () => (await reviewHost()).pickerToken());
+  handle('review:join', async (_e, link: string, name: string) => (await reviewHost()).joinReview(link, name));
+  // ---- Updating from the latest GitHub release ----
+  handle('update:version', () => app.getVersion());
+  handle('update:check', () => fetchLatestRelease(fetch, 'windows', app.getVersion()));
+  handle('update:install', async (e, info: UpdateInfo) => {
+    const file = await downloadInstaller(info, {
+      fetchFn: fetch,
+      dir: path.join(os.tmpdir(), 'mdedit-update'),
+      onProgress: (p) => {
+        if (!e.sender.isDestroyed()) e.sender.send('update:progress', p);
+      }
+    });
+    // Start the installer only after we have exited (so no file is in use). Quitting goes through the usual
+    // unsaved-changes prompt; if the user cancels that, `guardClose` clears this again.
+    installerToRun = file;
+    app.quit();
+  });
   handle('sync:status', async () => (await ensureSync()).getSyncStatus());
   handle('sync:connect', async () => (await ensureSync()).connectSync());
   handle('sync:now', async () => (await ensureSync()).syncNow());
@@ -395,6 +453,7 @@ function guardClose(win: BrowserWindow): void {
     waiting = true;
     ipcMain.once('app:closeDecision', (_e, ok: boolean) => {
       waiting = false;
+      if (ok !== true) installerToRun = null; // the user backed out of closing, so an update in progress is off
       if (ok === true) {
         confirmed = true;
         win.close();
@@ -519,6 +578,11 @@ if (!firstInstance) {
     app.exit(1);
   });
 }
+
+app.on('quit', () => {
+  if (!installerToRun) return;
+  spawn(installerToRun, [], { detached: true, stdio: 'ignore' }).unref();
+});
 
 let finalSyncStarted = false;
 app.on('before-quit', (e) => {

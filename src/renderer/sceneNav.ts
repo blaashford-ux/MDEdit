@@ -1,4 +1,5 @@
 import type { FindOptions, FindStatus } from '../shared/find';
+import type { ReviewApi } from './reviewPlugin';
 
 /** Which match to land on when a search is (re)run. */
 export type FindJump = 'caret' | 'first' | 'last' | 'keep';
@@ -28,4 +29,6 @@ export interface SceneNav {
   /** Puts the caret on file line `line` (which must be in this chapter) and scrolls it into view. */
   goToLine(line: number): boolean;
   find: FindApi;
+  /** Comments and suggestions in this chapter. Only the formatted editor has it. */
+  review?: ReviewApi;
 }
