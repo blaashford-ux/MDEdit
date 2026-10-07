@@ -4,21 +4,30 @@ import { diffOverrides, resolveInherited } from '../../shared/export/layers';
 import { bookFromDefaults, defaultAppDefaults, type AppDefaults } from '../../shared/appDefaults';
 import type { BookDetails } from '../../shared/export/model';
 import { defaultBookDetails } from '../../shared/export/model';
-import type {
-  DirNode,
-  DraftRecord,
-  FileStamp,
-  MdeditApi,
-  MenuAction,
-  Prefs,
-  Session,
-  TreeNode,
-  UnsavedChoice
+import {
+  DESKTOP_CAPABILITIES,
+  type DirNode,
+  type DraftRecord,
+  type FileStamp,
+  type MdeditApi,
+  type MenuAction,
+  type Prefs,
+  type Session,
+  type TreeNode,
+  type UnsavedChoice
 } from '../../shared/api';
 import { basename, dirname, isInside } from '../../shared/paths';
+import { syncOff } from '../../shared/syncStub';
 
 /** In-memory stand-in for the Electron bridge, with scripted dialog answers. */
 export class FakeApi implements MdeditApi {
+  capabilities = DESKTOP_CAPABILITIES;
+  getSyncStatus = syncOff.getSyncStatus;
+  connectSync = syncOff.connectSync;
+  syncNow = syncOff.syncNow;
+  confirmDeletes = syncOff.confirmDeletes;
+  disconnectSync = syncOff.disconnectSync;
+  onSyncStatus = syncOff.onSyncStatus;
   files = new Map<string, { text: string; mtime: number }>();
   /** Folders that exist on disk (like a real file system, they survive deleting their files). */
   dirs = new Set<string>();
@@ -38,6 +47,8 @@ export class FakeApi implements MdeditApi {
   overwriteAnswers: boolean[] = [];
   deleteAnswers: boolean[] = [];
   recoverAnswers: boolean[] = [];
+  markEditedAnswers: boolean[] = [];
+  markEditedAsked: string[] = [];
   unsavedAsked: string[] = [];
   pickResult: string | null = null;
   failTrash = false;
@@ -251,6 +262,10 @@ export class FakeApi implements MdeditApi {
   confirmOverwrite = async () => this.overwriteAnswers.shift() ?? true;
   confirmDelete = async () => this.deleteAnswers.shift() ?? true;
   confirmRecover = async () => this.recoverAnswers.shift() ?? true;
+  confirmMarkEdited = async (title: string) => {
+    this.markEditedAsked.push(title);
+    return this.markEditedAnswers.shift() ?? false;
+  };
 
   setDirtyFiles = (names: string[]) => void this.dirtyReports.push(names);
   onCloseRequested = () => () => undefined;

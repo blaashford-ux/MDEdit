@@ -33,7 +33,7 @@ export function QuickSwitcher({ projects, currentPath, onOpen, onHome, onNew, on
     const list: Entry[] = matching.map((p) => ({
       key: p.path,
       label: p.name,
-      detail: `${STATUS_LABELS[p.meta.status]} · ${p.words.toLocaleString()} words${p.path === currentPath ? ' · open' : ''}`,
+      detail: `${STATUS_LABELS[p.meta.status]} · ${p.words === null ? '-' : p.words.toLocaleString()} words${p.path === currentPath ? ' · open' : ''}`,
       run: () => onOpen(p.path)
     }));
     if ('projects home all projects'.includes(q) || q === '') list.push({ key: '#home', label: 'All projects…', run: onHome });

@@ -1,6 +1,7 @@
 import { relativeTo } from '../shared/projects';
 import { dirname } from '../shared/paths';
 import { beforeEach, describe, expect, it } from 'vitest';
+import type { WorkspaceApi } from '../shared/api';
 import { FakeApi } from './testing/fakeApi';
 import { Workspace } from './workspace';
 
@@ -1041,5 +1042,130 @@ describe('projects in the workspace', () => {
     expect(state().project?.meta.activeManuscript).toBe(relativeTo(PROJ, dirname(B) + '/Renamed.md'));
     expect(await ws.setActiveManuscript(null)).toBe(true);
     expect(state().project?.meta.activeManuscript).toBeNull();
+  });
+});
+
+describe('a core-only API (the phone)', () => {
+  /** FakeApi with every desktop-only method removed, as the Android app provides it. */
+  const phoneApi = (fake: FakeApi): WorkspaceApi => {
+    const desktopOnly = new Set(['setDirtyFiles', 'takeLaunchFiles', 'pickFolder', 'reveal', 'setMarked', 'relinkSidecar']);
+    return new Proxy(fake, { get: (target, prop, recv) => (desktopOnly.has(String(prop)) ? undefined : Reflect.get(target, prop, recv)) }) as unknown as WorkspaceApi;
+  };
+
+  it('opens, edits and saves without any desktop method', async () => {
+    const phone = new Workspace(phoneApi(api), { draftDelayMs: 5, sessionDelayMs: 5 });
+    await phone.openPath(ROOT);
+    await phone.openChapter(A, 0);
+    const tab = phone.getState().tabs[0];
+    phone.setDraft(tab.id, '# One\nEDITED ON THE PHONE');
+    expect(await phone.save()).toBe(true);
+    expect(api.files.get(A)!.text).toContain('EDITED ON THE PHONE');
+  });
+
+  it('treats the missing desktop calls as "not available" instead of throwing', async () => {
+    const phone = new Workspace(phoneApi(api), { draftDelayMs: 5, sessionDelayMs: 5 });
+    await phone.openPath(ROOT);
+    await expect(phone.openLaunchFiles()).resolves.toBeUndefined();
+    await expect(phone.openFolder()).resolves.toBeUndefined();
+    expect(await phone.setMarked(A, true)).toBe(false);
+    expect(await phone.relinkSidecar('x.export.json', A)).toBe(false);
+    expect(() => phone.reveal(A)).not.toThrow();
+  });
+});
+
+describe('edited chapters (Editing stage)', () => {
+  const PROJ = ROOT;
+  const edited = () => state().project!.meta.editedChapters;
+  const openEditing = async (patch: Record<string, unknown> = { status: 'editing' }) => {
+    api.addProject(PROJ, patch as never);
+    await ws.openPath(PROJ);
+  };
+  const saveChapter = async (file: string, md: string) => {
+    ws.setDraft(tabOf(file).id, md);
+    await ws.save(tabOf(file).id);
+  };
+
+  it('leaving a saved chapter offers to mark it; yes marks it and it is kept in the project', async () => {
+    await openEditing();
+    await ws.openChapter(A, 0);
+    await saveChapter(A, '# One\nfirst, polished');
+    api.markEditedAnswers = [true];
+    await ws.openChapter(A, 1);
+    expect(api.markEditedAsked).toEqual(['One']);
+    expect(edited()).toEqual({ 'a.md': ['One'] });
+    expect(ws.isChapterEdited(A, 0)).toBe(true);
+    expect(api.projectMetas.get(PROJ)!.editedChapters).toEqual({ 'a.md': ['One'] });
+  });
+
+  it('no means not marked, and a chapter already marked is not asked about again', async () => {
+    await openEditing();
+    await ws.openChapter(A, 0);
+    await saveChapter(A, '# One\nx');
+    await ws.openChapter(A, 1); // default answer: no
+    expect(edited()).toEqual({});
+    await ws.setChapterEdited(A, 0, true);
+    await ws.openChapter(A, 0);
+    await saveChapter(A, '# One\ny');
+    await ws.openChapter(A, 2);
+    expect(api.markEditedAsked).toEqual(['One']);
+  });
+
+  it('only chapters you saved are offered, and only in the Editing stage', async () => {
+    await openEditing();
+    await ws.openChapter(A, 0);
+    await ws.openChapter(A, 1); // just browsing
+    expect(api.markEditedAsked).toEqual([]);
+    await ws.closeProject();
+    await openEditing({ status: 'drafting' });
+    await ws.openChapter(A, 0);
+    await saveChapter(A, '# One\nz');
+    await ws.openChapter(A, 1);
+    expect(api.markEditedAsked).toEqual([]);
+  });
+
+  it('closing a saved chapter’s tab offers too', async () => {
+    await openEditing();
+    await ws.openChapter(A, 1);
+    await saveChapter(A, '# Two\nbetter');
+    api.markEditedAnswers = [true];
+    await ws.closeTab(tabOf(A).id);
+    expect(edited()).toEqual({ 'a.md': ['Two'] });
+  });
+
+  it('marks stay with a chapter that moves, is retitled, or whose file is renamed, and survive a status change', async () => {
+    await openEditing();
+    await ws.openChapter(A, 1);
+    await ws.setChapterEdited(A, 1, true); // "Two"
+    await ws.moveChapter(A, 1, -1);
+    expect(ws.isChapterEdited(A, 0)).toBe(true);
+    await ws.openChapter(A, 0);
+    await saveChapter(A, '# Second\nsecond');
+    expect(edited()).toEqual({ 'a.md': ['Second'] });
+    await ws.renameNode(A, 'renamed.md');
+    expect(edited()).toEqual({ 'renamed.md': ['Second'] });
+    await ws.updateProjectMeta({ ...state().project!.meta, status: 'drafting' });
+    expect(edited()).toEqual({ 'renamed.md': ['Second'] });
+  });
+
+  it('Unmark Edited removes the mark', async () => {
+    await openEditing();
+    await ws.setChapterEdited(A, 2, true);
+    await ws.setChapterEdited(A, 2, false);
+    expect(edited()).toEqual({});
+  });
+});
+
+describe('refresh picks up changes to the project made elsewhere', () => {
+  it('shows edited marks that arrived from another device (a sync) and keeps open work', async () => {
+    api.addProject(ROOT, { status: 'editing' });
+    await ws.openPath(ROOT);
+    await ws.openChapter(A, 0);
+    ws.setDraft(tabOf(A).id, '# One\nunsaved');
+    expect(state().project!.meta.editedChapters).toEqual({});
+    api.projectMetas.set(ROOT, { ...api.projectMetas.get(ROOT)!, editedChapters: { 'a.md': ['Two'] } });
+    await ws.refresh();
+    expect(state().project!.meta.editedChapters).toEqual({ 'a.md': ['Two'] });
+    expect(ws.isChapterEdited(A, 1)).toBe(true);
+    expect(tabOf(A).draft).toBe('# One\nunsaved');
   });
 });

@@ -40,6 +40,7 @@ export function installMenu(theme: ThemeHooks): void {
         { label: 'Project Settings…', click: send('project-settings') },
         { label: 'Project Progress…', click: send('project-progress') },
         { label: 'Export…\tCtrl+E', click: send('export') },
+        { label: 'Google Drive Sync…', click: send('sync') },
         { label: 'Settings…\tCtrl+,', click: send('settings') },
         { type: 'separator' },
         { label: 'Save\tCtrl+S', click: send('save') },
@@ -64,7 +65,8 @@ export function installMenu(theme: ThemeHooks): void {
         { label: 'Find…\tCtrl+F', click: send('find') },
         { label: 'Find Next\tF3', click: send('find-next') },
         { label: 'Find Previous\tShift+F3', click: send('find-prev') },
-        { label: 'Replace…\tCtrl+H', click: send('replace') }
+        { label: 'Replace…\tCtrl+H', click: send('replace') },
+        { label: 'Go to Line…\tCtrl+G', click: send('go-to-line') }
       ]
     },
     {

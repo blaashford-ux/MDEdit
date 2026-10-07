@@ -214,6 +214,8 @@ export interface ProjectMeta {
   manuscriptGoals: Record<string, Goal>;
   /** Folders (relative, "/" separated) whose words do not count toward the goal. */
   excludedFolders: string[];
+  /** Chapters marked as edited, per file (relative path): the chapter ids from `chapterIds`. Kept whatever the project's status. */
+  editedChapters: Record<string, string[]>;
   overrides: ProjectOverrides;
 }
 
@@ -242,6 +244,7 @@ export function newProjectMeta(opts: { id: string; name: string; template: Proje
     activeManuscript: null,
     manuscriptGoals: {},
     excludedFolders: uncountedFolders(t.folders),
+    editedChapters: {},
     overrides: { chapterLevel: t.chapterLevel, book: t.book ? templateOverrides(t.book, opts.app ?? defaultAppDefaults(), opts.now) : {} }
   };
 }
@@ -266,6 +269,7 @@ export function sanitizeProjectMeta(raw: unknown, fallbackName: string, today: s
     excludedFolders: Array.isArray(r.excludedFolders)
       ? r.excludedFolders.filter((x): x is string => typeof x === 'string' && safeRelPath(x.replace(/\\/g, '/'))).map((x) => x.replace(/\\/g, '/')).slice(0, 200)
       : [],
+    editedChapters: sanitizeEditedChapters(r.editedChapters),
     overrides: {
       chapterLevel: o.chapterLevel === null || o.chapterLevel === undefined ? null : clampLevel(o.chapterLevel),
       // projects saved before layering held a whole book (or null for "use the app's")
@@ -285,9 +289,46 @@ function sanitizeManuscriptGoals(raw: unknown, today: string): Record<string, Go
   return out;
 }
 
-/** The goal that applies now: the active manuscript's own goal, or the project's when no manuscript is active. */
+function sanitizeEditedChapters(raw: unknown): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  if (!isObj(raw)) return out;
+  for (const [file, ids] of Object.entries(raw).slice(0, 2000)) {
+    const key = file.replace(/\\/g, '/');
+    if (!safeRelPath(key) || !Array.isArray(ids)) continue;
+    const clean = [...new Set(ids.filter((x): x is string => typeof x === 'string' && x.length <= 500))].slice(0, 2000);
+    if (clean.length) out[key] = clean;
+  }
+  return out;
+}
+
+/**
+ * A stable id for each chapter of a file: its title, with later chapters of the same title told apart by their order.
+ * Unlike a position it survives chapters being moved around the file.
+ */
+export function chapterIds(chapters: readonly { title: string }[]): string[] {
+  const seen = new Map<string, number>();
+  return chapters.map((c) => {
+    const n = seen.get(c.title) ?? 0;
+    seen.set(c.title, n + 1);
+    return n === 0 ? c.title : `${c.title}\u0001${n + 1}`;
+  });
+}
+
+export const isChapterEdited = (meta: Pick<ProjectMeta, 'editedChapters'>, file: string, id: string): boolean => meta.editedChapters[file]?.includes(id) ?? false;
+
+/** The edited-chapter record with `id` marked (or unmarked) in `file`; the input is not changed. */
+export function withChapterEdited(edited: Record<string, string[]>, file: string, id: string, on: boolean): Record<string, string[]> {
+  const rest = (edited[file] ?? []).filter((x) => x !== id);
+  const next = { ...edited };
+  const ids = on ? [...rest, id] : rest;
+  if (ids.length) next[file] = ids;
+  else delete next[file];
+  return next;
+}
+
+/** The goal that applies now: the active manuscript's own goal. Without an active manuscript there is none (goals are kept per manuscript). */
 export function goalFor(meta: Pick<ProjectMeta, 'goal' | 'activeManuscript' | 'manuscriptGoals'>): Goal | null {
-  return meta.activeManuscript ? (meta.manuscriptGoals[meta.activeManuscript] ?? null) : meta.goal;
+  return meta.activeManuscript ? (meta.manuscriptGoals[meta.activeManuscript] ?? null) : null;
 }
 
 /** The same metadata with the applicable goal replaced (null removes it). */
@@ -388,8 +429,8 @@ export interface ProjectSummary {
   path: string;
   name: string;
   meta: ProjectMeta;
-  /** Words in the files that count toward the goal. */
-  words: number;
+  /** Words in the active manuscript; null when no manuscript is active (nothing is counted then). */
+  words: number | null;
   files: number;
   /** Most recent edit among the project's Markdown files (ms since epoch), or null if it has none. */
   lastEdited: number | null;

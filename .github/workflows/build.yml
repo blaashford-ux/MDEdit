@@ -46,6 +46,8 @@ jobs:
           #   WIN_CSC_LINK (base64 .pfx or URL), WIN_CSC_KEY_PASSWORD
           CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+          # Google Drive sync: the Desktop OAuth client's secret (repository secret GOOGLE_DESKTOP_CLIENT_SECRET).
+          MDEDIT_GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_DESKTOP_CLIENT_SECRET }}
         run: |
           if ([string]::IsNullOrEmpty($env:CSC_LINK)) {
             Remove-Item Env:CSC_LINK, Env:CSC_KEY_PASSWORD -ErrorAction SilentlyContinue

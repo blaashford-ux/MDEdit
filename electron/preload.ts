@@ -1,7 +1,18 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { ExportProgress, MdeditApi, MenuAction, WindowInfo } from '../src/shared/api';
+import { DESKTOP_CAPABILITIES, type ExportProgress, type MdeditApi, type MenuAction, type SyncStatus, type WindowInfo } from '../src/shared/api';
 
 const api: MdeditApi = {
+  capabilities: DESKTOP_CAPABILITIES,
+  getSyncStatus: () => ipcRenderer.invoke('sync:status'),
+  connectSync: () => ipcRenderer.invoke('sync:connect'),
+  syncNow: () => ipcRenderer.invoke('sync:now'),
+  confirmDeletes: () => ipcRenderer.invoke('sync:confirm'),
+  disconnectSync: () => ipcRenderer.invoke('sync:disconnect'),
+  onSyncStatus: (cb) => {
+    const listener = (_e: Electron.IpcRendererEvent, status: SyncStatus) => cb(status);
+    ipcRenderer.on('sync:status', listener);
+    return () => ipcRenderer.removeListener('sync:status', listener);
+  },
   pickFolder: () => ipcRenderer.invoke('dialog:pickFolder'),
   getLastFolder: () => ipcRenderer.invoke('settings:getLastFolder'),
   scanFolder: (root) => ipcRenderer.invoke('fs:scanFolder', root),
@@ -63,6 +74,7 @@ const api: MdeditApi = {
   confirmOverwrite: (name) => ipcRenderer.invoke('dialog:confirmOverwrite', name),
   confirmDelete: (name, kind, unsaved) => ipcRenderer.invoke('dialog:confirmDelete', name, kind, unsaved),
   confirmRecover: (name) => ipcRenderer.invoke('dialog:confirmRecover', name),
+  confirmMarkEdited: (title) => ipcRenderer.invoke('dialog:confirmMarkEdited', title),
   setDirtyFiles: (names) => ipcRenderer.send('app:setDirtyFiles', names),
   onCloseRequested: (cb) => {
     const handler = () => cb();

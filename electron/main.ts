@@ -1,4 +1,5 @@
-import { app, BrowserWindow, dialog, ipcMain, nativeTheme, screen, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, nativeTheme, safeStorage, screen, shell } from 'electron';
+import os from 'node:os';
 import path from 'node:path';
 import type { DraftRecord, Prefs, Session, ThemeSource } from '../src/shared/api';
 import { DraftStore } from './drafts';
@@ -14,7 +15,7 @@ import { sidecarPathFor } from '../src/shared/export/sidecar';
 import { promises as fsp } from 'node:fs';
 import { installMenu } from './menu';
 import { chromeOptions, registerWindowChrome, shellColor, watchWindow } from './windowChrome';
-import { confirmDelete, confirmOverwrite, confirmRecover, confirmUnsaved } from './prompts';
+import { confirmDelete, confirmMarkEdited, confirmOverwrite, confirmRecover, confirmUnsaved } from './prompts';
 import { scanFolder } from './scan';
 import { bundledFont } from '../src/shared/export/fonts';
 import { listInstalledFonts } from './fonts';
@@ -22,6 +23,8 @@ import { sanitizeAppDefaults, type AppDefaults } from '../src/shared/appDefaults
 import { defaultRootFolder, effectiveDefaults, sanitizeProjectsSettings, type ProjectsConfig } from '../src/shared/projects';
 import * as projects from './projects';
 import { existingFolder, SettingsStore, type WindowState } from './settings';
+import type { SyncService } from '../src/shared/sync/service';
+import { createDesktopSync } from './syncHost';
 
 const settings = new SettingsStore(path.join(app.getPath('userData'), 'settings.json'));
 let drafts: DraftStore;
@@ -50,6 +53,53 @@ function inRoot(p: string, opts: { allowRoot?: boolean } = {}): string {
   if (rel === '' && !opts.allowRoot) throw new Error('Refusing to operate on the root folder itself');
   return full;
 }
+
+// ---- Google Drive sync ------------------------------------------------------------------------------
+// The Desktop OAuth client secret is injected when the app is built (scripts/build-electron.mjs); `MDEDIT_GOOGLE_CLIENT_SECRET`
+// works for `npm run dev`. For installed apps Google does not treat it as confidential.
+const GOOGLE_SECRET = process.env.MDEDIT_GOOGLE_CLIENT_SECRET_BUILD || process.env.MDEDIT_GOOGLE_CLIENT_SECRET || '';
+
+let sync: SyncService | null = null;
+let syncRoot: string | null = null;
+let syncReady: Promise<SyncService> | null = null;
+let stopSyncStatus: (() => void) | null = null;
+
+/** The sync service for the current Root Folder (a new one if the Root changed), loaded and polling. */
+function ensureSync(): Promise<SyncService> {
+  const root = projectsRoot();
+  if (!syncReady || syncRoot !== root) {
+    sync?.stop();
+    stopSyncStatus?.();
+    syncRoot = root;
+    const svc = createDesktopSync({
+      userData: app.getPath('userData'),
+      root,
+      clientSecret: GOOGLE_SECRET,
+      device: os.hostname(),
+      openUrl: (url) => shell.openExternal(url),
+      encrypt: (plain) => (safeStorage.isEncryptionAvailable() ? safeStorage.encryptString(plain) : null),
+      decrypt: (data) => safeStorage.decryptString(data),
+      trash: (file) => shell.trashItem(file)
+    });
+    sync = svc;
+    stopSyncStatus = svc.onSyncStatus((st) => {
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('sync:status', st);
+    });
+    syncReady = svc.load().then(() => {
+      svc.startPolling(120_000);
+      return svc;
+    });
+  }
+  return syncReady;
+}
+
+/** Something on disk changed because of the user: sync soon (does nothing unless Google Drive is connected). */
+const touched = () => sync?.syncSoon();
+/** Channels that change the user's files: a pass follows them. */
+const SYNC_TRIGGERS = new Set([
+  'fs:writeFile', 'fs:createFile', 'fs:createFolder', 'fs:renameNode', 'fs:trashNode', 'export:saveDetails', 'export:setMarked', 'export:relink',
+  'projects:create', 'projects:update', 'projects:rename', 'projects:duplicate', 'projects:delete', 'projects:convert', 'projects:progress', 'projects:addMissing'
+]);
 
 const projectsRoot = () => settings.projects().rootFolder ?? defaultRootFolder(app.getPath('home'));
 const dirExists = (p: string) => fsp.stat(p).then((st) => st.isDirectory(), () => false);
@@ -105,15 +155,22 @@ function setTheme(theme: ThemeSource): void {
 
 function registerIpc(): void {
   const winOf = (e: Electron.IpcMainInvokeEvent) => BrowserWindow.fromWebContents(e.sender);
+  /** `ipcMain.handle` that also nudges Google Drive sync after the handlers that change the user's files. */
+  const handle = (channel: string, listener: (e: Electron.IpcMainInvokeEvent, ...args: any[]) => unknown) =>
+    ipcMain.handle(channel, async (e, ...args) => {
+      const result = await listener(e, ...args);
+      if (SYNC_TRIGGERS.has(channel)) touched();
+      return result;
+    });
 
-  ipcMain.handle('dialog:pickFolder', async (e) => {
+  handle('dialog:pickFolder', async (e) => {
     const win = winOf(e);
     const opts = { properties: ['openDirectory' as const] };
     const res = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
     return res.canceled || res.filePaths.length === 0 ? null : path.resolve(res.filePaths[0]);
   });
-  ipcMain.handle('settings:getLastFolder', () => existingFolder(settings.get().lastFolder));
-  ipcMain.handle('fs:scanFolder', async (_e, root: string) => {
+  handle('settings:getLastFolder', () => existingFolder(settings.get().lastFolder));
+  handle('fs:scanFolder', async (_e, root: string) => {
     const tree = await scanFolder(path.resolve(root));
     openRoot = path.resolve(root);
     settings.update((s) => {
@@ -121,26 +178,26 @@ function registerIpc(): void {
     });
     return tree;
   });
-  ipcMain.handle('fs:readFile', (_e, p: string) => readWithStamp(inRoot(p)));
-  ipcMain.handle('fs:statFile', (_e, p: string) => statStamp(inRoot(p)));
-  ipcMain.handle('fs:writeFile', (_e, p: string, content: string) => {
+  handle('fs:readFile', (_e, p: string) => readWithStamp(inRoot(p)));
+  handle('fs:statFile', (_e, p: string) => statStamp(inRoot(p)));
+  handle('fs:writeFile', (_e, p: string, content: string) => {
     const full = inRoot(p);
     if (!isMarkdown(full)) throw new Error('Refusing to write a non-Markdown file');
     return writeFileAtomic(full, content);
   });
-  ipcMain.handle('fs:createFile', (_e, dir: string, name: string, content?: string) =>
+  handle('fs:createFile', (_e, dir: string, name: string, content?: string) =>
     createFile(inRoot(dir, { allowRoot: true }), name, content)
   );
-  ipcMain.handle('fs:createFolder', (_e, dir: string, name: string) =>
+  handle('fs:createFolder', (_e, dir: string, name: string) =>
     createFolder(inRoot(dir, { allowRoot: true }), name)
   );
-  ipcMain.handle('fs:renameNode', async (_e, p: string, newName: string) => {
+  handle('fs:renameNode', async (_e, p: string, newName: string) => {
     const from = inRoot(p);
     const to = await renameNode(from, newName);
     if (isMarkdown(from)) await renameSidecar(from, to).catch(() => undefined); // export settings follow the file
     return to;
   });
-  ipcMain.handle('fs:trashNode', async (_e, p: string) => {
+  handle('fs:trashNode', async (_e, p: string) => {
     const full = inRoot(p);
     await shell.trashItem(full);
     if (isMarkdown(full)) {
@@ -155,8 +212,8 @@ function registerIpc(): void {
     if (!isMarkdown(full)) throw new Error('Only Markdown files can be exported');
     return full;
   };
-  ipcMain.handle('export:getDetails', async (_e, p: string) => loadDetails(mdPath(p), await defaultsFor(mdPath(p)), await projectFieldsFor(mdPath(p))));
-  ipcMain.handle('export:saveDetails', async (_e, p: string, details: unknown, overrides?: unknown) =>
+  handle('export:getDetails', async (_e, p: string) => loadDetails(mdPath(p), await defaultsFor(mdPath(p)), await projectFieldsFor(mdPath(p))));
+  handle('export:saveDetails', async (_e, p: string, details: unknown, overrides?: unknown) =>
     saveDetails(
       mdPath(p),
       sanitizeBookDetails(details),
@@ -164,10 +221,10 @@ function registerIpc(): void {
       await defaultsFor(mdPath(p))
     )
   );
-  ipcMain.handle('export:setMarked', async (_e, p: string, marked: boolean) =>
+  handle('export:setMarked', async (_e, p: string, marked: boolean) =>
     setMarked(mdPath(p), marked === true, await defaultsFor(mdPath(p)), await projectFieldsFor(mdPath(p)))
   );
-  ipcMain.handle('export:relink', async (_e, sidecar: string, md: string) => {
+  handle('export:relink', async (_e, sidecar: string, md: string) => {
     const from = inRoot(sidecar);
     const target = sidecarPathFor(mdPath(md));
     if (!from.toLowerCase().endsWith('.export.json')) throw new Error('Not an export-settings file');
@@ -183,10 +240,10 @@ function registerIpc(): void {
   const exportDeps = () => makeExportDeps(undefined, (file) => defaultsFor(file));
   let exportAbort: AbortController | null = null;
   const exportedFiles = new Set<string>(); // only files produced by an export may be revealed/opened
-  ipcMain.handle('export:plan', (_e, p: string, unsaved?: unknown) =>
+  handle('export:plan', (_e, p: string, unsaved?: unknown) =>
     planExport(mdPath(p), exportDeps(), unsaved ? sanitizeBookDetails(unsaved) : undefined)
   );
-  ipcMain.handle('export:run', async (e, p: string) => {
+  handle('export:run', async (e, p: string) => {
     const file = mdPath(p);
     if (exportAbort) return { ok: false, errors: ['Another export is already running.'], warnings: [], outputs: [] };
     exportAbort = new AbortController();
@@ -204,15 +261,15 @@ function registerIpc(): void {
   ipcMain.on('export:reveal', (_e, p: string) => {
     if (exportedFiles.has(path.resolve(p))) shell.showItemInFolder(path.resolve(p));
   });
-  ipcMain.handle('export:open', (_e, p: string) => (exportedFiles.has(path.resolve(p)) ? shell.openPath(path.resolve(p)) : Promise.resolve('Not an exported file')));
-  ipcMain.handle('fonts:installed', () => listInstalledFonts());
-  ipcMain.handle('fonts:preview', async (_e, family: string) => {
+  handle('export:open', (_e, p: string) => (exportedFiles.has(path.resolve(p)) ? shell.openPath(path.resolve(p)) : Promise.resolve('Not an exported file')));
+  handle('fonts:installed', () => listInstalledFonts());
+  handle('fonts:preview', async (_e, family: string) => {
     const b = bundledFont(String(family));
     if (!b) return null;
     const data = await fsp.readFile(path.join(pdfResources().fontsDir, b.slug, 'Regular.ttf')).catch(() => null);
     return data ? `data:font/ttf;base64,${data.toString('base64')}` : null;
   });
-  ipcMain.handle('export:pickCover', async (e) => {
+  handle('export:pickCover', async (e) => {
     const win = winOf(e);
     const opts = { properties: ['openFile' as const], filters: [{ name: 'Images', extensions: ['jpg', 'jpeg', 'png'] }] };
     const res = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
@@ -228,8 +285,8 @@ function registerIpc(): void {
 
   // --- projects ---
   const config = async (): Promise<ProjectsConfig> => ({ ...settings.projects(), root: projectsRoot(), defaultRoot: defaultRootFolder(app.getPath('home')), rootExists: await dirExists(projectsRoot()) });
-  ipcMain.handle('projects:config', config);
-  ipcMain.handle('projects:setConfig', async (_e, patch: Record<string, unknown>) => {
+  handle('projects:config', config);
+  handle('projects:setConfig', async (_e, patch: Record<string, unknown>) => {
     const next = sanitizeProjectsSettings({ ...settings.projects(), ...(patch && typeof patch === 'object' ? patch : {}) });
     if (next.rootFolder) {
       if (!path.isAbsolute(next.rootFolder)) throw new Error('The Root Folder must be a full path.');
@@ -240,30 +297,30 @@ function registerIpc(): void {
     });
     return config();
   });
-  ipcMain.handle('projects:list', () => projects.listProjects(projectsRoot()));
-  ipcMain.handle('projects:create', async (_e, name: string, templateId: string) => {
+  handle('projects:list', () => projects.listProjects(projectsRoot()));
+  handle('projects:create', async (_e, name: string, templateId: string) => {
     const template = settings.projects().templates.find((t) => t.id === templateId);
     if (!template) throw new Error('That template no longer exists.');
     return projects.createProject(projectsRoot(), String(name), template, { app: settings.appDefaults() });
   });
-  ipcMain.handle('projects:meta', (_e, p: string) => (path.isAbsolute(p) ? projects.readMeta(path.resolve(p)) : null)); // read-only, any folder
-  ipcMain.handle('projects:update', (_e, p: string, patch: Record<string, unknown>) => projects.updateMeta(projectPath(p), patch as never));
-  ipcMain.handle('projects:rename', async (_e, p: string, name: string) => {
+  handle('projects:meta', (_e, p: string) => (path.isAbsolute(p) ? projects.readMeta(path.resolve(p)) : null)); // read-only, any folder
+  handle('projects:update', (_e, p: string, patch: Record<string, unknown>) => projects.updateMeta(projectPath(p), patch as never));
+  handle('projects:rename', async (_e, p: string, name: string) => {
     const from = projectPath(p);
     const to = await projects.renameProject(from, String(name));
     if (openRoot && (openRoot === from || openRoot.startsWith(from + path.sep))) openRoot = to + openRoot.slice(from.length);
     return to;
   });
-  ipcMain.handle('projects:duplicate', (_e, p: string, name: string) => projects.duplicateProject(projectPath(p), String(name)));
-  ipcMain.handle('projects:delete', (_e, p: string) => projects.deleteProject(projectPath(p), (x) => shell.trashItem(x)));
-  ipcMain.handle('projects:convert', (_e, p: string) => projects.convertToProject(projectPath(p)));
-  ipcMain.handle('projects:addMissing', (_e, p: string, templateId: string) => {
+  handle('projects:duplicate', (_e, p: string, name: string) => projects.duplicateProject(projectPath(p), String(name)));
+  handle('projects:delete', (_e, p: string) => projects.deleteProject(projectPath(p), (x) => shell.trashItem(x)));
+  handle('projects:convert', (_e, p: string) => projects.convertToProject(projectPath(p)));
+  handle('projects:addMissing', (_e, p: string, templateId: string) => {
     const t = settings.projects().templates.find((x) => x.id === templateId);
     if (!t) throw new Error('That template no longer exists.');
     return projects.addMissingTemplateParts(projectPath(p), t);
   });
-  ipcMain.handle('projects:progress', (_e, p: string) => projects.recordProgress(projectPath(p)));
-  ipcMain.handle('projects:move', async (_e, newRoot: string) => {
+  handle('projects:progress', (_e, p: string) => projects.recordProgress(projectPath(p)));
+  handle('projects:move', async (_e, newRoot: string) => {
     if (typeof newRoot !== 'string' || !path.isAbsolute(newRoot)) throw new Error('Choose a full folder path.');
     return projects.moveProjects(projectsRoot(), path.resolve(newRoot));
   });
@@ -273,15 +330,15 @@ function registerIpc(): void {
     });
   });
 
-  ipcMain.handle('app:getDefaults', () => settings.appDefaults());
-  ipcMain.handle('app:setDefaults', (_e, raw: unknown) => {
+  handle('app:getDefaults', () => settings.appDefaults());
+  handle('app:setDefaults', (_e, raw: unknown) => {
     const next = sanitizeAppDefaults(raw);
     settings.update((s) => {
       s.appDefaults = next;
     });
     return next;
   });
-  ipcMain.handle('prefs:get', () => settings.get().prefs ?? {});
+  handle('prefs:get', () => settings.get().prefs ?? {});
   ipcMain.on('prefs:set', (_e, patch: Partial<Prefs>) => {
     if (typeof patch?.sidebarWidth === 'number' && Number.isFinite(patch.sidebarWidth)) {
       settings.update((s) => {
@@ -289,30 +346,38 @@ function registerIpc(): void {
       });
     }
   });
-  ipcMain.handle('session:get', (_e, folder: string) => settings.get().sessions?.[folder] ?? null);
+  handle('session:get', (_e, folder: string) => settings.get().sessions?.[folder] ?? null);
   ipcMain.on('session:save', (_e, folder: string, session: Session) => {
     if (typeof folder === 'string' && session && Array.isArray(session.tabs)) settings.setSession(folder, session);
   });
 
   // Markdown files named on the command line (double-click / "Open with") are queued here until the
   // renderer collects them, so none are lost if they arrive before the UI is ready.
-  ipcMain.handle('app:takeLaunchFiles', async () => {
+  handle('app:takeLaunchFiles', async () => {
     const files = pendingFiles.splice(0);
     const ok: string[] = [];
     for (const f of files) if (await fsp.stat(f).then((st) => st.isFile(), () => false)) ok.push(f);
     return ok;
   });
 
-  ipcMain.handle('drafts:save', (_e, d: DraftRecord) => drafts.save(d));
-  ipcMain.handle('drafts:clear', (_e, file: string) => drafts.clear(file));
-  ipcMain.handle('drafts:list', () => drafts.list());
+  handle('drafts:save', (_e, d: DraftRecord) => drafts.save(d));
+  handle('drafts:clear', (_e, file: string) => drafts.clear(file));
+  handle('drafts:list', () => drafts.list());
 
-  ipcMain.handle('dialog:confirmUnsaved', (e, name: string) => confirmUnsaved(winOf(e), name));
-  ipcMain.handle('dialog:confirmOverwrite', (e, name: string) => confirmOverwrite(winOf(e), name));
-  ipcMain.handle('dialog:confirmDelete', (e, name: string, kind: 'file' | 'folder' | 'chapter', unsaved: boolean) =>
+  handle('dialog:confirmUnsaved', (e, name: string) => confirmUnsaved(winOf(e), name));
+  handle('dialog:confirmOverwrite', (e, name: string) => confirmOverwrite(winOf(e), name));
+  handle('dialog:confirmDelete', (e, name: string, kind: 'file' | 'folder' | 'chapter', unsaved: boolean) =>
     confirmDelete(winOf(e), name, kind, unsaved)
   );
-  ipcMain.handle('dialog:confirmRecover', (e, name: string) => confirmRecover(winOf(e), name));
+  handle('dialog:confirmRecover', (e, name: string) => confirmRecover(winOf(e), name));
+  handle('dialog:confirmMarkEdited', (e, title: string) => confirmMarkEdited(winOf(e), title));
+  // --- Google Drive sync ---
+  handle('sync:status', async () => (await ensureSync()).getSyncStatus());
+  handle('sync:connect', async () => (await ensureSync()).connectSync());
+  handle('sync:now', async () => (await ensureSync()).syncNow());
+  handle('sync:confirm', async () => (await ensureSync()).confirmDeletes());
+  handle('sync:disconnect', async () => (await ensureSync()).disconnectSync());
+
   ipcMain.on('app:setDirtyFiles', (_e, names: string[]) => {
     dirtyFiles = Array.isArray(names) ? names.filter((n) => typeof n === 'string') : [];
   });
@@ -384,6 +449,7 @@ function createWindow(): BrowserWindow {
   });
   guardClose(win);
   watchWindow(win);
+  win.on('focus', () => sync?.syncSoon(1000)); // edits made elsewhere (another device) show up when you come back
 
   let timer: NodeJS.Timeout | undefined;
   const later = () => {
@@ -443,6 +509,7 @@ if (!firstInstance) {
     registerWindowChrome(() => mainWindow);
     installMenu({ get: () => settings.get().theme ?? 'system', set: setTheme });
     createWindow();
+    void ensureSync().then((svc) => svc.syncNow()); // does nothing unless Google Drive is connected
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
     });
@@ -453,8 +520,15 @@ if (!firstInstance) {
   });
 }
 
-app.on('before-quit', () => {
+let finalSyncStarted = false;
+app.on('before-quit', (e) => {
   if (!smokeMode) void settings.flush();
+  // Edits made in the last few seconds haven't synced yet: give them one pass (at most 10 s) before exiting.
+  if (!smokeMode && !finalSyncStarted && sync?.dirty) {
+    finalSyncStarted = true;
+    e.preventDefault();
+    void Promise.race([sync.syncNow(), new Promise((resolve) => setTimeout(resolve, 10_000))]).finally(() => app.quit());
+  }
 });
 
 app.on('window-all-closed', () => {

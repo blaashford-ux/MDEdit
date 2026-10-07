@@ -25,5 +25,7 @@ export interface FindApi {
 /** What an editor hands its parent: scene-break jumps and find & replace. */
 export interface SceneNav {
   go(dir: 1 | -1): boolean;
+  /** Puts the caret on file line `line` (which must be in this chapter) and scrolls it into view. */
+  goToLine(line: number): boolean;
   find: FindApi;
 }

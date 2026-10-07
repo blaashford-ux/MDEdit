@@ -9,8 +9,8 @@ interface Props {
   loading: boolean;
   onOpen(path: string): void;
   onNew(): void;
-  onChangeRoot(): void;
-  onOpenFolder(): void;
+  onChangeRoot?(): void;
+  onOpenFolder?(): void;
   onRetry(): void;
   onConvert(path: string): void;
   onRename(p: ProjectSummary): void;
@@ -19,7 +19,7 @@ interface Props {
   onArchive(p: ProjectSummary, archived: boolean): void;
   onStatus(p: ProjectSummary, status: ProjectStatus): void;
   onProperties(p: ProjectSummary): void;
-  onReveal(path: string): void;
+  onReveal?(path: string): void;
 }
 
 export function timeAgo(ms: number | null, now = Date.now()): string {
@@ -51,7 +51,7 @@ export function ProjectsHome(p: Props) {
     const q = query.trim().toLowerCase();
     const list = all.filter((x) => x.meta.archived === showArchived && (q === '' || x.name.toLowerCase().includes(q) || x.meta.templateName.toLowerCase().includes(q)));
     return list.sort((a, b) =>
-      sort === 'name' ? a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }) : sort === 'words' ? b.words - a.words : (b.lastEdited ?? 0) - (a.lastEdited ?? 0)
+      sort === 'name' ? a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }) : sort === 'words' ? (b.words ?? -1) - (a.words ?? -1) : (b.lastEdited ?? 0) - (a.lastEdited ?? 0)
     );
   }, [all, query, sort, showArchived]);
 
@@ -62,7 +62,7 @@ export function ProjectsHome(p: Props) {
     { label: 'Duplicate…', onClick: () => p.onDuplicate(x) },
     ...STATUSES.filter((s) => s !== x.meta.status).map((s) => ({ label: `Mark as ${STATUS_LABELS[s]}`, onClick: () => p.onStatus(x, s) })),
     { label: x.meta.archived ? 'Unarchive' : 'Archive', onClick: () => p.onArchive(x, !x.meta.archived) },
-    { label: 'Show in File Explorer', onClick: () => p.onReveal(x.path) },
+    ...(p.onReveal ? [{ label: 'Show in File Explorer', onClick: () => p.onReveal!(x.path) }] : []),
     { label: 'Delete…', danger: true, onClick: () => p.onDelete(x) }
   ];
 
@@ -79,20 +79,24 @@ export function ProjectsHome(p: Props) {
               <code className="path" title="Root Folder">
                 {p.config?.root ?? '…'}
               </code>
-              <button type="button" className="link-btn" onClick={p.onChangeRoot}>
-                Change…
-              </button>
-              {p.config?.rootExists && (
-                <button type="button" className="link-btn" onClick={() => p.onReveal(p.config!.root)}>
+              {p.onChangeRoot && (
+                <button type="button" className="link-btn" onClick={p.onChangeRoot}>
+                  Change…
+                </button>
+              )}
+              {p.onReveal && p.config?.rootExists && (
+                <button type="button" className="link-btn" onClick={() => p.onReveal!(p.config!.root)}>
                   Show in Explorer
                 </button>
               )}
             </div>
           </div>
           <div className="home-head-actions">
-            <button type="button" onClick={p.onOpenFolder} title="Open any folder of Markdown files, even outside the Root Folder (Ctrl+O)">
-              Open Folder…
-            </button>
+            {p.onOpenFolder && (
+              <button type="button" onClick={p.onOpenFolder} title="Open any folder of Markdown files, even outside the Root Folder (Ctrl+O)">
+                Open Folder…
+              </button>
+            )}
             <button type="button" className="primary big" onClick={p.onNew}>
               <Icon name="plus" /> New Project
             </button>
@@ -102,7 +106,7 @@ export function ProjectsHome(p: Props) {
         {missingRoot && (
           <div className="banner warn" role="alert">
             The Root Folder <code className="path">{p.config?.root}</code> can’t be found (renamed, on a drive that isn’t connected, or not created yet).{' '}
-            <button onClick={p.onChangeRoot}>Choose Root Folder…</button> <button onClick={p.onRetry}>Try again</button> <button onClick={p.onNew}>Create it with a new project</button>
+            {p.onChangeRoot && <button onClick={p.onChangeRoot}>Choose Root Folder…</button>} <button onClick={p.onRetry}>Try again</button> <button onClick={p.onNew}>Create it with a new project</button>
           </div>
         )}
 
@@ -142,7 +146,7 @@ export function ProjectsHome(p: Props) {
         <div className="project-grid">
           {shown.map((x) => {
             const g = goalFor(x.meta);
-            const pct = g ? Math.min(100, Math.round((x.words / g.targetWords) * 100)) : null;
+            const pct = g && x.words !== null ? Math.min(100, Math.round((x.words / g.targetWords) * 100)) : null;
             return (
               <div
                 key={x.path}
@@ -186,7 +190,7 @@ export function ProjectsHome(p: Props) {
                   </div>
                 )}
                 <div className="card-words">
-                  <strong>{x.words.toLocaleString()}</strong> <span className="muted">words{g ? ` of ${g.targetWords.toLocaleString()}` : ''}</span>
+                  <strong>{x.words === null ? '-' : x.words.toLocaleString()}</strong> <span className="muted">words{g ? ` of ${g.targetWords.toLocaleString()}` : ''}</span>
                 </div>
                 {pct !== null && (
                   <div className="goal-bar" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label={`${pct}% of the word goal`}>
