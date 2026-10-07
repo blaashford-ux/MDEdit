@@ -22,6 +22,9 @@ import { goalFor, relativeTo } from '../shared/projects';
 import { projectNameError, uniqueName, type ProjectStatus, type ProjectSummary, type ProjectsConfig, type RootListing } from '../shared/projects';
 import { RelinkDialog } from './RelinkDialog';
 import { SettingsDialog } from './SettingsDialog';
+import type { MarkdownDoc } from '../shared/chapters';
+import { locateRow } from '../shared/rows';
+import { docRows } from './rowEnv';
 import type { SceneNav } from './sceneNav';
 import { SourceEditor } from './SourceEditor';
 import { StatusBar } from './StatusBar';
@@ -74,18 +77,29 @@ export function App() {
   const [showSync, setShowSync] = useState(false);
 
   const activeTab = s.tabs.find((t) => t.id === s.activeId);
+
   const activeDoc = activeTab ? s.docs.get(activeTab.file) : undefined;
   const activeChapter = activeDoc?.chapters[activeTab?.chapter ?? 0];
   const activeKey = activeTab ? chapterKey(activeTab.file, activeTab.chapter) : null;
   useEffect(() => setDrawer(false), [activeKey]);
+  // the pane element outlives a chapter change within a tab, so its scroll position would carry over: always start a chapter at the top
+  useEffect(() => {
+    if (!activeKey) return;
+    document.querySelectorAll<HTMLElement>('.pane:not([hidden])').forEach((el) => {
+      el.scrollTop = 0;
+    });
+  }, [activeKey]);
   // On the phone, a project with nothing open starts with its file list showing.
   useEffect(() => {
     if (!caps.windowChrome && s.root && !s.activeId) setDrawer(true);
   }, [caps.windowChrome, s.root, s.activeId]);
 
   const rows = useMemo(
-    () => (s.root ? buildRows(s.root, s.expanded, s.docs, filter) : []),
-    [s.root, s.expanded, s.docs, filter]
+    () =>
+      s.root
+        ? buildRows(s.root, s.expanded, s.docs, filter, s.project?.meta.status === 'editing' ? (file) => s.project!.meta.editedChapters[relativeTo(s.project!.path, file)] ?? [] : null)
+        : [],
+    [s.root, s.expanded, s.docs, filter, s.project]
   );
   const orphan = useMemo(
     () => (s.root ? collectOrphans(s.root).find((o) => !ignoredOrphans.has(o)) : undefined),
@@ -340,6 +354,13 @@ export function App() {
     const real = !doc?.chapters[i]?.isPreamble;
     return [
       { label: 'New Chapter Below…', onClick: () => promptNewChapter(row.path, i) },
+      ...(s.project
+        ? [
+            ws.isChapterEdited(row.path, i)
+              ? { label: 'Unmark Edited', onClick: () => void ws.setChapterEdited(row.path, i, false) }
+              : { label: 'Mark Edited', onClick: () => void ws.setChapterEdited(row.path, i, true) }
+          ]
+        : []),
       { label: 'Move Up', hint: 'Alt+↑', disabled: !real || i <= first, onClick: () => void moveRow(row, -1) },
       {
         label: 'Move Down',
@@ -413,7 +434,7 @@ export function App() {
     onDelete: (p: ProjectSummary) =>
       setPrompt({
         title: `Delete “${p.name}”?`,
-        hint: `Its folder and everything in it (${p.files} file${p.files === 1 ? '' : 's'}, ${p.words.toLocaleString()} words) goes to the Recycle Bin.`,
+        hint: `Its folder and everything in it (${p.files} file${p.files === 1 ? '' : 's'}) goes to the Recycle Bin.`,
         label: 'Type the project name to confirm',
         initial: '',
         confirm: 'Delete project',
@@ -444,12 +465,73 @@ export function App() {
     if (!moved) sceneTimer.current = setTimeout(() => setSceneMsg(null), 2500);
   };
 
+  /** A Go To that is waiting for the editor of its chapter to open. */
+  const pendingLine = useRef<{ id: string; chapter: number; line: number } | null>(null);
+  const applyPendingLine = () => {
+    const p = pendingLine.current;
+    const tab = p && s.tabs.find((t) => t.id === p.id);
+    const nav = p && navs.current.get(p.id);
+    if (!p || !tab || !nav || s.activeId !== p.id || tab.chapter !== p.chapter) return;
+    pendingLine.current = null;
+    setTimeout(() => nav.goToLine(p.line), 80); // after the Go To dialog has closed and given focus back
+  };
+
+  /** Ctrl+G: asks for a line number and goes there, opening another chapter if that is where it is (unsaved edits are checked first). */
+  const promptGoToLine = () => {
+    const tab = activeTab;
+    const doc = tab && s.docs.get(tab.file);
+    if (!tab || !doc) return;
+    const { rows } = docRows(doc, tab.mode);
+    const total = Math.max(1, rows.reduce((a, b) => a + b, 0));
+    setPrompt({
+      title: 'Go to Line',
+      label: `Line number (1–${total})`,
+      hint: 'Lines are the rows you see on screen, blank lines included. The total is approximate for chapters you are not in.',
+      initial: '',
+      confirm: 'Go',
+      validate: (v) => (/^\d+$/.test(v.trim()) && Number(v) >= 1 && Number(v) <= total ? null : `Enter a line number from 1 to ${total}.`),
+      onSubmit: async (v) => {
+        const line = Number(v);
+        const at = locateRow(rows, line);
+        if (at.chapter === tab.chapter) {
+          pendingLine.current = null;
+          setTimeout(() => navs.current.get(tab.id)?.goToLine(line), 80);
+          return null;
+        }
+        pendingLine.current = { id: tab.id, chapter: at.chapter, line };
+        await ws.openChapter(tab.file, at.chapter);
+        if (ws.tabForFile(tab.file)?.chapter !== at.chapter) pendingLine.current = null; // cancelled at the unsaved-changes prompt
+        return null;
+      }
+    });
+  };
+
+  // Row numbers depend on the width of the text, so a resized window renumbers the chapters after this one.
+  const [, setLayoutTick] = useState(0);
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>;
+    const onResize = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => setLayoutTick((n) => n + 1), 250);
+    };
+    window.addEventListener('resize', onResize);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('resize', onResize);
+    };
+  }, []);
+
+  /** The row number the chapter starts on: one more than the rows of the chapters before it (estimated for those). */
+  const firstRowOf = (doc: MarkdownDoc, chapter: number, mode: 'visual' | 'source') =>
+    1 + docRows(doc, mode).rows.slice(0, chapter).reduce((a, b) => a + b, 0);
+
   const registerNav = (id: string, n: SceneNav | null) => {
     if (n) navs.current.set(id, n);
     else navs.current.delete(id);
     setNavVersion((v) => v + 1);
   };
   void navVersion; // re-render when an editor registers, so the find bar gets its handle
+  useEffect(applyPendingLine); // a Go To into another chapter lands once that chapter's editor is up
 
   const closeFind = () => {
     setFind({ open: false });
@@ -500,6 +582,7 @@ export function App() {
     'redo-action': () => void ws.redoAction(),
     find: () => openFind(false),
     replace: () => openFind(true),
+    'go-to-line': promptGoToLine,
     'find-next': () => findStep(1),
     'find-prev': () => findStep(-1),
     'next-scene': () => gotoScene(1),
@@ -538,7 +621,7 @@ export function App() {
       else if (mod && !e.shiftKey && !e.altKey && k === 'f') name = 'find';
       else if (mod && !e.shiftKey && !e.altKey && k === 'h') name = 'replace';
       else if (e.key === 'F3' && !mod) name = e.shiftKey ? 'find-prev' : 'find-next';
-      else if (mod && !e.altKey && k === 'g') name = e.shiftKey ? 'find-prev' : 'find-next';
+      else if (mod && !e.shiftKey && !e.altKey && k === 'g') name = 'go-to-line';
       else if (mod && e.shiftKey && k === 'm') name = 'toggle-mode';
       else if (e.ctrlKey && e.key === 'Tab') name = e.shiftKey ? 'prev-tab' : 'next-tab';
       else if (e.ctrlKey && e.key === 'PageDown') name = 'next-chapter';
@@ -803,6 +886,11 @@ export function App() {
                     <button aria-label="Next chapter" title="Next chapter (Ctrl+PgDn)" disabled={tab.chapter >= doc.chapters.length - 1} onClick={() => void ws.gotoChapter(1)}>
                       <Icon name="right" />
                     </button>
+                    {!caps.windowChrome && (
+                      <button aria-label="Go to line" onClick={promptGoToLine}>
+                        Line…
+                      </button>
+                    )}
                     <button aria-label="Previous scene break" title="Previous scene break (Ctrl+↑)" onClick={() => gotoScene(-1)}>
                       <Icon name="up" /> Scene
                     </button>
@@ -845,6 +933,7 @@ export function App() {
                     onChange={(md) => ws.setDraft(tab.id, md)}
                     saved={tab.saved}
                     onNav={(n) => registerNav(tab.id, n)}
+                    firstLine={firstRowOf(doc, tab.chapter, 'visual')}
                   />
                 ) : (
                   <SourceEditor
@@ -854,6 +943,7 @@ export function App() {
                     onChange={(md) => ws.setDraft(tab.id, md)}
                     savedVersion={tab.saved?.version ?? 0}
                     onNav={(n) => registerNav(tab.id, n)}
+                    firstLine={firstRowOf(doc, tab.chapter, 'source')}
                   />
                 )}
               </section>

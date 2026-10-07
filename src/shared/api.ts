@@ -1,4 +1,5 @@
 import type { AppDefaults } from './appDefaults';
+import type { Origin } from './export/layers';
 import type { BookDetails } from './export/model';
 import type { Progress } from './progress';
 import type { ProjectMeta, ProjectsConfig, ProjectsSettings, ProjectSummary, RootListing } from './projects';
@@ -49,6 +50,7 @@ export type MenuAction =
   | 'find'
   | 'replace'
   | 'find-next'
+  | 'go-to-line'
   | 'find-prev'
   | 'next-scene'
   | 'prev-scene'
@@ -140,7 +142,7 @@ export interface DraftRecord {
 }
 
 /** Fields of a project's metadata that can be changed after it is created. */
-export type ProjectPatch = Partial<Pick<ProjectMeta, 'status' | 'notes' | 'archived' | 'goal' | 'activeManuscript' | 'manuscriptGoals' | 'excludedFolders'>> & {
+export type ProjectPatch = Partial<Pick<ProjectMeta, 'status' | 'notes' | 'archived' | 'goal' | 'activeManuscript' | 'manuscriptGoals' | 'excludedFolders' | 'editedChapters'>> & {
   overrides?: Partial<ProjectMeta['overrides']>;
 };
 
@@ -193,7 +195,7 @@ export interface CoreApi {
   /** Adds template folders / starter files the project is missing; returns what was added. */
   addMissingTemplateParts(path: string, templateId: string): Promise<string[]>;
   /** Counts the project's words now, notes them in its history, and returns the history. */
-  recordProgress(path: string): Promise<{ progress: Progress; total: number; manuscript: string | null }>;
+  recordProgress(path: string): Promise<{ progress: Progress; total: number | null; manuscript: string | null }>;
   /** Moves every project in the Root to a new Root Folder (best effort; reports what failed). */
   moveProjects(newRoot: string): Promise<{ moved: string[]; failed: { name: string; error: string }[] }>;
   /** Remembers which project is open (so it can be reopened at startup). */
@@ -214,13 +216,29 @@ export interface CoreApi {
   confirmOverwrite(fileName: string): Promise<boolean>;
   confirmDelete(name: string, kind: 'file' | 'folder' | 'chapter', hasUnsaved: boolean): Promise<boolean>;
   confirmRecover(fileName: string): Promise<boolean>;
+  /** Editing stage: asks whether the chapter just left should be marked as edited. */
+  confirmMarkEdited(chapterTitle: string): Promise<boolean>;
+}
+
+export interface BookDetailsResult {
+  details: BookDetails;
+  inherited: BookDetails;
+  origins: Record<string, Origin>;
+  overrides: string[];
+  exists: boolean;
+  damaged: boolean;
 }
 
 /** Export for KDP (EPUB, print PDF, DOCX) and the book details it needs. Desktop only. */
 export interface ExportApi {
-  /** The book's saved details, or fresh defaults if none exist yet. */
-  getBookDetails(file: string): Promise<{ details: BookDetails; exists: boolean; damaged: boolean }>;
-  saveBookDetails(file: string, details: BookDetails): Promise<void>;
+  /**
+   * The book's details as they export (app settings, then the project's, then the book's own), or fresh defaults if none
+   * exist yet. `inherited` is the book without its own settings, `origins` says whether each inherited field comes from
+   * the project or the app, and `overrides` lists the fields the book sets itself.
+   */
+  getBookDetails(file: string): Promise<BookDetailsResult>;
+  /** `overrides` names the fields this book sets itself; the rest follow the project and the app. */
+  saveBookDetails(file: string, details: BookDetails, overrides?: string[]): Promise<void>;
   /** Marks/unmarks a file for export (creates or updates its export-settings file). */
   setMarked(file: string, marked: boolean): Promise<{ backedUp: boolean }>;
   /** Attaches an orphaned export-settings file to a manuscript in the same folder. */

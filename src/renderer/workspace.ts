@@ -14,7 +14,8 @@ import {
 import type { AppDefaults } from '../shared/appDefaults';
 import { compileFind, replaceAllInText, type FindOptions } from '../shared/find';
 import type { Progress } from '../shared/progress';
-import { relativeTo, type ProjectMeta } from '../shared/projects';
+import { chapterIds, isChapterEdited, relativeTo, withChapterEdited, type ProjectMeta } from '../shared/projects';
+import { chapterLabel } from './treeRows';
 import { basename, dirname, isInside, remapPath } from '../shared/paths';
 import { collectFiles, collectOrphans, flattenPaths } from '../shared/tree';
 
@@ -34,6 +35,8 @@ export interface Tab {
   conflict: Conflict | null;
   /** When the current draft was last autosaved for crash recovery. */
   autosavedAt: number | null;
+  /** The open chapter has been saved since it was opened (so leaving it can offer "Mark Edited"). */
+  savedHere: boolean;
 }
 
 export interface WorkspaceState {
@@ -53,7 +56,7 @@ export interface WorkspaceState {
   /** The open folder is a project (it carries `.mdedit/project.json`). */
   project: { path: string; meta: ProjectMeta } | null;
   /** The open project's word total and day-by-day history (null until counted). */
-  progress: { progress: Progress; total: number; manuscript: string | null } | null;
+  progress: { progress: Progress; total: number | null; manuscript: string | null } | null;
   /** Labels of undone actions Redo would re-apply, oldest first. */
   redoLabels: string[];
 }
@@ -455,7 +458,8 @@ export class Workspace {
       saved: null,
       reloadKey: 0,
       conflict: null,
-      autosavedAt: null
+      autosavedAt: null,
+      savedHere: false
     };
   }
 
@@ -514,11 +518,12 @@ export class Workspace {
     }
     if (tab.chapter !== chapter) {
       if (!(await this.leaveTab(tab))) return;
+      await this.offerMarkEdited(tab.id);
       tab = this.tabForFile(file);
       if (!tab) return;
       const doc = this.state.docs.get(file);
       const target = Math.max(0, Math.min(chapter, (doc?.chapters.length ?? 1) - 1));
-      this.patchTab(tab.id, (t) => ({ chapter: target, draft: null, conflict: null, reloadKey: t.reloadKey + 1 }));
+      this.patchTab(tab.id, (t) => ({ chapter: target, draft: null, conflict: null, savedHere: false, reloadKey: t.reloadKey + 1 }));
     }
     this.set({ activeId: tab.id, notice: null });
   }
@@ -543,8 +548,60 @@ export class Workspace {
     const tab = this.tab(id);
     if (!tab) return true;
     if (!(await this.leaveTab(tab))) return false;
+    await this.offerMarkEdited(id);
     this.removeTabs([id]);
     return true;
+  }
+
+  // ---- edited chapters (the Editing stage) ----------------------------------------------
+
+  /** The chapter's id and its file's relative path, if a project is open and the chapter exists. */
+  private chapterRef(file: string, chapter: number): { rel: string; id: string; title: string } | null {
+    const project = this.state.project;
+    const doc = this.state.docs.get(file);
+    const c = doc?.chapters[chapter];
+    if (!project || !doc || !c) return null;
+    return { rel: relativeTo(project.path, file), id: chapterIds(doc.chapters)[chapter], title: chapterLabel(c) };
+  }
+
+  /** Is this chapter marked as edited? */
+  isChapterEdited(file: string, chapter: number): boolean {
+    const project = this.state.project;
+    const ref = this.chapterRef(file, chapter);
+    return !!project && !!ref && isChapterEdited(project.meta, ref.rel, ref.id);
+  }
+
+  /** Marks or unmarks a chapter as edited. The marks are kept in the project, whatever its status. */
+  async setChapterEdited(file: string, chapter: number, on: boolean): Promise<boolean> {
+    const project = this.state.project;
+    const ref = this.chapterRef(file, chapter);
+    if (!project || !ref) return false;
+    return this.patchEdited((edited) => withChapterEdited(edited, ref.rel, ref.id, on));
+  }
+
+  /** Changes the edited marks, starting from what is stored now (a sync may have brought marks from another device). */
+  private async patchEdited(change: (current: Record<string, string[]>) => Record<string, string[]>): Promise<boolean> {
+    const project = this.state.project;
+    if (!project) return false;
+    try {
+      const current = (await this.api.getProjectMeta(project.path))?.editedChapters ?? project.meta.editedChapters;
+      const meta = await this.api.updateProject(project.path, { editedChapters: change(current) });
+      if (this.state.project?.path === project.path) this.set({ project: { ...this.state.project, meta } });
+      return true;
+    } catch (e) {
+      this.set({ error: String(e instanceof Error ? e.message : e) });
+      return false;
+    }
+  }
+
+  /** In the Editing stage, leaving a chapter you saved offers to mark it edited (once; nothing is asked for a chapter already marked). */
+  private async offerMarkEdited(tabId: string): Promise<void> {
+    const tab = this.tab(tabId);
+    const project = this.state.project;
+    if (!tab || !project || project.meta.status !== 'editing' || !tab.savedHere || tab.draft !== null) return;
+    const ref = this.chapterRef(tab.file, tab.chapter);
+    if (!ref || isChapterEdited(project.meta, ref.rel, ref.id)) return;
+    if (await this.api.confirmMarkEdited(ref.title)) await this.setChapterEdited(tab.file, tab.chapter, true);
   }
 
   private removeTabs(ids: string[]): void {
@@ -707,11 +764,13 @@ export class Workspace {
         conflict: null,
         autosavedAt: null,
         saved: { version: (t.saved?.version ?? 0) + 1, markdown: text },
+        savedHere: true,
         ...(restructured ? { chapter: idx, reloadKey: t.reloadKey + 1 } : {})
       }));
       this.dropDraft(tab.file);
       this.set({ error: null });
       this.scheduleProgress();
+      void this.followRetitle(tab.file, doc, fresh, tab.chapter);
       return true;
     } catch (e) {
       this.set({ error: `Could not save: ${e}` });
@@ -797,6 +856,22 @@ export class Workspace {
   }
 
   /** Rescans the folder and re-reads expanded/open files, keeping tabs and unsaved edits. */
+  /**
+   * Picks up changes to the open project's own record that were made elsewhere (a sync from another device brings its edited
+   * marks, status, active manuscript and goals). Settings that reshape the open files (chapter level) are left to the settings dialog.
+   */
+  private async reloadProjectState(): Promise<void> {
+    const project = this.state.project;
+    if (!project) return;
+    const fresh = await this.api.getProjectMeta(project.path).catch(() => null);
+    if (!fresh || this.state.project?.path !== project.path) return;
+    const pick = (m: ProjectMeta) => JSON.stringify([m.editedChapters, m.status, m.activeManuscript, m.manuscriptGoals, m.goal]);
+    if (pick(fresh) === pick(project.meta)) return;
+    const { editedChapters, status, activeManuscript, manuscriptGoals, goal } = fresh;
+    this.set({ project: { ...project, meta: { ...project.meta, editedChapters, status, activeManuscript, manuscriptGoals, goal } } });
+    if (activeManuscript !== project.meta.activeManuscript) void this.refreshProgress();
+  }
+
   async refresh(): Promise<void> {
     const current = this.state.root;
     if (!current || this.state.refreshing) return;
@@ -817,6 +892,7 @@ export class Workspace {
           await this.loadDoc(file).catch(() => undefined);
         }
       }
+      await this.reloadProjectState();
       this.set({ error: null });
     } catch (e) {
       this.set({ error: `Could not refresh: ${e}` });
@@ -903,17 +979,35 @@ export class Workspace {
     }
   }
 
-  /** A renamed file (or folder) that holds the active manuscript: point the project at its new path. */
+  /** A chapter whose heading was edited keeps its edited mark under the new title. */
+  private async followRetitle(file: string, before: MarkdownDoc, after: MarkdownDoc, chapter: number): Promise<void> {
+    const project = this.state.project;
+    if (!project || before.chapters.length !== after.chapters.length) return;
+    const rel = relativeTo(project.path, file);
+    const was = chapterIds(before.chapters)[chapter];
+    const now = chapterIds(after.chapters)[chapter];
+    if (was === now || !isChapterEdited(project.meta, rel, was)) return;
+    await this.patchEdited((edited) => withChapterEdited(withChapterEdited(edited, rel, was, false), rel, now, true));
+  }
+
+  /** A renamed file (or folder): point the active manuscript and the edited-chapter marks at its new path. */
   private async followActiveManuscript(from: string, to: string): Promise<void> {
     const project = this.state.project;
-    const active = project?.meta.activeManuscript;
-    if (!project || !active) return;
-    const moved = remapPath(active, relativeTo(project.path, from), relativeTo(project.path, to));
-    if (moved === active) return;
+    if (!project) return;
+    const f = relativeTo(project.path, from);
+    const t = relativeTo(project.path, to);
+    const active = project.meta.activeManuscript;
+    const moved = active ? remapPath(active, f, t) : null;
+    const current = (await this.api.getProjectMeta(project.path))?.editedChapters ?? project.meta.editedChapters;
+    const edited = Object.fromEntries(Object.entries(current).map(([k, v]) => [remapPath(k, f, t), v]));
+    const patch: { activeManuscript?: string | null; editedChapters?: Record<string, string[]> } = {};
+    if (active && moved !== active) patch.activeManuscript = moved;
+    if (Object.keys(edited).some((k) => !(k in current))) patch.editedChapters = edited;
+    if (!Object.keys(patch).length) return;
     try {
-      const meta = await this.api.updateProject(project.path, { activeManuscript: moved });
+      const meta = await this.api.updateProject(project.path, patch);
       this.set({ project: { ...project, meta } });
-      void this.refreshProgress();
+      if (patch.activeManuscript !== undefined) void this.refreshProgress();
     } catch {
       // the next progress count clears a manuscript that can't be found
     }

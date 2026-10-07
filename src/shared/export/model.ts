@@ -72,6 +72,8 @@ export interface ExportSettings {
     topMargin: number;
     bottomMargin: number;
     rectoStarts: boolean;
+    /** Extra space above each chapter heading, in inches, on top of the page margin (0 = heading at the top margin). */
+    chapterSink: number;
     pageNumbers: boolean;
     runningHead: RunningHead;
     fontSize: number;
@@ -122,6 +124,7 @@ export function defaultExportSettings(): ExportSettings {
       topMargin: 0.75,
       bottomMargin: 0.75,
       rectoStarts: true,
+      chapterSink: 1.25,
       pageNumbers: true,
       runningHead: 'none',
       fontSize: 11,
@@ -270,6 +273,7 @@ export function sanitizeBookDetails(raw: unknown, seed: { title?: string; author
         topMargin: num(pd.topMargin, e.pdf.topMargin, 0.25, 2),
         bottomMargin: num(pd.bottomMargin, e.pdf.bottomMargin, 0.25, 2),
         rectoStarts: bool(pd.rectoStarts, e.pdf.rectoStarts),
+        chapterSink: num(pd.chapterSink, e.pdf.chapterSink, 0, 3),
         pageNumbers: bool(pd.pageNumbers, e.pdf.pageNumbers),
         runningHead: oneOf(pd.runningHead, ['none', 'author', 'title', 'authorTitle'] as const, e.pdf.runningHead),
         fontSize: num(pd.fontSize, e.pdf.fontSize, 8, 16),

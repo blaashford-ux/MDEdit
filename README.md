@@ -20,7 +20,7 @@ repository secrets. See [docs/sync-rules.md](docs/sync-rules.md) for how sync be
 - [x] **Android app and Google Drive sync** (0.4): the same editor on your phone (projects, chapters, goals; no export), and both apps keep the Root Folder in step through an `MDEdit` folder in your Google Drive. Edits sync a few seconds after you save and when you switch back to the app; two devices changing the same chapter keep **both** versions; nothing is deleted in bulk without asking. Details in [docs/sync-rules.md](docs/sync-rules.md)
 - [x] **Projects** (0.3): a project is a folder with a hidden `.mdedit` marker, living in your **Root Folder** (default `%USERPROFILE%\MDEdit`, chosen on first run and changeable in Settings). The Projects home shows every project as a card (status, words, goal progress); **New Project** (Ctrl+Alt+N) makes one from a **template** — folders, starter files and export defaults, all editable in Settings → Projects. Ctrl+K switches project; rename, duplicate, archive, delete (to the Recycle Bin) and status (planning → published) are on each card. Folders outside the Root still open with File → Open Folder, and can be converted to projects
 - [x] **Project settings and defaults**: each project can override the chapter-heading level and the export defaults (author, copyright page, fonts, trim size…); everything inside a project uses them. Order of precedence: built-in → app Settings → template → project → the book's own export settings
-- [x] **Goals and progress**: set a word-count goal (and deadline) per project, choose which folders count; the Progress window (status bar or switcher) shows a day-by-day bar chart with a burn-down line, the words per day needed to finish on time, and the estimated finish date at your 3-day and 5-day averages
+- [x] **Goals and progress**: set a word-count goal (and deadline) for the active manuscript; the Progress window (status bar or switcher) shows a day-by-day bar chart with a burn-down line, the words per day needed to finish on time, and the estimated finish date at your 3-day and 5-day averages
 - [x] Scaffold (Electron, Vite, React, TypeScript, Vitest, CI Windows build)
 - [x] Chapter engine (`src/shared/chapters.ts`): lossless split/join by heading (H1 by default; the level is a setting)
 - [x] Folder picker, recursive file tree, chapters listed under each file (read-only preview)
@@ -63,7 +63,8 @@ repository secrets. See [docs/sync-rules.md](docs/sync-rules.md) for how sync be
 | Ctrl+Alt+Z / Ctrl+Alt+Y | Undo / redo the last chapter or file action (5 deep) |
 | Ctrl+P | Filter files |
 | Ctrl+F / Ctrl+H | Find / Find & Replace in the open chapter or file |
-| F3, Shift+F3 (or Ctrl+G) | Next / previous match |
+| F3, Shift+F3 | Next / previous match |
+| Ctrl+G | Go to a line number (file-wide; asks about unsaved changes if it leaves the chapter) |
 | Alt+C / Alt+W / Alt+R | (in the find bar) match case / whole word / regular expression |
 | F5 | Refresh |
 | F2 / Del / Alt+Up / Alt+Down | Rename / delete / move chapter (in the tree) |
@@ -76,6 +77,11 @@ repository secrets. See [docs/sync-rules.md](docs/sync-rules.md) for how sync be
    disclaimer, 18+ notice, content warning, extra lines — shown in a live preview in the skill's fixed order); dedication; epigraph; back matter
    (Continue the Story, Also by, About the Author, a custom page). Only links you type are ever added.
 3. **Export…** (toolbar, File menu, Ctrl+E) → confirm the title/subtitle/author read-back → pick outputs and their variables → Export.
+
+**Where settings come from.** Settings layer: **app** (File → Settings) → **project** (Project Settings → Export defaults) → **book**
+(Book Details and Export). Each level changes only the fields you edit; every other field follows the level above, so changing a
+project default reaches every book in it that hasn't set that field. Each field is tagged *From app settings* / *From project settings*
+or *Set for this book*, and **Reset** hands it back. The Export dialog ends with a list of every setting that doesn't follow the app.
 
 | Output | How it is built |
 |---|---|
@@ -125,6 +131,34 @@ automatically. See [docs/RELEASING.md](docs/RELEASING.md).
 
 ## Changelog
 
+### 0.4.2 — 2026-10-07
+**New**
+- **Export settings follow app → project → book, field by field.** Each level stores only the fields you change; every other field follows the level above, so editing a project's (or the app's) back matter, author, fonts or layout now reaches every book that hasn't set that field itself. Previously each book kept a full copy made when it was first set up, so later changes never reached it.
+- Every field in **Project Settings → Export defaults**, **Book Details** and **Export** is tagged *From app settings*, *From project settings* or *Set for this book*, with a **Reset** that hands it back. The Export dialog ends with a list of every setting that doesn't simply follow the app, with where it is set.
+- **Chapter drop** (Export → Print PDF): the space above each chapter heading, from 0 (flush with the top margin) to 3 in; the default stays 1.25 in.
+
+**Changed**
+- **Project settings** replace 0.4.1's single **Override** switch with per-field overrides (templates keep the switch). A project starts from what its template changes relative to the app.
+- Existing files are converted the first time they are opened: a project's saved book becomes the fields it changes, and a book's `.export.json` keeps only the fields that differ from what it would inherit (the rest now follow the project and app). The previous book file is kept beside it as `<name>.export.v1.bak` (never synced). The copyright year is fixed when a book is first set up, so it doesn't change with the calendar. Excluded chapters and the cover image stay with each book.
+- A book whose settings differed from its project (for example a back matter page typed into the book earlier) keeps those as its own and shows *Set for this book*; **Reset** it to follow the project.
+
+### 0.4.1 — 2026-10-07
+**New**
+- **Line numbers** in the right margin, outside the text: every row you see is numbered, wrapped rows and blank lines included, and every tenth is always visible in a faint colour. The rest appear while the pointer is over the editor, with the line under the pointer picked out. Numbers run through the whole file; the open chapter is measured exactly and the others are estimated, so numbers in other chapters can be a little off and change if you resize the window.
+- **Go to Line** (Ctrl+G, Edit → Go to Line…, and a **Line…** button on the phone): jumps to a numbered row anywhere in the file, opening another chapter if needed and asking about unsaved changes first.
+- **Editing stage**: while a project's status is *Editing*, every chapter in the file list has a red empty circle. Leaving a chapter you saved asks whether to mark it edited, which turns the dot into a filled green one; *Mark Edited* / *Unmark Edited* are also on the chapter's right-click menu. Marks stay with a chapter when it is moved, retitled or its file is renamed, and stay when the status changes.
+- Edited marks are kept in their own file (`.mdedit/edited.json`) and **merge between devices** when syncing, chapter by chapter, so marks made on your phone and your PC both survive.
+- **Project settings show every setting**: chapter-heading level and the title, front/back matter and export defaults are always visible, read-only with the app's values until you tick **Override**, which makes them editable.
+
+**Changed**
+- **Word counts and goals follow the active manuscript only.** The Projects cards, Quick Switcher, status-bar total and Progress window show “-” when no manuscript is active. Each manuscript keeps its own goal and writing history, so choosing it again brings them back. Project Settings → Goal now asks you to pick an active manuscript first, and the old “What counts” folder list is gone.
+- **Ctrl+G is now Go to Line.** Find Next and Previous stay on F3 and Shift+F3 (Ctrl+G and Ctrl+Shift+G no longer do that).
+- A sync, or Refresh, now also reloads the open project's edited marks, status, active manuscript and goals, so changes from another device appear without reopening the project.
+
+**Fixed**
+- **A chapter always opens at the top**, instead of keeping the scroll position of the one before it.
+- **Phone: the chapter header no longer paints over the file drawer** when it is open, and the backdrop now dims it too.
+
 ### 0.4.0 — 2026-10-06
 **New**
 - **Android app** (an APK on each release): the editor, Projects home, goals and progress on your phone, with files stored on the phone. It has no KDP export, fonts or Explorer actions, and its Root Folder is fixed.
@@ -152,7 +186,8 @@ automatically. See [docs/RELEASING.md](docs/RELEASING.md).
 - **Project status** (Planning, Drafting, Revising, Editing, Published, On hold) and notes.
 - **Word-count goals and progress**: target and optional deadline; Progress window with a day-by-day bar chart, burn-down against a steady-pace line, words per day needed, and estimated completion at the 3-day and 5-day averages; running total in the status bar.
 - **Series template**: a Manuscripts folder for several books (no book files created) plus a series bible.
-- **Active Manuscript**: right-click a file → *Active Manuscript* to make word-count goals and progress follow that single file (one at a time; choosing another swaps without asking). A target marker shows on the file in the browser, the Progress chart and tiles are labelled with its filename, and each manuscript keeps its own goal and writing history.
+- **Editing stage**: while a project's status is *Editing*, every chapter in the file list has a red empty circle; leaving a chapter you saved asks whether to mark it edited (filled green). *Mark Edited* / *Unmark Edited* are on the chapter's right-click menu. The marks live in their own `.mdedit/edited.json` (by file and chapter title, so they follow moved, retitled and renamed chapters), stay when the status changes, and merge between devices when syncing.
+- **Active Manuscript**: right-click a file → *Active Manuscript* to make word-count goals and progress follow that single file (one at a time; choosing another swaps without asking). Project word counts and goals exist only for the active manuscript: with none chosen the cards, status bar and Progress window show “-”, and a manuscript's stats are kept and come back when it is chosen again. A target marker shows on the file in the browser, the Progress chart and tiles are labelled with its filename, and each manuscript keeps its own goal and writing history.
 
 **Changed**
 - The sidebar's folder button became the project switcher; File → Change Folder is now **Open Folder**.

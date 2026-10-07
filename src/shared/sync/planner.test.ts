@@ -73,6 +73,10 @@ describe('conflicts in non-prose files', () => {
     const { actions } = run({ local: [L(png, 'x')], remote: [R(png, 'p1', 'y')], base: [B(png, 'p1', 'a')] });
     expect(actions.some((a) => a.type === 'keepBoth')).toBe(false);
   });
+  it('merges edited-chapter marks instead of copying them', () => {
+    const marks = 'Novel/.mdedit/edited.json';
+    expect(run({ local: [L(marks, 'x')], remote: [R(marks, 'g1', 'y')], base: [B(marks, 'g1', 'a')] }).actions).toEqual([{ type: 'mergeMarks', path: marks, id: 'g1' }]);
+  });
   it('merges progress history instead of copying it', () => {
     const prog = 'Novel/.mdedit/progress.json';
     expect(run({ local: [L(prog, 'x')], remote: [R(prog, 'g1', 'y')], base: [B(prog, 'g1', 'a')] }).actions).toEqual([{ type: 'mergeProgress', path: prog, id: 'g1' }]);

@@ -41,3 +41,9 @@ describe('classify', () => {
     expect(classify('Novel/Manuscript/Exports/a.md')).toBe('prose'); // only a project's own Exports folder
   });
 });
+
+describe('edited-chapter marks', () => {
+  it('travel and are merged', () => {
+    expect(classify('Novel/.mdedit/edited.json')).toBe('marks');
+  });
+});

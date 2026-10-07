@@ -1,5 +1,6 @@
 import { defaultProjectsSettings, defaultTemplates, newProjectMeta, type ProjectMeta, type ProjectsConfig, type ProjectsSettings } from '../../shared/projects';
 import { emptyProgress, recordSnapshot, type Progress } from '../../shared/progress';
+import { diffOverrides, resolveInherited } from '../../shared/export/layers';
 import { bookFromDefaults, defaultAppDefaults, type AppDefaults } from '../../shared/appDefaults';
 import type { BookDetails } from '../../shared/export/model';
 import { defaultBookDetails } from '../../shared/export/model';
@@ -46,6 +47,8 @@ export class FakeApi implements MdeditApi {
   overwriteAnswers: boolean[] = [];
   deleteAnswers: boolean[] = [];
   recoverAnswers: boolean[] = [];
+  markEditedAnswers: boolean[] = [];
+  markEditedAsked: string[] = [];
   unsavedAsked: string[] = [];
   pickResult: string | null = null;
   failTrash = false;
@@ -93,11 +96,24 @@ export class FakeApi implements MdeditApi {
   orphans: string[] = [];
   damagedOnMark = false;
   coverPick: string | null = null;
+  /** The fields each saved book sets itself (absent = all that differ, as for a file saved before layering). */
+  bookOverrides = new Map<string, string[]>();
   getBookDetails = async (file: string) => {
     const d = this.books.get(file);
-    return { details: d ?? bookFromDefaults(this.appDefaults, { title: basename(file).replace(/\.md$/, '') }), exists: !!d, damaged: false };
+    const inh = resolveInherited(this.appDefaults.book, {});
+    return {
+      details: d ?? bookFromDefaults(this.appDefaults, { title: basename(file).replace(/\.md$/, '') }),
+      inherited: inh.details,
+      origins: inh.origins,
+      overrides: this.bookOverrides.get(file) ?? (d ? Object.keys(diffOverrides(inh.details, d)) : ['copyright.year']),
+      exists: !!d,
+      damaged: false
+    };
   };
-  saveBookDetails = async (file: string, d: BookDetails) => void this.books.set(file, d);
+  saveBookDetails = async (file: string, d: BookDetails, overrides?: string[]) => {
+    this.books.set(file, d);
+    if (overrides) this.bookOverrides.set(file, overrides);
+  };
   setMarked = async (file: string, marked: boolean) => {
     const cur = this.books.get(file) ?? bookFromDefaults(this.appDefaults, { title: basename(file).replace(/\.md$/, '') });
     if (!marked && !this.books.has(file)) return { backedUp: false };
@@ -246,6 +262,10 @@ export class FakeApi implements MdeditApi {
   confirmOverwrite = async () => this.overwriteAnswers.shift() ?? true;
   confirmDelete = async () => this.deleteAnswers.shift() ?? true;
   confirmRecover = async () => this.recoverAnswers.shift() ?? true;
+  confirmMarkEdited = async (title: string) => {
+    this.markEditedAsked.push(title);
+    return this.markEditedAnswers.shift() ?? false;
+  };
 
   setDirtyFiles = (names: string[]) => void this.dirtyReports.push(names);
   onCloseRequested = () => () => undefined;

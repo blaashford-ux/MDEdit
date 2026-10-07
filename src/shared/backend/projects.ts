@@ -1,5 +1,7 @@
+import type { AppDefaults } from '../appDefaults';
 import { errorCode, type FsPort } from '../fsPort';
 import { basename, dirname, joinParts, joinPath } from '../paths';
+import { applyMap, EDITED_FILE, emptyMarks, marksToMap, sanitizeMarks, type EditedMarks } from '../editedMarks';
 import { localDate, recordSnapshot, sanitizeProgress, type Progress } from '../progress';
 import { sha1Hex } from '../sha1';
 import {
@@ -12,11 +14,14 @@ import { makeFiles } from './files';
 export interface Deps {
   now?: () => Date;
   uuid?: () => string;
+  /** The app's defaults: a template's book settings are stored as what they change relative to these. */
+  app?: AppDefaults;
   /** Test hook: called before each creation step ("folders", "files", "meta", "rename"); may throw to simulate a failure. */
   step?: (name: string) => void | Promise<void>;
 }
 
 const metaPath = (dir: string) => joinParts(dir, PROJECT_DIR, PROJECT_FILE);
+const marksPath = (dir: string) => joinParts(dir, PROJECT_DIR, EDITED_FILE);
 /** History file: one for the whole project, and one per active manuscript (named from a hash of its relative path). */
 const progressPath = (dir: string, manuscript: string | null = null) =>
   joinParts(dir, PROJECT_DIR, manuscript ? `progress-${sha1Hex(manuscript.toLowerCase()).slice(0, 12)}.json` : PROGRESS_FILE);
@@ -51,6 +56,12 @@ export function makeProjects(fs: FsPort) {
       damaged = true;
     }
     const meta = sanitizeProjectMeta(raw, basename(dir), localDate(now()));
+    // Edited-chapter marks live in their own file (so sync can merge them). Marks an older project.json still carries move across once.
+    let marks = await readMarks(dir);
+    if (!marks && Object.keys(meta.editedChapters).length) {
+      marks = applyMap(emptyMarks(), meta.editedChapters, now().getTime());
+      await writeMarks(dir, marks).catch(() => undefined);
+    }
     if (damaged) {
       // keep what was there, then start again from defaults named after the folder
       await fs.copy(metaPath(dir), metaPath(dir) + '.bak').catch(() => undefined);
@@ -58,21 +69,42 @@ export function makeProjects(fs: FsPort) {
     } else if (JSON.stringify(raw) !== JSON.stringify(meta)) {
       await writeMeta(dir, meta).catch(() => undefined); // tidy once
     }
-    return meta;
+    return { ...meta, editedChapters: marks ? marksToMap(marks) : {} };
   }
 
+  /** The project's edited-chapter marks, or null when it has none yet (or the file is unreadable). */
+  async function readMarks(dir: string): Promise<EditedMarks | null> {
+    try {
+      return sanitizeMarks(JSON.parse(await fs.readText(marksPath(dir))));
+    } catch {
+      return null;
+    }
+  }
+
+  async function writeMarks(dir: string, marks: EditedMarks): Promise<void> {
+    await fs.mkdir(joinPath(dir, PROJECT_DIR), { recursive: true });
+    await writeFileAtomic(marksPath(dir), JSON.stringify(marks, null, 2) + '\n');
+  }
+
+  /** project.json never holds the marks (they would be overwritten, not merged, when two devices sync). */
   async function writeMeta(dir: string, meta: ProjectMeta): Promise<void> {
     await fs.mkdir(joinPath(dir, PROJECT_DIR), { recursive: true });
-    await writeFileAtomic(metaPath(dir), JSON.stringify(meta, null, 2) + '\n');
+    await writeFileAtomic(metaPath(dir), JSON.stringify({ ...meta, editedChapters: {} }, null, 2) + '\n');
   }
 
   /** Merges a partial change into a project's metadata (sanitised) and saves it. */
   async function updateMeta(dir: string, patch: Partial<Omit<ProjectMeta, 'version' | 'id'>>, now: () => Date = () => new Date()): Promise<ProjectMeta> {
     const current = await readMeta(dir, now);
     if (!current) throw new Error('That folder is not a project.');
-    const next = sanitizeProjectMeta({ ...current, ...patch, overrides: { ...current.overrides, ...(patch.overrides ?? {}) } }, current.name, localDate(now()));
+    const { editedChapters, ...rest } = patch;
+    if (editedChapters) {
+      const before = (await readMarks(dir)) ?? emptyMarks();
+      const after = applyMap(before, editedChapters, now().getTime());
+      if (after !== before) await writeMarks(dir, after);
+    }
+    const next = sanitizeProjectMeta({ ...current, ...rest, overrides: { ...current.overrides, ...(rest.overrides ?? {}) } }, current.name, localDate(now()));
     await writeMeta(dir, next);
-    return next;
+    return (await readMeta(dir, now))!;
   }
 
   // ---- counting ---------------------------------------------------------------------------
@@ -132,11 +164,9 @@ export function makeProjects(fs: FsPort) {
     const meta = await readMeta(dir, now);
     if (!meta) return null;
     const c = await countProject(dir, meta.excludedFolders);
-    if (meta.activeManuscript) {
-      const n = await countFile(dir, meta.activeManuscript);
-      if (n !== null) return { path: dir, name: basename(dir), meta, ...c, words: n };
-    }
-    return { path: dir, name: basename(dir), meta, ...c };
+    // words belong to the active manuscript alone: without one (or if it has gone) there is no count
+    const words = meta.activeManuscript ? await countFile(dir, meta.activeManuscript) : null;
+    return { path: dir, name: basename(dir), meta, files: c.files, lastEdited: c.lastEdited, words };
   }
 
   /** The projects (and other folders) directly inside the Root Folder. */
@@ -190,22 +220,19 @@ export function makeProjects(fs: FsPort) {
   }
 
   /**
-   * Counts the words that goals follow now (the active manuscript, or the project's counted folders) and notes them in
-   * that history for today. If the active manuscript has been deleted or moved away, it is cleared.
+   * Counts the words of the active manuscript and notes them in that manuscript's own history for today (each
+   * manuscript keeps its history, so swapping back shows it again). With no active manuscript there is nothing to
+   * count: the total is null and nothing is recorded. If the active manuscript has been deleted or moved away, it is cleared.
    */
-  async function recordProgress(dir: string, now: () => Date = () => new Date()): Promise<{ progress: Progress; total: number; manuscript: string | null }> {
-    let meta = await readMeta(dir, now);
+  async function recordProgress(dir: string, now: () => Date = () => new Date()): Promise<{ progress: Progress; total: number | null; manuscript: string | null }> {
+    const meta = await readMeta(dir, now);
     if (!meta) throw new Error('That folder is not a project.');
-    let manuscript = meta.activeManuscript;
-    let words: number;
-    if (manuscript) {
-      const n = await countFile(dir, manuscript);
-      if (n === null) {
-        meta = await updateMeta(dir, { activeManuscript: null }, now);
-        manuscript = null;
-        words = (await countProject(dir, meta.excludedFolders)).words;
-      } else words = n;
-    } else words = (await countProject(dir, meta.excludedFolders)).words;
+    const manuscript = meta.activeManuscript;
+    const words = manuscript ? await countFile(dir, manuscript) : null;
+    if (!manuscript || words === null) {
+      if (manuscript) await updateMeta(dir, { activeManuscript: null }, now);
+      return { progress: sanitizeProgress(null), total: null, manuscript: null };
+    }
     const before = await readProgress(dir, manuscript);
     const after = recordSnapshot(before, localDate(now()), words);
     if (after !== before) {
@@ -242,7 +269,7 @@ export function makeProjects(fs: FsPort) {
         await fs.writeText(full, f.content, { exclusive: true });
       }
       await step('meta');
-      const meta = newProjectMeta({ id: (deps.uuid ?? newUuid)(), name: clean, template, now: now() });
+      const meta = newProjectMeta({ id: (deps.uuid ?? newUuid)(), name: clean, template, now: now(), app: deps.app });
       await writeMeta(tmp, meta);
       starterWords = (await countProject(tmp, meta.excludedFolders)).words;
       const progress = recordSnapshot(sanitizeProgress(null), localDate(now()), starterWords);
