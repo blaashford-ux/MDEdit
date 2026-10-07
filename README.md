@@ -126,6 +126,23 @@ automatically. See [docs/RELEASING.md](docs/RELEASING.md).
 
 ## Changelog
 
+### 0.4.1 — 2026-10-07
+**New**
+- **Line numbers**: every tenth line is numbered in a faint colour, and the line under the pointer shows its own number. Numbers count the lines of the whole file, so they mean the same in every chapter. Source mode numbers each line; the formatted editor numbers each paragraph or block.
+- **Go to Line** (Ctrl+G, Edit → Go to Line…, and a **Line…** button on the phone): jumps to a line number anywhere in the file, opening another chapter if needed and asking about unsaved changes first.
+- **Editing stage**: while a project's status is *Editing*, every chapter in the file list has a red empty circle. Leaving a chapter you saved asks whether to mark it edited, which turns the dot into a filled green one; *Mark Edited* / *Unmark Edited* are also on the chapter's right-click menu. Marks stay with a chapter when it is moved, retitled or its file is renamed, and stay when the status changes.
+- Edited marks are kept in their own file (`.mdedit/edited.json`) and **merge between devices** when syncing, chapter by chapter, so marks made on your phone and your PC both survive.
+- **Project settings show every setting**: chapter-heading level and the title, front/back matter and export defaults are always visible, read-only with the app's values until you tick **Override**, which makes them editable.
+
+**Changed**
+- **Word counts and goals follow the active manuscript only.** The Projects cards, Quick Switcher, status-bar total and Progress window show “-” when no manuscript is active. Each manuscript keeps its own goal and writing history, so choosing it again brings them back. Project Settings → Goal now asks you to pick an active manuscript first, and the old “What counts” folder list is gone.
+- **Ctrl+G is now Go to Line.** Find Next and Previous stay on F3 and Shift+F3 (Ctrl+G and Ctrl+Shift+G no longer do that).
+- A sync, or Refresh, now also reloads the open project's edited marks, status, active manuscript and goals, so changes from another device appear without reopening the project.
+
+**Fixed**
+- **A chapter always opens at the top**, instead of keeping the scroll position of the one before it.
+- **Phone: the chapter header no longer paints over the file drawer** when it is open, and the backdrop now dims it too.
+
 ### 0.4.0 — 2026-10-06
 **New**
 - **Android app** (an APK on each release): the editor, Projects home, goals and progress on your phone, with files stored on the phone. It has no KDP export, fonts or Explorer actions, and its Root Folder is fixed.
