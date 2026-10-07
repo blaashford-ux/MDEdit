@@ -630,3 +630,11 @@ code.path { background: var(--raised); padding: 1px 6px; border-radius: 6px; }
 .defaults-fields { border: 0; margin: 0; padding: 0; min-width: 0; }
 .defaults-fields.readonly { opacity: 0.6; }
 .defaults-fields.readonly input, .defaults-fields.readonly select, .defaults-fields.readonly textarea, .defaults-fields.readonly button { cursor: not-allowed; }
+
+.about-head { display: flex; align-items: center; gap: 14px; margin-bottom: 8px; }
+.about-head h3 { margin: 0; }
+.about-version { color: var(--muted); font-size: 13px; }
+.about-update { margin: 12px 0 4px; font-size: 13px; }
+.about-update p { margin: 4px 0; }
+.about-notes summary { cursor: pointer; color: var(--muted); }
+.about-notes pre { max-height: 180px; margin: 6px 0 0; padding: 8px 10px; overflow: auto; white-space: pre-wrap; background: var(--raised); border-radius: 10px; font: inherit; font-size: 12px; }

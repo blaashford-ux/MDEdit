@@ -16,6 +16,7 @@ import {
   type TreeNode,
   type UnsavedChoice
 } from '../../shared/api';
+import type { UpdateInfo } from '../../shared/update';
 import { basename, dirname, isInside } from '../../shared/paths';
 import { reviewOff, syncOff } from '../../shared/syncStub';
 
@@ -283,5 +284,9 @@ export class FakeApi implements MdeditApi {
   setDirtyFiles = (names: string[]) => void this.dirtyReports.push(names);
   onCloseRequested = () => () => undefined;
   reportCloseDecision = () => undefined;
+  getAppVersion = async () => '0.0.0';
+  checkForUpdate = async (): Promise<UpdateInfo> => ({ current: '0.0.0', latest: '0.0.0', available: false, notes: '', pageUrl: '', asset: null, sumsUrl: null });
+  installUpdate = async () => undefined;
+  onUpdateProgress = () => () => undefined;
   onMenuAction = (_cb: (a: MenuAction) => void) => () => undefined;
 }

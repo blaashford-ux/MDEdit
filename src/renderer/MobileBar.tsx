@@ -14,11 +14,13 @@ interface Props {
   /** The Google Drive button (absent where sync isn't available). */
   /** Find & replace in the open file (absent when nothing is open). */
   find?: { open: boolean; onToggle(): void };
+  /** Opens About (version and updates). */
+  onAbout?(): void;
   sync?: { state: 'off' | 'idle' | 'syncing' | 'error' | 'confirm'; onOpen(): void };
 }
 
 /** The phone's top bar: file list, the open chapter, and Save (there are no menus or window buttons). */
-export function MobileBar({ title, dirty, showFiles, onFiles, onHome, onSave, canSave, find, sync }: Props) {
+export function MobileBar({ title, dirty, showFiles, onFiles, onHome, onSave, canSave, find, sync, onAbout }: Props) {
   return (
     <header className="mobilebar">
       {showFiles ? (
@@ -47,6 +49,14 @@ export function MobileBar({ title, dirty, showFiles, onFiles, onHome, onSave, ca
             {sync.state === 'off' && <path d="m4 4 16 16" />}
           </svg>
           {sync.state !== 'off' && sync.state !== 'idle' && <span className="sync-dot" aria-hidden />}
+        </button>
+      )}
+      {onAbout && (
+        <button type="button" className="mb-btn" aria-label="About MDEdit" onClick={onAbout}>
+          <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="9" />
+            <path d="M12 11v5M12 8h.01" />
+          </svg>
         </button>
       )}
       {onHome && (

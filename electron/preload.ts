@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
+import type { UpdateProgress } from '../src/shared/update';
 import { DESKTOP_CAPABILITIES, type ExportProgress, type MdeditApi, type MenuAction, type SyncStatus, type WindowInfo } from '../src/shared/api';
 
 const api: MdeditApi = {
@@ -19,6 +20,14 @@ const api: MdeditApi = {
     const listener = (_e: Electron.IpcRendererEvent, status: SyncStatus) => cb(status);
     ipcRenderer.on('sync:status', listener);
     return () => ipcRenderer.removeListener('sync:status', listener);
+  },
+  getAppVersion: () => ipcRenderer.invoke('update:version'),
+  checkForUpdate: () => ipcRenderer.invoke('update:check'),
+  installUpdate: (info) => ipcRenderer.invoke('update:install', info),
+  onUpdateProgress: (cb) => {
+    const listener = (_e: Electron.IpcRendererEvent, p: UpdateProgress) => cb(p);
+    ipcRenderer.on('update:progress', listener);
+    return () => ipcRenderer.removeListener('update:progress', listener);
   },
   pickFolder: () => ipcRenderer.invoke('dialog:pickFolder'),
   getLastFolder: () => ipcRenderer.invoke('settings:getLastFolder'),

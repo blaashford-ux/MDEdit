@@ -40,7 +40,7 @@ installer is unsigned and the release notes explain the warning to users.
 
 ## Not set up yet
 
-Auto-update inside the app, a portable build, macOS/Linux installers, and publishing to winget/Chocolatey.
+Silent background auto-update (About has a manual **Check for updates** that downloads and runs the installer), a portable build, macOS/Linux installers, and publishing to winget/Chocolatey.
 
 ## Releasing without a local tag push
 

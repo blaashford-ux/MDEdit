@@ -3,6 +3,7 @@ import type { Origin } from './export/layers';
 import type { BookDetails } from './export/model';
 import type { Progress } from './progress';
 import type { ReviewerRecord, ShareStatus, SharedProject } from './review/share';
+import type { UpdateInfo, UpdateProgress } from './update';
 import type { ProjectMeta, ProjectsConfig, ProjectsSettings, ProjectSummary, RootListing } from './projects';
 
 export interface FileNode {
@@ -60,7 +61,8 @@ export type MenuAction =
   | 'prev-tab'
   | 'next-chapter'
   | 'prev-chapter'
-  | 'sync';
+  | 'sync'
+  | 'about';
 
 export type ExportKind = 'epub' | 'pdf' | 'docx';
 
@@ -295,6 +297,20 @@ export interface DesktopApi {
   onMenuAction(cb: (action: MenuAction) => void): () => void;
 }
 
+/** Updating the app from its latest GitHub release (the Windows installer, or the Android APK). */
+export interface UpdateApi {
+  /** The running app's version, e.g. "0.4.3". */
+  getAppVersion(): Promise<string>;
+  /** Asks GitHub for the newest release and the file that fits this device. Rejects with a readable message if offline. */
+  checkForUpdate(): Promise<UpdateInfo>;
+  /**
+   * Downloads the release's file for this device, checks it against the release's checksums and hands it to the system
+   * installer (Windows: the app closes and the installer opens; Android: the system install screen opens).
+   */
+  installUpdate(info: UpdateInfo): Promise<void>;
+  onUpdateProgress(cb: (p: UpdateProgress) => void): () => void;
+}
+
 export interface SyncSummary {
   uploaded: number;
   downloaded: number;
@@ -372,11 +388,13 @@ export interface Capabilities {
   sync: boolean;
   /** Sharing for review (`ReviewSharingApi`); needs sync. */
   review: boolean;
+  /** Updating from the latest GitHub release (`UpdateApi`). */
+  update: boolean;
 }
 
-export const DESKTOP_CAPABILITIES: Capabilities = { export: true, windowChrome: true, folderPicker: true, launchFiles: true, fonts: true, sync: true, review: true };
+export const DESKTOP_CAPABILITIES: Capabilities = { export: true, windowChrome: true, folderPicker: true, launchFiles: true, fonts: true, sync: true, review: true, update: true };
 /** The phone: the editor and projects, nothing desktop-specific. */
-export const MOBILE_CAPABILITIES: Capabilities = { export: false, windowChrome: false, folderPicker: false, launchFiles: false, fonts: false, sync: true, review: true };
+export const MOBILE_CAPABILITIES: Capabilities = { export: false, windowChrome: false, folderPicker: false, launchFiles: false, fonts: false, sync: true, review: true, update: true };
 
 /**
  * What `Workspace` (the editor's state and logic) needs: the core, plus a few desktop extras it uses when present
@@ -390,7 +408,7 @@ export type WorkspaceApi = CoreApi &
  * The full surface the renderer talks to. On the phone the `ExportApi` / `DesktopApi` parts are inert stubs and the
  * UI checks `capabilities` before showing anything that needs them.
  */
-export type MdeditApi = CoreApi & ExportApi & DesktopApi & SyncApi & ReviewSharingApi & { capabilities: Capabilities };
+export type MdeditApi = CoreApi & ExportApi & DesktopApi & SyncApi & ReviewSharingApi & UpdateApi & { capabilities: Capabilities };
 
 declare global {
   interface Window {
