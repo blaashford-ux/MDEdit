@@ -13,6 +13,8 @@ interface Props {
   onShare?(): void;
   /** Desktop owner only: opens the dialog for connecting AI reviewers. */
   onAi?(): void;
+  /** Shows a note in the text, opening its chapter first. Resolves to a message when it can't be shown. */
+  onGoTo?(id: string): Promise<string | null>;
   /** A problem or change worth telling the user about (for example, access withdrawn). */
   notice?: string | null;
   /** Opens the composer on this selection (from the right-click menu). A new `id` is a new request. */
@@ -22,7 +24,7 @@ interface Props {
 const excerpt = (s: string, n = 90) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
 /** Comments and suggestions on the open chapter's file. */
-export function ReviewPanel({ state, me, role, onRename, onClose, onShare, onAi, notice, request }: Props) {
+export function ReviewPanel({ state, me, role, onRename, onClose, onShare, onAi, onGoTo, notice, request }: Props) {
   const [draft, setDraft] = useState<{ anchor: Anchor; oneBlock: boolean } | null>(null);
   const [kind, setKind] = useState<'comment' | 'suggestion'>('comment');
   const [body, setBody] = useState('');
@@ -160,7 +162,7 @@ export function ReviewPanel({ state, me, role, onRename, onClose, onShare, onAi,
         {visible.length === 0 && <li className="review-empty">{state.items.length ? 'No open notes.' : 'No notes on this file yet.'}</li>}
         {visible.map((i) => (
           <li key={i.id} className={`review-item s-${i.status}${state.detached.has(i.id) ? ' detached' : ''}`}>
-            <button type="button" className="review-quote" onClick={() => state.focus(i.id)} title="Show in the text">
+            <button type="button" className="review-quote" onClick={() => (onGoTo ? void onGoTo(i.id).then(setMessage) : state.focus(i.id))} title="Show in the text">
               {excerpt(i.anchor.quote)}
             </button>
             <div className="review-meta">
