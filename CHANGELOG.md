@@ -1,6 +1,6 @@
 # Changelog
 
-### Unreleased
+### 0.6.1 — 2026-10-08
 **New**
 - **Click a note to go to it.** In the Notes panel, clicking a note now scrolls to its text and highlights it, opening the chapter it is in if that is a different one. If the chapter you are leaving has unsaved changes you get the usual Save / Don't Save / Cancel question first (Cancel keeps you where you are). A note whose text has been deleted from the file says so instead of doing nothing.
 
