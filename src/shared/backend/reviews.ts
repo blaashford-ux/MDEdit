@@ -30,6 +30,13 @@ export function makeReviews(fs: FsPort) {
       return out;
     },
 
+    /** Deletes one reviewer's file. A missing file is fine. */
+    async remove(project: string, id: string): Promise<void> {
+      const clean = safeId(id);
+      if (!clean) throw new Error('A review file needs a reviewer id');
+      await fs.rm(`${dirOf(project)}/${clean}.json`, { force: true });
+    },
+
     /**
      * Writes one reviewer's file (via a temp file, so a crash can't leave half a file). Someone else may have added
      * notes to the same file since the caller read it (an AI reviewer, or the other side of a share), so a valid file is

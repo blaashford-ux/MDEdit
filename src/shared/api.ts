@@ -2,6 +2,7 @@ import type { AppDefaults } from './appDefaults';
 import type { Origin } from './export/layers';
 import type { BookDetails } from './export/model';
 import type { Progress } from './progress';
+import type { AiServerInfo } from './agent/config';
 import type { ReviewerRecord, ShareStatus, ShareSummary, SharedProject } from './review/share';
 import type { UpdateInfo, UpdateProgress } from './update';
 import type { ProjectMeta, ProjectsConfig, ProjectsSettings, ProjectSummary, RootListing } from './projects';
@@ -207,6 +208,8 @@ export interface CoreApi {
   /** Review files (comments and suggestions), one per reviewer, kept inside the project. */
   listReviews(project: string): Promise<{ id: string; text: string }[]>;
   saveReview(project: string, reviewerId: string, text: string): Promise<void>;
+  /** Removes one reviewer's whole file (all the notes they wrote). */
+  deleteReview(project: string, reviewerId: string): Promise<void>;
 
   getPrefs(): Promise<Prefs>;
   setPrefs(patch: Partial<Prefs>): void;
@@ -274,6 +277,8 @@ export interface DesktopApi {
   pickFolder(): Promise<string | null>;
   /** Shows the item in File Explorer. */
   reveal(path: string): void;
+  /** How an AI app starts MDEdit's MCP server; null when this build doesn't include it. */
+  getAiServer(): Promise<AiServerInfo | null>;
 
   /** Markdown files given on the command line (double-click / "Open with"); each is returned once. */
   takeLaunchFiles(): Promise<string[]>;
@@ -394,11 +399,13 @@ export interface Capabilities {
   review: boolean;
   /** Updating from the latest GitHub release (`UpdateApi`). */
   update: boolean;
+  /** Connecting AI reviewers (the MCP server); needs the desktop app. */
+  ai: boolean;
 }
 
-export const DESKTOP_CAPABILITIES: Capabilities = { export: true, windowChrome: true, folderPicker: true, launchFiles: true, fonts: true, sync: true, review: true, update: true };
+export const DESKTOP_CAPABILITIES: Capabilities = { export: true, windowChrome: true, folderPicker: true, launchFiles: true, fonts: true, sync: true, review: true, update: true, ai: true };
 /** The phone: the editor and projects, nothing desktop-specific. */
-export const MOBILE_CAPABILITIES: Capabilities = { export: false, windowChrome: false, folderPicker: false, launchFiles: false, fonts: false, sync: true, review: true, update: true };
+export const MOBILE_CAPABILITIES: Capabilities = { export: false, windowChrome: false, folderPicker: false, launchFiles: false, fonts: false, sync: true, review: true, update: true, ai: false };
 
 /**
  * What `Workspace` (the editor's state and logic) needs: the core, plus a few desktop extras it uses when present

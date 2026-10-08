@@ -11,6 +11,8 @@ interface Props {
   onClose(): void;
   /** Owner only: opens the sharing dialog. */
   onShare?(): void;
+  /** Desktop owner only: opens the dialog for connecting AI reviewers. */
+  onAi?(): void;
   /** A problem or change worth telling the user about (for example, access withdrawn). */
   notice?: string | null;
   /** Opens the composer on this selection (from the right-click menu). A new `id` is a new request. */
@@ -20,7 +22,7 @@ interface Props {
 const excerpt = (s: string, n = 90) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
 /** Comments and suggestions on the open chapter's file. */
-export function ReviewPanel({ state, me, role, onRename, onClose, onShare, notice, request }: Props) {
+export function ReviewPanel({ state, me, role, onRename, onClose, onShare, onAi, notice, request }: Props) {
   const [draft, setDraft] = useState<{ anchor: Anchor; oneBlock: boolean } | null>(null);
   const [kind, setKind] = useState<'comment' | 'suggestion'>('comment');
   const [body, setBody] = useState('');
@@ -29,6 +31,9 @@ export function ReviewPanel({ state, me, role, onRename, onClose, onShare, notic
   const [message, setMessage] = useState<string | null>(null);
   const [replyFor, setReplyFor] = useState<string | null>(null);
   const [replyText, setReplyText] = useState('');
+  const [who, setWho] = useState('all');
+  const [category, setCategory] = useState('all');
+  const [confirmAll, setConfirmAll] = useState(false);
 
   useEffect(() => {
     if (!request) return;
@@ -60,14 +65,30 @@ export function ReviewPanel({ state, me, role, onRename, onClose, onShare, notic
     setBody('');
   };
 
-  const visible = state.items.filter((i) => showDone || i.status === 'open');
-  const doneCount = state.items.length - state.items.filter((i) => i.status === 'open').length;
+  // Filters only appear once there is something to choose between, and fall back to "all" if their choice goes away.
+  const reviewers = [...new Map(state.items.map((i) => [i.reviewerId, i.reviewerName])).entries()];
+  const categories = [...new Set(state.items.map((i) => i.category).filter((c): c is string => !!c))].sort();
+  const whoNow = reviewers.some(([id]) => id === who) ? who : 'all';
+  const categoryNow = categories.includes(category) ? category : 'all';
+  const matching = state.items.filter((i) => (whoNow === 'all' || i.reviewerId === whoNow) && (categoryNow === 'all' || i.category === categoryNow));
+  const visible = matching.filter((i) => showDone || i.status === 'open');
+  const doneCount = matching.length - matching.filter((i) => i.status === 'open').length;
+  const applicable = role === 'owner' && whoNow !== 'all' ? matching.filter((i) => i.kind === 'suggestion' && i.status === 'open') : [];
+
+  const applyAll = async () => {
+    setConfirmAll(false);
+    let done = 0;
+    for (const i of applicable) if ((await state.accept(i.id)) === null) done += 1;
+    const left = applicable.length - done;
+    setMessage(`Applied ${done} change${done === 1 ? '' : 's'}.${left ? ` ${left} could not be applied here (in another chapter, or the text has changed).` : ''}`);
+  };
   const mine = (i: ShownItem) => role === 'owner' || i.reviewerId === me.id;
 
   return (
     <aside className="review-panel" aria-label="Comments and suggestions">
       <div className="review-head">
         <h3>Notes</h3>
+        {onAi && <button type="button" className="review-share" onClick={onAi} title="Let Claude, GPT or another AI app review your chapters">AI…</button>}
         {onShare && <button type="button" className="review-share" onClick={onShare}>Share…</button>}
         <button type="button" aria-label="Close notes" onClick={onClose}>×</button>
       </div>
@@ -105,6 +126,36 @@ export function ReviewPanel({ state, me, role, onRename, onClose, onShare, notic
         </div>
       )}
 
+      {(reviewers.length > 1 || categories.length > 0) && (
+        <div className="review-filters">
+          {reviewers.length > 1 && (
+            <select aria-label="Show notes from" value={whoNow} onChange={(e) => { setWho(e.target.value); setConfirmAll(false); }}>
+              <option value="all">Everyone</option>
+              {reviewers.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+            </select>
+          )}
+          {categories.length > 0 && (
+            <select aria-label="Show notes about" value={categoryNow} onChange={(e) => setCategory(e.target.value)}>
+              <option value="all">All topics</option>
+              {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          )}
+        </div>
+      )}
+      {applicable.length > 1 && (
+        <div className="review-bulk">
+          {confirmAll ? (
+            <>
+              <span>Change the text in {applicable.length} places?</span>
+              <button type="button" className="primary" onClick={() => void applyAll()}>Apply</button>
+              <button type="button" onClick={() => setConfirmAll(false)}>Cancel</button>
+            </>
+          ) : (
+            <button type="button" onClick={() => setConfirmAll(true)}>Accept all {applicable.length} suggestions</button>
+          )}
+        </div>
+      )}
+
       <ul className="review-list">
         {visible.length === 0 && <li className="review-empty">{state.items.length ? 'No open notes.' : 'No notes on this file yet.'}</li>}
         {visible.map((i) => (
@@ -113,7 +164,9 @@ export function ReviewPanel({ state, me, role, onRename, onClose, onShare, notic
               {excerpt(i.anchor.quote)}
             </button>
             <div className="review-meta">
+              {i.origin === 'ai' && <span className="review-ai" title="Written by an AI reviewer">AI</span>}
               <strong>{i.author}</strong> · {i.kind === 'suggestion' ? 'suggestion' : 'comment'}
+              {i.category && <span className="review-cat">{i.category}</span>}
               {i.status !== 'open' && <span className="review-status"> · {i.status}</span>}
               {state.detached.has(i.id) && <span className="review-lost"> · not in this chapter</span>}
             </div>

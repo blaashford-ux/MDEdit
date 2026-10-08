@@ -20,6 +20,9 @@
   "build": {
     "appId": "com.blaashford.mdedit",
     "productName": "MDEdit",
+    "asarUnpack": [
+      "dist-electron/mcp/**"
+    ],
     "files": [
       "dist/**",
       "dist-electron/**",

@@ -508,9 +508,9 @@ code.path { background: var(--raised); padding: 1px 6px; border-radius: 6px; }
 .layer-tag { display: inline-flex; align-items: baseline; gap: 6px; margin-left: 8px; font-size: 11px; font-weight: 400; color: var(--muted); }
 .layer-tag.own { color: var(--accent, #2b6cb0); font-weight: 600; }
 .layer-reset { font-size: 11px; padding: 0 6px; line-height: 1.5; }
-.review-list { list-style: none; margin: 0; padding: 0; }
-.review-list li { display: grid; grid-template-columns: minmax(140px, 1fr) minmax(80px, 1fr) auto auto; gap: 8px; align-items: baseline; padding: 3px 0; border-bottom: 1px solid var(--border, rgba(128, 128, 128, 0.25)); font-size: 13px; }
-.review-list .review-value { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.layer-review-list { list-style: none; margin: 0; padding: 0; }
+.layer-review-list li { display: grid; grid-template-columns: minmax(140px, 1fr) minmax(80px, 1fr) auto auto; gap: 8px; align-items: baseline; padding: 3px 0; border-bottom: 1px solid var(--border, rgba(128, 128, 128, 0.25)); font-size: 13px; }
+.layer-review-list .layer-review-value { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ---- phone layout: used when the platform has no window chrome (Android) ---- */
 .frame.mobile { height: 100dvh; position: relative; }
@@ -652,3 +652,19 @@ code.path { background: var(--raised); padding: 1px 6px; border-radius: 6px; }
 .frame.mobile .find-row .find-input { flex: 1 1 calc(100% - 36px); min-width: 0; max-width: none; } /* the box takes the first line, the options wrap below */
 .frame.mobile .find-scope { order: 5; flex: 1 1 100%; max-width: 100%; }
 .frame.mobile .find-bar button { min-height: 36px; }
+
+/* AI reviewers */
+.review-ai { display: inline-block; margin-right: 6px; padding: 0 5px; font-size: 10px; font-weight: 700; letter-spacing: 0.04em; color: var(--bg, #fff); background: var(--accent); border-radius: 4px; }
+.review-cat { margin-left: 6px; padding: 0 6px; font-size: 10px; color: var(--muted); border: 1px solid var(--faint); border-radius: 999px; }
+.review-filters { display: flex; gap: 6px; }
+.review-filters select { flex: 1; min-width: 0; padding: 4px 6px; font-size: 12px; background: var(--raised); color: var(--fg); border: 0; border-radius: 8px; }
+.review-bulk { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-size: 12px; }
+.review-bulk button { padding: 3px 10px; font-size: 12px; background: var(--raised); }
+.review-bulk .primary { background: var(--accent); }
+.ai-dialog { width: 560px; max-height: calc(100dvh - 48px); overflow: auto; }
+.ai-dialog h4 { margin: 14px 0 4px; font-size: 13px; }
+.ai-snippet { margin: 8px 0; }
+.ai-snippet-head { display: flex; align-items: baseline; gap: 8px; }
+.ai-snippet-head button { margin-left: auto; padding: 3px 10px; font-size: 12px; }
+.ai-snippet pre { margin: 4px 0 0; padding: 8px 10px; overflow: auto; max-height: 120px; font: 11px/1.4 Consolas, monospace; user-select: all; background: var(--raised); border-radius: 8px; white-space: pre-wrap; word-break: break-all; }
+.frame.mobile .ai-dialog { width: auto; }

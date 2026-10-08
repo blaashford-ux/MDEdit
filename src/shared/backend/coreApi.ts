@@ -97,6 +97,7 @@ export function createCoreApi(o: CoreApiOptions): CoreBackend {
     },
     listReviews: async (project) => reviews.list(inRoot(project, { allowRoot: true })),
     saveReview: async (project, id, text) => reviews.save(inRoot(project, { allowRoot: true }), id, text),
+    deleteReview: async (project, id) => reviews.remove(inRoot(project, { allowRoot: true }), id),
     readFile: async (p) => files.readWithStamp(inRoot(p)),
     statFile: async (p) => files.statStamp(inRoot(p)),
     async writeFile(p, content) {

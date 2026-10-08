@@ -18,6 +18,7 @@ import { installMenu } from './menu';
 import { chromeOptions, registerWindowChrome, shellColor, watchWindow } from './windowChrome';
 import { confirmDelete, confirmMarkEdited, confirmOverwrite, confirmRecover, confirmUnsaved } from './prompts';
 import { scanFolder } from './scan';
+import type { AiServerInfo } from '../src/shared/agent/config';
 import { makeReviews } from '../src/shared/backend/reviews';
 import { nodeFs } from './nodeFs';
 import { bundledFont } from '../src/shared/export/fonts';
@@ -100,6 +101,18 @@ function ensureSync(): Promise<SyncService> {
     });
   }
   return syncReady;
+}
+
+/**
+ * How an AI app launches the MCP server. The installed app runs it with itself in Node mode, so users need no Node.js;
+ * the file sits outside app.asar (see `asarUnpack`) because an outside program can't read inside the archive.
+ */
+async function aiServer(): Promise<AiServerInfo | null> {
+  const file = path.join(app.getAppPath(), 'dist-electron', 'mcp', 'mdedit-mcp.js').replace(/app\.asar(?=[\\/])/, 'app.asar.unpacked');
+  if (!(await fsp.stat(file).catch(() => null))) return null;
+  const root = path.resolve(projectsRoot());
+  const args = [file, '--root', root];
+  return app.isPackaged ? { root, command: process.execPath, args, env: { ELECTRON_RUN_AS_NODE: '1' } } : { root, command: 'node', args };
 }
 
 /** A project in the Root Folder (so the Sharing page can reach it with no folder open) or anything inside the open folder. */
@@ -211,6 +224,8 @@ function registerIpc(): void {
   handle('fs:readFile', (_e, p: string) => readWithStamp(inRoot(p)));
   const reviews = makeReviews(nodeFs);
   handle('review:list', (_e, project: string) => reviews.list(reviewPath(project)));
+  handle('review:delete', (_e, project: string, id: string) => reviews.remove(reviewPath(project), id));
+  handle('ai:server', aiServer);
   handle('review:save', (_e, project: string, id: string, text: string) => reviews.save(reviewPath(project), id, text));
   handle('fs:statFile', (_e, p: string) => statStamp(inRoot(p)));
   handle('fs:writeFile', (_e, p: string, content: string) => {

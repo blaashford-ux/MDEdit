@@ -17,6 +17,9 @@ export interface Identity {
 
 const KEY = 'mdedit.reviewer';
 
+/** How often the review files are re-read, to pick up notes written by someone or something else. */
+const POLL_MS = 4000;
+
 /** Who is writing the notes on this device. The owner's own notes use the id "owner". */
 export function loadIdentity(): Identity {
   try {
@@ -80,23 +83,44 @@ export function useReview(
   const filesRef = useRef(files);
   filesRef.current = files;
 
+  // What was last read from disk, and how many saves this app has made: a read that began before a save of ours
+  // finished would bring back the old text, so it is dropped.
+  const seen = useRef('');
+  const saves = useRef(0);
+
   useEffect(() => {
     let live = true;
     if (!project) {
       setFiles(new Map());
       return;
     }
-    void api.listReviews(project).then((list) => {
-      if (!live) return;
-      const m = new Map<string, ReviewFile>();
-      for (const { id, text } of list) {
-        const f = parseReviewFile(text);
-        if (f) m.set(id, f);
-      }
-      setFiles(m);
-    }).catch(() => undefined);
+    const load = () => {
+      const before = saves.current;
+      void api
+        .listReviews(project)
+        .then((list) => {
+          if (!live || saves.current !== before) return;
+          const signature = list.map((f) => `${f.id}\u0000${f.text}`).join('\u0001');
+          if (signature === seen.current) return;
+          seen.current = signature;
+          const m = new Map<string, ReviewFile>();
+          for (const { id, text } of list) {
+            const f = parseReviewFile(text);
+            if (f) m.set(id, f);
+          }
+          setFiles(m);
+        })
+        .catch(() => undefined);
+    };
+    seen.current = '';
+    load();
+    // Notes added from outside (an AI reviewer, or the other side of a share) show up without a restart.
+    const timer = setInterval(() => {
+      if (typeof document === 'undefined' || !document.hidden) load();
+    }, POLL_MS);
     return () => {
       live = false;
+      clearInterval(timer);
     };
   }, [api, project, tick]);
 
@@ -121,9 +145,14 @@ export function useReview(
       if (!project) return;
       const current = filesRef.current.get(reviewerId) ?? newReviewFile(project, { id: me.id, name: me.name });
       const next = change(current);
+      saves.current += 1;
       setFiles((prev) => new Map(prev).set(reviewerId, next));
       filesRef.current = new Map(filesRef.current).set(reviewerId, next);
-      await api.saveReview(project, reviewerId, serializeReviewFile(next));
+      try {
+        await api.saveReview(project, reviewerId, serializeReviewFile(next));
+      } finally {
+        saves.current += 1; // reads that started while this save was in flight are stale
+      }
     },
     [api, project, me.id, me.name]
   );

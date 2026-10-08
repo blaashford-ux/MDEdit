@@ -33,6 +33,7 @@ import { StatusBar } from './StatusBar';
 import { MobileBar } from './MobileBar';
 import { AboutDialog } from './AboutDialog';
 import { SyncDialog } from './SyncDialog';
+import { AiDialog } from './AiDialog';
 import { ReviewPanel } from './ReviewPanel';
 import { ShareDialog } from './ShareDialog';
 import { JoinDialog } from './JoinDialog';
@@ -97,6 +98,7 @@ export function App() {
   // Comments and suggestions on the open file (stored per reviewer inside the project).
   const [showReview, setShowReview] = useState(false);
   const [showShare, setShowShare] = useState(false);
+  const [showAi, setShowAi] = useState(false);
   const [textMenu, setTextMenu] = useState<{ x: number; y: number; sel: { anchor: Anchor; oneBlock: boolean } } | null>(null);
   const [noteRequest, setNoteRequest] = useState<{ id: number; kind: 'comment' | 'suggestion'; sel: { anchor: Anchor; oneBlock: boolean } } | null>(null);
   const [showJoin, setShowJoin] = useState(false);
@@ -1112,6 +1114,7 @@ export function App() {
           notice={reviewNotice}
           request={noteRequest}
           onShare={caps.review && !isReviewer ? () => setShowShare(true) : undefined}
+          onAi={caps.ai && !isReviewer ? () => setShowAi(true) : undefined}
           onRename={(name) => {
             const next = { ...me, name };
             setMe(next);
@@ -1164,6 +1167,7 @@ export function App() {
       )}
     </div>
     )}
+    {showAi && projectPath && <AiDialog project={projectPath} projectName={s.project?.meta.name ?? ''} onClose={() => setShowAi(false)} />}
     {showShare && projectPath && (
       <ShareDialog
         project={projectPath}

@@ -25,6 +25,7 @@ export const desktopOnlyStubs: ExportApi & DesktopApi = {
 
   pickFolder: async () => null,
   reveal: noop,
+  getAiServer: async () => null,
   takeLaunchFiles: async () => [],
   onLaunchFiles: never,
   setDirtyFiles: noop,
