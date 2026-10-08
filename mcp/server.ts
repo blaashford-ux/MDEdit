@@ -37,7 +37,13 @@ export function agentFromClient(clientName: string | undefined, override?: strin
 
 const project = z.string().describe('Project name, as returned by list_projects.');
 const file = z.string().describe('Path of a manuscript file inside the project, as returned by list_files, e.g. "Manuscript/Book 1.md".');
-const pass = z.enum(['developmental', 'line', 'copy']).describe('Which editing pass these notes belong to. Each pass has its own reviewer in the app.');
+const skill = z
+  .string()
+  .max(40)
+  .optional()
+  .describe(
+    'The skill or role you are working as, e.g. "Line edit", "Copy edit", "Developmental edit". Your notes are signed with it ("Claude · Line edit") and kept apart from your other notes. Leave it out if you are not following a skill: the notes are then signed with just your name.'
+  );
 
 const note = z.object({
   file,
@@ -132,20 +138,20 @@ export function createServer(o: ServerOptions): McpServer {
         `Add up to ${LIMITS.notesPerCall} comments and suggestions in one call. Each note is checked separately: valid ones are saved and appear in the author's Notes panel, ` +
         'and any that fail come back with the reason (quote not found, quote matches several places, and so on) so you can fix and resend just those. ' +
         'A suggestion must sit inside one paragraph. Notes never change the manuscript.',
-      inputSchema: { project, pass, notes: z.array(note).min(1).max(LIMITS.notesPerCall) },
+      inputSchema: { project, skill, notes: z.array(note).min(1).max(LIMITS.notesPerCall) },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
-    (a) => run((c) => addNotes(c, a.project, a.pass, a.notes))()
+    (a) => run((c) => addNotes(c, a.project, a.skill, a.notes))()
   );
 
   server.registerTool(
     'reply_to_note',
     {
       description: 'Reply in the thread of an existing note, for example to answer the author\'s reply. Does not change the note otherwise.',
-      inputSchema: { project, pass, note_id: z.string(), body: z.string() },
+      inputSchema: { project, skill, note_id: z.string(), body: z.string() },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
-    (a) => run((c) => replyToNote(c, a.project, a.pass, a.note_id, a.body))()
+    (a) => run((c) => replyToNote(c, a.project, a.skill, a.note_id, a.body))()
   );
 
   server.registerTool(

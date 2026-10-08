@@ -22,8 +22,8 @@ import { classify } from '../sync/rules';
 import { countWords } from '../words';
 import { flattenMarkdown } from './flatten';
 
-export const PASSES = { developmental: 'Developmental edit', line: 'Line edit', copy: 'Copy edit' } as const;
-export type Pass = keyof typeof PASSES;
+/** Skills MDEdit ships; anything else a skill calls itself is used as given. */
+const KNOWN_SKILLS: Record<string, string> = { developmental: 'Developmental edit', line: 'Line edit', copy: 'Copy edit' };
 
 export const LIMITS = {
   notesPerCall: 50,
@@ -56,9 +56,19 @@ const safe = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 2
 const uid = () => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`);
 const join = (a: string, b: string) => `${a.replace(/[\\/]+$/, '')}/${b}`;
 
-export function reviewerFor(ctx: AgentContext, pass: Pass): { id: string; name: string } {
-  if (!(pass in PASSES)) throw new AgentError(`pass must be one of: ${Object.keys(PASSES).join(', ')}.`);
-  return { id: `ai-${safe(ctx.agent) || 'ai'}-${pass}`, name: `${ctx.agentName} · ${PASSES[pass]}` };
+/**
+ * Who a note is signed as. With no skill it is just the AI ("Claude", file `ai-claude`); a skill adds its own tag
+ * ("Claude · Line edit", file `ai-claude-line`), so each skill's notes can be filtered or cleared on their own.
+ * "line", "line-editing" and "Line edit" all mean the shipped line-edit skill.
+ */
+export function reviewerFor(ctx: AgentContext, skill?: string): { id: string; name: string } {
+  const base = `ai-${safe(ctx.agent) || 'ai'}`;
+  const label = (skill ?? '').trim().replace(/\s+/g, ' ').slice(0, 40);
+  if (!label) return { id: base, name: ctx.agentName };
+  const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  const short = slug.replace(/-(editing|edit)$/, '');
+  const known = KNOWN_SKILLS[short];
+  return { id: `${base}-${known ? short : slug || 'skill'}`, name: `${ctx.agentName} · ${known ?? label}` };
 }
 
 // ---- finding things on disk ------------------------------------------------------------------
@@ -360,8 +370,8 @@ async function readFile(ctx: AgentContext, dir: string, id: string): Promise<Rev
 }
 
 /** Adds up to 50 notes. Each is checked on its own: the good ones are saved and the rest come back with the reason. */
-export function addNotes(ctx: AgentContext, project: string, pass: Pass, notes: NoteInput[]): Promise<NoteResult[]> {
-  const reviewer = reviewerFor(ctx, pass);
+export function addNotes(ctx: AgentContext, project: string, skill: string | undefined, notes: NoteInput[]): Promise<NoteResult[]> {
+  const reviewer = reviewerFor(ctx, skill);
   if (!Array.isArray(notes) || !notes.length) throw new AgentError('notes must be a list with at least one note.');
   if (notes.length > LIMITS.notesPerCall) throw new AgentError(`At most ${LIMITS.notesPerCall} notes per call; send the rest in another call.`);
   return serial(`${ctx.root}/${project}`, async () => {
@@ -400,8 +410,8 @@ async function findNote(ctx: AgentContext, project: string, id: string): Promise
 }
 
 /** Adds a reply to any note (for example to answer the author's reply). It changes nothing else about the note. */
-export function replyToNote(ctx: AgentContext, project: string, pass: Pass, noteId: string, body: string): Promise<{ id: string }> {
-  const reviewer = reviewerFor(ctx, pass);
+export function replyToNote(ctx: AgentContext, project: string, skill: string | undefined, noteId: string, body: string): Promise<{ id: string }> {
+  const reviewer = reviewerFor(ctx, skill);
   const text = (body ?? '').trim();
   if (!text || text.length > LIMITS.body) throw new AgentError(`A reply needs some text (up to ${LIMITS.body} characters).`);
   return serial(`${ctx.root}/${project}`, async () => {

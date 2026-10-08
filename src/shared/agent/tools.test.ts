@@ -105,7 +105,6 @@ describe('adding notes', () => {
     const [b] = await addNotes(ctx, 'Novel', 'line', [note({ quote: 'x'.repeat(601) })]);
     expect(b.ok).toBe(false);
     expect(() => addNotes(ctx, 'Novel', 'line', Array.from({ length: 51 }, () => note()))).toThrow(/At most 50/);
-    expect(() => addNotes(ctx, 'Novel', 'nonsense' as never, [note()])).toThrow(/pass must be/);
   });
 
   it('saves the good notes in a batch and reports the bad one; repeats are ignored', async () => {
@@ -116,7 +115,28 @@ describe('adding notes', () => {
     expect((again as { error: string }).error).toMatch(/already left/);
   });
 
-  it('separate passes write separate files', async () => {
+  it('signs with just the AI’s name when no skill is used, and adds the skill’s tag when one is', async () => {
+    await addNotes(ctx, 'Novel', undefined, [note({ quote: 'river' })]);
+    await addNotes(ctx, 'Novel', 'Dialogue Voice', [note({ quote: 'apples' })]);
+    await addNotes(ctx, 'Novel', 'line-editing', [note({ quote: 'pears' })]);
+    const files = await makeReviews(fs).list('/books/Novel');
+    expect(files.map((f) => f.id)).toEqual(['ai-claude-dialogue-voice', 'ai-claude-line', 'ai-claude']);
+    expect(files.map((f) => parseReviewFile(f.text)!.reviewer.name)).toEqual(['Claude · Dialogue Voice', 'Claude · Line edit', 'Claude']);
+    expect((await getNotes(ctx, 'Novel')).map((x) => x.reviewer).sort()).toEqual(['Claude', 'Claude · Dialogue Voice', 'Claude · Line edit']);
+  });
+
+  it('names reviewers from the skill, whatever the spelling', () => {
+    const name = (skill?: string) => reviewerFor(ctx, skill);
+    expect(name()).toEqual({ id: 'ai-claude', name: 'Claude' });
+    expect(name('  ')).toEqual({ id: 'ai-claude', name: 'Claude' });
+    for (const s of ['line', 'Line edit', 'line-editing', 'LINE']) expect(name(s)).toEqual({ id: 'ai-claude-line', name: 'Claude · Line edit' });
+    expect(name('copy-editing').id).toBe('ai-claude-copy');
+    expect(name('developmental edit').name).toBe('Claude · Developmental edit');
+    expect(name('Blake’s Craft Check')).toEqual({ id: 'ai-claude-blake-s-craft-check', name: 'Claude · Blake’s Craft Check' });
+    expect(name('!!!').id).toBe('ai-claude-skill');
+  });
+
+  it('separate skills write separate files', async () => {
     await addNotes(ctx, 'Novel', 'line', [note({ quote: 'apples' })]);
     await addNotes(ctx, 'Novel', 'copy', [note({ quote: 'pears' })]);
     expect((await makeReviews(fs).list('/books/Novel')).map((f) => f.id)).toEqual(['ai-claude-copy', 'ai-claude-line']);

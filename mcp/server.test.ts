@@ -39,16 +39,22 @@ describe('the MDEdit MCP server', () => {
     const { call } = await connect('claude-ai');
     expect((await call('list_projects')).json()).toEqual([{ project: 'Novel', status: 'editing' }]);
     expect((await call('read_chapter', { project: 'Novel', file: 'Book.md', chapter: 1 })).json().text).toBe('Two\nThe river ran cold.');
-    const added = await call('add_notes', { project: 'Novel', pass: 'line', notes: [{ file: 'Book.md', kind: 'suggestion', quote: 'river ran cold', replacement: 'river ran icy', category: 'word choice' }] });
+    const added = await call('add_notes', { project: 'Novel', skill: 'line', notes: [{ file: 'Book.md', kind: 'suggestion', quote: 'river ran cold', replacement: 'river ran icy', category: 'word choice' }] });
     expect(added.json()[0]).toMatchObject({ ok: true, chapter: 1 });
     const notes = (await call('get_notes', { project: 'Novel' })).json();
     expect(notes).toMatchObject([{ kind: 'suggestion', reviewer: 'Claude · Line edit', replacement: 'river ran icy' }]);
     expect(await fs.readText('/books/Novel/Book.md')).toBe(BOOK);
   });
 
+  it('signs as just the AI when add_notes is called without a skill', async () => {
+    const { call } = await connect('claude-ai');
+    await call('add_notes', { project: 'Novel', notes: [{ file: 'Book.md', kind: 'comment', quote: 'slowly', body: 'Adverb.' }] });
+    expect((await call('get_notes', { project: 'Novel' })).json()[0].reviewer).toBe('Claude');
+  });
+
   it('GPT clients get the same tools and are named GPT', async () => {
     const { call } = await connect('openai-mcp');
-    await call('add_notes', { project: 'Novel', pass: 'copy', notes: [{ file: 'Book.md', kind: 'comment', quote: 'slowly', body: 'Adverb.' }] });
+    await call('add_notes', { project: 'Novel', skill: 'copy', notes: [{ file: 'Book.md', kind: 'comment', quote: 'slowly', body: 'Adverb.' }] });
     expect((await call('get_notes', { project: 'Novel' })).json()[0].reviewer).toBe('GPT · Copy edit');
   });
 
@@ -57,7 +63,7 @@ describe('the MDEdit MCP server', () => {
     const bad = await call('read_chapter', { project: 'Nope', file: 'Book.md', chapter: 0 });
     expect(bad.isError).toBe(true);
     expect(bad.text).toMatch(/list_projects/);
-    const res = (await call('add_notes', { project: 'Novel', pass: 'line', notes: [{ file: 'Book.md', kind: 'comment', quote: 'absent', body: 'x' }] })).json();
+    const res = (await call('add_notes', { project: 'Novel', skill: 'line', notes: [{ file: 'Book.md', kind: 'comment', quote: 'absent', body: 'x' }] })).json();
     expect(res[0]).toMatchObject({ ok: false });
   });
 
