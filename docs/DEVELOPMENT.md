@@ -15,6 +15,17 @@ Google sign-in needs the app's OAuth clients: the Windows build reads the Deskto
 repository secrets. See [sync-rules.md](sync-rules.md) for how sync behaves and [RELEASING.md](RELEASING.md) for releases.
 
 
+## AI reviewers (MCP)
+`src/shared/agent/` holds the tools (read chapters, add notes), `mcp/` the MCP and REST servers, `skills/` the editing skills, and
+`electron/aiRemote.ts` the optional online access. See [AI-REVIEW.md](AI-REVIEW.md) for how it works and [the plan](milestone-9-ai-review-plan.md) for why.
+
+```
+npm run build:electron     # also builds dist-electron/mcp/mdedit-mcp.js (the server; the installer unpacks it beside app.asar)
+npm run build:skills       # after editing skills/*/SKILL.md: refreshes mcp/skills.generated.ts (a test fails if it is stale)
+node dist-electron/mcp/mdedit-mcp.js --http   # try the online door locally
+```
+Notes anchor to the editor's plain text, so `src/shared/agent/flatten.ts` must stay in step with `flatten` in `src/renderer/reviewPlugin.ts`; `src/renderer/flattenParity.test.ts` checks it against the real editor parser.
+
 ## Tests
 
 `npm test` runs everything. Some suites use external tools and skip themselves if they are missing:
