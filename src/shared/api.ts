@@ -279,6 +279,8 @@ export interface DesktopApi {
   reveal(path: string): void;
   /** How an AI app starts MDEdit's MCP server; null when this build doesn't include it. */
   getAiServer(): Promise<AiServerInfo | null>;
+  /** Writes the AI Kit (Claude extension, skills, server, settings) into Downloads, shows it, and returns the folder. */
+  exportAiKit(): Promise<string>;
 
   /** Markdown files given on the command line (double-click / "Open with"); each is returned once. */
   takeLaunchFiles(): Promise<string[]>;

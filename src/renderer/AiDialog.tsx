@@ -25,6 +25,7 @@ export function AiDialog({ project, projectName, onClose }: Props) {
   const [confirm, setConfirm] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   useEscape(onClose);
 
   const load = () => void api.listReviews(project).then((l) => setReviewers(aiReviewers(l))).catch(() => undefined);
@@ -51,8 +52,30 @@ export function AiDialog({ project, projectName, onClose }: Props) {
           It can’t change your text: you accept or reject each note. If you move your Root Folder, copy the settings again.
         </p>
 
+        {server && (
+          <div className="ai-kit">
+            <button
+              type="button"
+              className="primary"
+              disabled={saving}
+              onClick={() => {
+                setSaving(true);
+                setError(null);
+                void api
+                  .exportAiKit()
+                  .then((dir) => setNote(`Saved to ${dir}. Open README.txt there for the steps for Claude and GPT.`))
+                  .catch((e) => setError(e instanceof Error ? e.message : String(e)))
+                  .finally(() => setSaving(false));
+              }}
+            >
+              {saving ? 'Saving…' : 'Save files to Downloads'}
+            </button>
+            <span className="muted small">The Claude extension, the three editing skills, the server and instructions for GPT, in one folder with a README.</span>
+          </div>
+        )}
         {server === undefined && <p className="muted">Looking…</p>}
         {server === null && <p className="modal-error">This build of MDEdit doesn’t include the AI connection.</p>}
+        {rows.length > 0 && <h4>Or set it up by hand</h4>}
         {rows.map(([name, hint, text]) => (
           <div key={name} className="ai-snippet">
             <div className="ai-snippet-head">

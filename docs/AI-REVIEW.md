@@ -2,6 +2,19 @@
 
 MDEdit ships an MCP server so Claude, GPT and any other MCP client can read your chapters and leave **comments and suggestions** in the Notes panel, like a human reviewer. It cannot change your manuscript: you accept or reject each note in MDEdit. Design and plan: [milestone-9-ai-review-plan.md](milestone-9-ai-review-plan.md).
 
+## The AI Kit (easiest)
+In MDEdit open a project and choose **Notes → AI… → Save files to Downloads**. It writes a **MDEdit AI Kit** folder to your Downloads and shows it. Open `README.txt` there for the steps. It holds:
+
+| File | For |
+|---|---|
+| `mdedit.mcpb` | Claude Desktop: double-click, or drag into Settings → Extensions. Claude Desktop runs it with its own Node, so nothing else is installed. It asks for your projects folder (pre-filled). |
+| `skills/*.zip` | Claude Desktop and claude.ai: upload each under Settings → Capabilities → Skills. |
+| `skills/folders/` | Claude Code: copy into `~/.claude/skills`. |
+| `mdedit-mcp.js`, `connect-settings.txt` | Claude Code, Codex (GPT) and other MCP apps: ready-made settings pointing at the saved server (needs Node.js 20+). |
+| `for-gpt/*.md` | GPT apps without skills or prompts: paste into custom instructions. |
+
+Nothing extra is installed or kept up to date by MDEdit: the kit is a copy. Save it again after updating MDEdit. The server and skills ship inside the app (the server is unpacked beside `app.asar`, the skills are compiled into the app), so no files are added to the install folder.
+
 ## Connect
 In MDEdit, open a project, choose **Notes → AI…**. It shows settings ready to copy for Claude Code, Claude Desktop and Codex (GPT), and lists the notes each AI has left, with a button to delete all of one reviewer's notes. In the installed app the server runs on MDEdit itself, so Node.js isn't needed. New notes appear in the Notes panel within a few seconds.
 

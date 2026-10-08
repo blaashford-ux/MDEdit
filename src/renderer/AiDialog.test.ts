@@ -15,6 +15,7 @@ const reviewFile = (id: string, name: string, n: number) =>
 
 let host: HTMLDivElement;
 let files: { id: string; text: string }[];
+const exportAiKit = vi.fn(async () => 'C:\\Users\\me\\Downloads\\MDEdit AI Kit');
 const deleteReview = vi.fn(async (_p: string, id: string) => {
   files = files.filter((f) => f.id !== id);
 });
@@ -30,6 +31,7 @@ beforeEach(() => {
     getAiServer: async () => ({ root: 'C:\\Users\\me\\MDEdit', command: 'C:\\Program Files\\MDEdit\\MDEdit.exe', args: ['C:\\x\\mdedit-mcp.js', '--root', 'C:\\Users\\me\\MDEdit'], env: { ELECTRON_RUN_AS_NODE: '1' } }),
     listReviews: async () => files,
     deleteReview,
+    exportAiKit,
   };
 });
 afterEach(() => host.remove());
@@ -57,6 +59,17 @@ describe('AiDialog', () => {
     await settle();
     expect(deleteReview).toHaveBeenCalledWith('/p', 'ai-claude-line');
     expect(host.textContent).toContain('None yet.');
+    await act(async () => root.unmount());
+  });
+
+  it('saves the AI Kit to Downloads and says where', async () => {
+    const root = createRoot(host);
+    await act(async () => root.render(createElement(AiDialog, { project: '/p', projectName: 'P', onClose: () => undefined })));
+    await settle();
+    await act(async () => button(/Save files to Downloads/).click());
+    await settle();
+    expect(exportAiKit).toHaveBeenCalledOnce();
+    expect(host.textContent).toContain('Saved to C:\\Users\\me\\Downloads\\MDEdit AI Kit');
     await act(async () => root.unmount());
   });
 

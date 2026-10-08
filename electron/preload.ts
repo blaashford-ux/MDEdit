@@ -39,6 +39,7 @@ const api: MdeditApi = {
   saveReview: (project, id, text) => ipcRenderer.invoke('review:save', project, id, text),
   deleteReview: (project, id) => ipcRenderer.invoke('review:delete', project, id),
   getAiServer: () => ipcRenderer.invoke('ai:server'),
+  exportAiKit: () => ipcRenderer.invoke('ai:exportKit'),
   statFile: (p) => ipcRenderer.invoke('fs:statFile', p),
   writeFile: (p, content) => ipcRenderer.invoke('fs:writeFile', p, content),
   createFile: (dir, name, content) => ipcRenderer.invoke('fs:createFile', dir, name, content),

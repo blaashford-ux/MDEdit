@@ -668,3 +668,5 @@ code.path { background: var(--raised); padding: 1px 6px; border-radius: 6px; }
 .ai-snippet-head button { margin-left: auto; padding: 3px 10px; font-size: 12px; }
 .ai-snippet pre { margin: 4px 0 0; padding: 8px 10px; overflow: auto; max-height: 120px; font: 11px/1.4 Consolas, monospace; user-select: all; background: var(--raised); border-radius: 8px; white-space: pre-wrap; word-break: break-all; }
 .frame.mobile .ai-dialog { width: auto; }
+
+.ai-kit { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin: 10px 0 4px; }

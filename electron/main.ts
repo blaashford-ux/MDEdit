@@ -19,6 +19,8 @@ import { chromeOptions, registerWindowChrome, shellColor, watchWindow } from './
 import { confirmDelete, confirmMarkEdited, confirmOverwrite, confirmRecover, confirmUnsaved } from './prompts';
 import { scanFolder } from './scan';
 import type { AiServerInfo } from '../src/shared/agent/config';
+import { buildKit, KIT_FOLDER } from '../src/shared/agent/kit';
+import { SKILLS } from '../mcp/skills.generated';
 import { makeReviews } from '../src/shared/backend/reviews';
 import { nodeFs } from './nodeFs';
 import { bundledFont } from '../src/shared/export/fonts';
@@ -113,6 +115,27 @@ async function aiServer(): Promise<AiServerInfo | null> {
   const root = path.resolve(projectsRoot());
   const args = [file, '--root', root];
   return app.isPackaged ? { root, command: process.execPath, args, env: { ELECTRON_RUN_AS_NODE: '1' } } : { root, command: 'node', args };
+}
+
+/** Saves the AI Kit into the user's Downloads folder (replacing an earlier copy of the same files) and shows it. */
+async function exportAiKit(): Promise<string> {
+  const info = await aiServer();
+  if (!info) throw new Error('This build of MDEdit doesn’t include the AI connection.');
+  const dest = path.join(app.getPath('downloads'), KIT_FOLDER);
+  const files = buildKit({
+    skills: SKILLS,
+    server: await fsp.readFile(info.args[0]),
+    version: app.getVersion(),
+    root: info.root,
+    serverPath: path.join(dest, 'mdedit-mcp.js'),
+  });
+  for (const f of files) {
+    const target = path.join(dest, ...f.path.split('/'));
+    await fsp.mkdir(path.dirname(target), { recursive: true });
+    await fsp.writeFile(target, f.data);
+  }
+  shell.showItemInFolder(path.join(dest, 'README.txt'));
+  return dest;
 }
 
 /** A project in the Root Folder (so the Sharing page can reach it with no folder open) or anything inside the open folder. */
@@ -226,6 +249,7 @@ function registerIpc(): void {
   handle('review:list', (_e, project: string) => reviews.list(reviewPath(project)));
   handle('review:delete', (_e, project: string, id: string) => reviews.remove(reviewPath(project), id));
   handle('ai:server', aiServer);
+  handle('ai:exportKit', exportAiKit);
   handle('review:save', (_e, project: string, id: string, text: string) => reviews.save(reviewPath(project), id, text));
   handle('fs:statFile', (_e, p: string) => statStamp(inRoot(p)));
   handle('fs:writeFile', (_e, p: string, content: string) => {

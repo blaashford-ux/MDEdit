@@ -220,6 +220,7 @@ export class FakeApi implements MdeditApi {
   deleteReview = async (project: string, id: string) => {
     this.reviews.delete(`${project}|${id}`);
   };
+  exportAiKit = async () => '/Downloads/MDEdit AI Kit';
   getAiServer = async () => ({ root: '/root', command: 'node', args: ['/x/mdedit-mcp.js'] });
   statFile = async (p: string) => this.stampOf(p);
   writeFile = async (p: string, content: string) => {
