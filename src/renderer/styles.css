@@ -670,3 +670,12 @@ code.path { background: var(--raised); padding: 1px 6px; border-radius: 6px; }
 .frame.mobile .ai-dialog { width: auto; }
 
 .ai-kit { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin: 10px 0 4px; }
+
+.ai-remote { margin: 12px 0 0; padding: 8px 10px; background: var(--raised); border-radius: 10px; }
+.ai-remote summary { cursor: pointer; font-weight: 600; font-size: 13px; }
+.ai-remote-row { display: flex; align-items: center; gap: 10px; margin: 8px 0; }
+.ai-on { color: var(--accent); font-weight: 600; }
+.ai-remote-field { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: center; margin: 6px 0; }
+.ai-remote-field .muted { grid-column: 1 / -1; }
+.ai-remote-field code { overflow: hidden; text-overflow: ellipsis; user-select: all; font: 11px Consolas, monospace; }
+.ai-remote-field button, .ai-remote > button { padding: 3px 10px; font-size: 12px; }

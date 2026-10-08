@@ -36,12 +36,30 @@ Use the full path to `mdedit-mcp.js` below.
 | Codex CLI | In `~/.codex/config.toml`: `[mcp_servers.mdedit]`, `command = "node"`, `args = ["/path/to/mdedit-mcp.js"]` |
 | OpenAI Agents SDK | `MCPServerStdio(params={"command": "node", "args": ["/path/to/mdedit-mcp.js"]})` |
 
-The ChatGPT app and claude.ai on the web can only reach servers on the internet, not a program on your PC; that needs the HTTP option planned for phase 5.
+The ChatGPT app and claude.ai on the web can only reach servers on the internet, not a program on your PC; for those see **Online apps** below.
 
 ## Tools
 `list_projects`, `list_files`, `list_chapters`, `read_chapter`, `search_text` (find a name, term or spelling across the book), `get_notes`, `add_notes` (up to 50 at a time), `reply_to_note`, `withdraw_note`.
 
 Quotes in `add_notes` are matched against the plain text `read_chapter` returns (Markdown marks removed, one paragraph per line), which is the same text MDEdit anchors notes to. A quote that is missing, or that matches more than one place, is rejected with the reason so the model can fix it. Suggestions must stay inside one paragraph.
+
+## Online apps (ChatGPT, Custom GPTs): advanced, optional
+Off by default. In **Notes → AI… → Online apps** choose **Turn on**. MDEdit then listens on `127.0.0.1` (this PC only) and every request needs the access token shown there (also `Make a new token` to lock out the old one). From the command line: `node mdedit-mcp.js --http [--port 47831] [--token …]`.
+
+| Address | What |
+|---|---|
+| `/mcp` | MCP over HTTP, for apps that take an MCP server URL |
+| `/api/...` | The same tools as REST |
+| `/openapi.json` | Description of the REST API for a Custom GPT's Actions (open, so it can be imported; it holds no data) |
+| `/health` | `{"ok":true}` |
+
+REST: `GET /api/projects`, `/api/projects/{project}/files`, `/chapters?file=`, `/chapter?file=&chapter=`, `/search?query=`, `/notes`; `POST /api/projects/{project}/notes` with `{ "skill": "Line edit", "notes": [...] }`; `POST .../notes/{id}/replies`; `DELETE .../notes/{id}`. REST callers are named **GPT** unless the `x-mdedit-agent` header (or `--agent`) says otherwise.
+
+**To use it from an online app you must make it reachable from the internet yourself.** For example, run `cloudflared tunnel --url http://127.0.0.1:47831` and use the address it prints. Then:
+- **Custom GPT:** Actions → import from URL `https://<address>/openapi.json` → Authentication: API Key, Bearer, paste the token. Paste the text of a `for-gpt/*.md` file into the GPT's instructions.
+- **ChatGPT connector or other MCP apps:** use `https://<address>/mcp`. The app must be able to send a bearer token; if it offers only "no authentication" or sign-in, don't expose this to it.
+
+**Think before turning it on.** Anyone who has both the public address and the token can read your chapters and add notes (never edit text). The token is long and random and requests without it get 401, but turn it off when you aren't using it, don't share the token, and replace it if it leaks. Only the file `ai-remote.json` in the app's data folder holds it. It goes through a public tunnel, so your chapters pass through whatever service you pick. These steps and the menus of those apps are from memory and I haven't tried them against the live services.
 
 ## The editing skills
 Three skills in `skills/` run a full pass and leave the results as notes. They are not tied to a genre: the author's style sheet and notes in the project set the standard, and they look for those first.

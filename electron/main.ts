@@ -20,6 +20,7 @@ import { confirmDelete, confirmMarkEdited, confirmOverwrite, confirmRecover, con
 import { scanFolder } from './scan';
 import type { AiServerInfo } from '../src/shared/agent/config';
 import { buildKit, KIT_FOLDER } from '../src/shared/agent/kit';
+import { AiRemote } from './aiRemote';
 import { SKILLS } from '../mcp/skills.generated';
 import { makeReviews } from '../src/shared/backend/reviews';
 import { nodeFs } from './nodeFs';
@@ -37,6 +38,8 @@ import { createReviewHost } from '../src/shared/review/host';
 import type { ReviewSharingApi } from '../src/shared/api';
 
 const settings = new SettingsStore(path.join(app.getPath('userData'), 'settings.json'));
+/** The optional online door for AI apps (off until the user turns it on). */
+const aiRemote = new AiRemote({ file: path.join(app.getPath('userData'), 'ai-remote.json'), fs: nodeFs, root: () => projectsRoot(), version: app.getVersion() });
 let drafts: DraftStore;
 let mainWindow: BrowserWindow | null = null;
 let smokeMode = false;
@@ -250,6 +253,9 @@ function registerIpc(): void {
   handle('review:delete', (_e, project: string, id: string) => reviews.remove(reviewPath(project), id));
   handle('ai:server', aiServer);
   handle('ai:exportKit', exportAiKit);
+  handle('ai:remote:get', () => aiRemote.status());
+  handle('ai:remote:set', (_e, enabled: boolean) => aiRemote.setEnabled(enabled === true));
+  handle('ai:remote:reset', () => aiRemote.resetToken());
   handle('review:save', (_e, project: string, id: string, text: string) => reviews.save(reviewPath(project), id, text));
   handle('fs:statFile', (_e, p: string) => statStamp(inRoot(p)));
   handle('fs:writeFile', (_e, p: string, content: string) => {
@@ -604,6 +610,8 @@ if (!firstInstance) {
     nativeTheme.themeSource = settings.get().theme ?? 'system';
 
     registerIpc();
+    void aiRemote.load(); // comes back up only if the user left it on
+    app.on('before-quit', () => void aiRemote.stop());
     registerWindowChrome(() => mainWindow);
     installMenu({ get: () => settings.get().theme ?? 'system', set: setTheme });
     createWindow();

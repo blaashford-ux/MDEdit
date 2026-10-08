@@ -2,7 +2,7 @@ import type { AppDefaults } from './appDefaults';
 import type { Origin } from './export/layers';
 import type { BookDetails } from './export/model';
 import type { Progress } from './progress';
-import type { AiServerInfo } from './agent/config';
+import type { AiRemoteStatus, AiServerInfo } from './agent/config';
 import type { ReviewerRecord, ShareStatus, ShareSummary, SharedProject } from './review/share';
 import type { UpdateInfo, UpdateProgress } from './update';
 import type { ProjectMeta, ProjectsConfig, ProjectsSettings, ProjectSummary, RootListing } from './projects';
@@ -281,6 +281,11 @@ export interface DesktopApi {
   getAiServer(): Promise<AiServerInfo | null>;
   /** Writes the AI Kit (Claude extension, skills, server, settings) into Downloads, shows it, and returns the folder. */
   exportAiKit(): Promise<string>;
+  /** Online access for apps that can't run a program on this PC (ChatGPT, Custom GPTs). Off until the user turns it on. */
+  getAiRemote(): Promise<AiRemoteStatus>;
+  setAiRemote(enabled: boolean): Promise<AiRemoteStatus>;
+  /** Replaces the access token, so any app using the old one is locked out. */
+  resetAiRemoteToken(): Promise<AiRemoteStatus>;
 
   /** Markdown files given on the command line (double-click / "Open with"); each is returned once. */
   takeLaunchFiles(): Promise<string[]>;

@@ -50,3 +50,18 @@ export function aiReviewers(files: { id: string; text: string }[]): AiReviewerSu
   }
   return out;
 }
+
+/** The online-access switch, as the "Connect AI" dialog shows it. */
+export interface AiRemoteStatus {
+  /** The user turned it on. */
+  enabled: boolean;
+  /** The server is listening now (it may not be, if the port was taken). */
+  running: boolean;
+  port: number;
+  /** The secret every request must carry. */
+  token: string;
+  mcpUrl: string;
+  apiUrl: string;
+  openApiUrl: string;
+  error: string | null;
+}

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { aiConfigSnippets, aiReviewers, type AiReviewerSummary, type AiServerInfo } from '../shared/agent/config';
+import { aiConfigSnippets, aiReviewers, type AiRemoteStatus, type AiReviewerSummary, type AiServerInfo } from '../shared/agent/config';
 import { useEscape } from './useEscape';
 
 interface Props {
@@ -26,11 +26,13 @@ export function AiDialog({ project, projectName, onClose }: Props) {
   const [note, setNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [remote, setRemote] = useState<AiRemoteStatus | null>(null);
   useEscape(onClose);
 
   const load = () => void api.listReviews(project).then((l) => setReviewers(aiReviewers(l))).catch(() => undefined);
   useEffect(() => {
     void api.getAiServer().then(setServer).catch(() => setServer(null));
+    void api.getAiRemote().then(setRemote).catch(() => undefined);
     load();
   }, [project]);
 
@@ -87,6 +89,41 @@ export function AiDialog({ project, projectName, onClose }: Props) {
           </div>
         ))}
         {note && <div className="share-note" role="status">{note}</div>}
+
+        {remote && (
+          <details className="ai-remote">
+            <summary>Online apps (ChatGPT, Custom GPTs) — advanced</summary>
+            <p className="modal-hint">
+              These apps run on the internet, so they can’t start a program on your PC. Turn this on and MDEdit listens on this PC only, and every request needs the access token below.
+              To let an online app reach it you must also make it available on the internet yourself, for example with a tunnel such as <code>cloudflared tunnel --url http://127.0.0.1:{remote.port}</code>.
+              Anyone with the tunnel address <strong>and</strong> the token can read your chapters and add notes, so keep the token private and turn this off when you aren’t using it.
+              ChatGPT’s connector settings must allow a bearer token; if an app only offers “no authentication” or sign-in, don’t expose this to it.
+            </p>
+            <div className="ai-remote-row">
+              <button
+                type="button"
+                className={remote.enabled ? '' : 'primary'}
+                onClick={() => void api.setAiRemote(!remote.enabled).then(setRemote, (e) => setError(e instanceof Error ? e.message : String(e)))}
+              >
+                {remote.enabled ? 'Turn off' : 'Turn on'}
+              </button>
+              <span className={remote.running ? 'ai-on' : 'muted'}>{remote.running ? 'On: listening on this PC' : 'Off'}</span>
+            </div>
+            {remote.error && <div className="modal-error" role="alert">{remote.error}</div>}
+            {remote.enabled && (
+              <>
+                {([['MCP address', remote.mcpUrl], ['REST address', remote.apiUrl], ['API description (for Custom GPT Actions)', remote.openApiUrl], ['Access token', remote.token]] as const).map(([label, value]) => (
+                  <div key={label} className="ai-remote-field">
+                    <span className="muted small">{label}</span>
+                    <code>{value}</code>
+                    <button type="button" onClick={() => void copy(value).then((ok) => setNote(ok ? `${label} copied.` : 'Couldn’t copy to the clipboard.'))}>Copy</button>
+                  </div>
+                ))}
+                <button type="button" onClick={() => void api.resetAiRemoteToken().then(setRemote, (e) => setError(e instanceof Error ? e.message : String(e)))}>Make a new token (locks out the old one)</button>
+              </>
+            )}
+          </details>
+        )}
 
         <h4>Notes from AI in “{projectName}”</h4>
         <ul className="share-list">

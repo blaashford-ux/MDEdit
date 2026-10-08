@@ -16,11 +16,15 @@ const reviewFile = (id: string, name: string, n: number) =>
 let host: HTMLDivElement;
 let files: { id: string; text: string }[];
 const exportAiKit = vi.fn(async () => 'C:\\Users\\me\\Downloads\\MDEdit AI Kit');
+let remote = { enabled: false, running: false, port: 47831, token: 'tok-0123456789abcdefghij', mcpUrl: 'http://127.0.0.1:47831/mcp', apiUrl: 'http://127.0.0.1:47831/api', openApiUrl: 'http://127.0.0.1:47831/openapi.json', error: null as string | null };
+const setAiRemote = vi.fn(async (enabled: boolean) => (remote = { ...remote, enabled, running: enabled }));
+const resetAiRemoteToken = vi.fn(async () => (remote = { ...remote, token: 'fresh-0123456789abcdefghij' }));
 const deleteReview = vi.fn(async (_p: string, id: string) => {
   files = files.filter((f) => f.id !== id);
 });
 
 beforeEach(() => {
+  remote = { ...remote, enabled: false, running: false, token: 'tok-0123456789abcdefghij' };
   host = document.createElement('div');
   document.body.appendChild(host);
   files = [
@@ -32,6 +36,9 @@ beforeEach(() => {
     listReviews: async () => files,
     deleteReview,
     exportAiKit,
+    getAiRemote: async () => remote,
+    setAiRemote,
+    resetAiRemoteToken,
   };
 });
 afterEach(() => host.remove());
@@ -70,6 +77,32 @@ describe('AiDialog', () => {
     await settle();
     expect(exportAiKit).toHaveBeenCalledOnce();
     expect(host.textContent).toContain('Saved to C:\\Users\\me\\Downloads\\MDEdit AI Kit');
+    await act(async () => root.unmount());
+  });
+
+  it('keeps online access off until turned on, then shows the addresses and token, and can replace the token', async () => {
+    const root = createRoot(host);
+    await act(async () => root.render(createElement(AiDialog, { project: '/p', projectName: 'P', onClose: () => undefined })));
+    await settle();
+    expect(host.textContent).toContain('Online apps');
+    expect(host.textContent).not.toContain('tok-0123456789abcdefghij'); // the token is not shown while it's off
+    expect(host.textContent).toContain('Anyone with the tunnel address and the token'); // the risk is explained up front
+
+    await act(async () => button(/^Turn on$/).click());
+    await settle();
+    expect(setAiRemote).toHaveBeenCalledWith(true);
+    expect(host.textContent).toContain('http://127.0.0.1:47831/openapi.json');
+    expect(host.textContent).toContain('tok-0123456789abcdefghij');
+
+    await act(async () => button(/Make a new token/).click());
+    await settle();
+    expect(resetAiRemoteToken).toHaveBeenCalled();
+    expect(host.textContent).toContain('fresh-0123456789abcdefghij');
+    expect(host.textContent).not.toContain('tok-0123456789abcdefghij');
+
+    await act(async () => button(/^Turn off$/).click());
+    await settle();
+    expect(setAiRemote).toHaveBeenLastCalledWith(false);
     await act(async () => root.unmount());
   });
 
