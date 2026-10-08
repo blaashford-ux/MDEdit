@@ -217,6 +217,15 @@ export class FakeApi implements MdeditApi {
   saveReview = async (project: string, id: string, text: string) => {
     this.reviews.set(`${project}|${id}`, text);
   };
+  deleteReview = async (project: string, id: string) => {
+    this.reviews.delete(`${project}|${id}`);
+  };
+  exportAiKit = async () => '/Downloads/MDEdit AI Kit';
+  private remote = { enabled: false, running: false, port: 47831, token: 'fake-token-0123456789abcdef', mcpUrl: 'http://127.0.0.1:47831/mcp', apiUrl: 'http://127.0.0.1:47831/api', openApiUrl: 'http://127.0.0.1:47831/openapi.json', error: null as string | null };
+  getAiRemote = async () => ({ ...this.remote });
+  setAiRemote = async (enabled: boolean) => ({ ...(this.remote = { ...this.remote, enabled, running: enabled }) });
+  resetAiRemoteToken = async () => ({ ...(this.remote = { ...this.remote, token: 'new-token-0123456789abcdefgh' }) });
+  getAiServer = async () => ({ root: '/root', command: 'node', args: ['/x/mdedit-mcp.js'] });
   statFile = async (p: string) => this.stampOf(p);
   writeFile = async (p: string, content: string) => {
     this.writes.push(p);

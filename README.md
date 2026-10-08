@@ -24,6 +24,20 @@ Sign in once on each device and MDEdit keeps your projects in an `MDEdit` folder
 ## Review with others
 Select text (or right-click it; press and hold on the phone) and choose **Add comment…** or **Suggest a change…**. The **Notes** panel lists them, and accepting a suggestion edits your chapter. To get feedback from other people, open Notes → **Share…** and create a link for each reviewer. They open it under **Projects → Shared with me** in their own MDEdit, read your latest text and add their own notes; you see everyone's together, and they never see each other's. **Projects → Sharing** lists everything you've shared and lets you manage each project's links; copy a link on its own or a short invitation with a download link for MDEdit. Sharing uses Google Drive and needs sync set up on both sides.
 
+## Review with AI
+Let Claude, GPT or another AI app read your chapters and leave **comments and suggestions** in the same Notes panel, as a reviewer. The AI can never change your text: you accept or reject each note, and **Accept all** applies one reviewer's suggestions after a confirmation. AI notes carry an **AI** badge and a topic label, can be filtered by who wrote them, and appear within a few seconds. They stay on the PC they were written on.
+
+1. Open a project, choose **Notes → AI…**, then **Save files to Downloads**. You get a **MDEdit AI Kit** folder with a README.
+2. **Claude Desktop:** double-click `mdedit.mcpb` to install the extension and upload the three skill zips under Settings → Capabilities → Skills. **Claude Code, Codex (GPT) and other apps** that run MCP servers: use the ready-made settings in the kit.
+3. Ask for an edit: *"Do a line edit of the chapters in my project The Lost King."*
+
+Three editing skills are included, and none is tied to a genre; they follow your style sheet and notes in the project:
+- **Developmental edit** — comments on structure, pacing, stakes, continuity and character.
+- **Line edit** — one-click suggestions for sentence-level fixes, plus comments on patterns and on what works.
+- **Copy edit** — exact corrections for spelling, grammar, punctuation and consistency, with repeated patterns grouped.
+
+Notes are signed with the AI and the skill ("Claude · Line edit"), or just "Claude" when no skill is used. A skill's notes can be removed in one go from **Notes → AI…**. The ChatGPT app and claude.ai on the web can't reach a program on your PC; **Notes → AI… → Online apps** can open a token-protected door for them, if you also set up a tunnel (see [docs/AI-REVIEW.md](docs/AI-REVIEW.md) for the risks). On Windows, MDEdit runs the connection itself, so Node.js isn't needed. The phone app doesn't have this.
+
 ## Export for KDP
 1. Right-click a `.md` file and choose **Mark for Export**. Your manuscript is never modified; the book's details are saved beside it.
 2. Fill in **Book Details**: title, subtitle and author; the copyright page; dedication; epigraph; and back matter (Continue the Story, Also by the author with a blurb for each book, About the Author, and a custom page). Only links you type are ever added.

@@ -25,6 +25,19 @@ export const desktopOnlyStubs: ExportApi & DesktopApi = {
 
   pickFolder: async () => null,
   reveal: noop,
+  getAiServer: async () => null,
+  exportAiKit: async () => {
+    throw new Error('Not available on the phone.');
+  },
+  getAiRemote: async () => {
+    throw new Error('Not available on the phone.');
+  },
+  setAiRemote: async () => {
+    throw new Error('Not available on the phone.');
+  },
+  resetAiRemoteToken: async () => {
+    throw new Error('Not available on the phone.');
+  },
   takeLaunchFiles: async () => [],
   onLaunchFiles: never,
   setDirtyFiles: noop,

@@ -1,5 +1,19 @@
 # Changelog
 
+### 0.6.0 — 2026-10-08
+**New**
+- **Review with AI.** Claude, GPT and other AI apps can read your chapters and leave comments and suggestions in the Notes panel, signed with the AI's name. They can't change your text. Notes carry an **AI** badge and a topic label; when more than one person or AI has written notes you can filter by who and by topic, and with one reviewer chosen **Accept all N suggestions** applies theirs after a confirmation. Notes written outside the app appear within a few seconds, with no restart.
+- **Notes → AI…** connects an AI app. **Save files to Downloads** writes a **MDEdit AI Kit** folder: a Claude Desktop extension (`mdedit.mcpb`), the editing skills as upload-ready zips and folders, the server with ready-made settings for Claude Code and Codex, instructions to paste into GPT apps, and a README. The dialog also lists each AI reviewer's notes, with **Delete all…** for one reviewer. In the installed app the connection runs on MDEdit itself, so Node.js isn't needed.
+- **Three editing skills,** not tied to a genre: **Developmental edit** (comments on structure, pacing, stakes, continuity), **Line edit** (suggestions for sentences, comments on patterns and strengths) and **Copy edit** (exact corrections, grouped by pattern, with a running style sheet). They follow the author's style sheet and notes. Notes are signed "Claude · Line edit", or just "Claude" with no skill. The same instructions are offered as MCP prompts for clients without skills.
+- **The connection** (an MCP server) can read chapters one at a time as plain text, search the whole book for a name or term, and add, reply to, and withdraw its own notes. A note whose quote can't be found, or matches several places, is rejected with the reason so the AI can correct it.
+- **Online apps (advanced, off by default).** For apps that can't run a program on your PC (the ChatGPT app, Custom GPTs): **Notes → AI… → Online apps** listens on this PC only and answers only requests carrying a long random token, as MCP over HTTP and as a REST API with an OpenAPI description for a Custom GPT's Actions. Making it reachable from the internet is up to you (for example a tunnel); the dialog explains the risk. The token can be replaced at any time.
+
+**Changed**
+- Saving a reviewer's notes now merges with what is already on disk, so accepting or rejecting a note can no longer erase notes added in the meantime by an AI or the other side of a share.
+
+**Fixed**
+- Note cards in the Notes panel could be laid out sideways, because the export-settings list used the same style name.
+
 ### 0.5.0 — 2026-10-07
 **New**
 - **Comments and suggestions.** Select text, or right-click it (press and hold on the phone), and choose **Add comment…** or **Suggest a change…**; with nothing selected the note attaches to the paragraph. The **Notes** button on each chapter opens a panel to reply, resolve, reject, accept (a suggestion edits the chapter) and delete. Notes are highlighted in the text and follow it as you edit; a note whose text was deleted stays in the list, marked *not in this chapter*. They are stored one file per reviewer under `.mdedit/review`.

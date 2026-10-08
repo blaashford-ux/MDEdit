@@ -18,6 +18,10 @@ import { installMenu } from './menu';
 import { chromeOptions, registerWindowChrome, shellColor, watchWindow } from './windowChrome';
 import { confirmDelete, confirmMarkEdited, confirmOverwrite, confirmRecover, confirmUnsaved } from './prompts';
 import { scanFolder } from './scan';
+import type { AiServerInfo } from '../src/shared/agent/config';
+import { buildKit, KIT_FOLDER } from '../src/shared/agent/kit';
+import { AiRemote } from './aiRemote';
+import { SKILLS } from '../mcp/skills.generated';
 import { makeReviews } from '../src/shared/backend/reviews';
 import { nodeFs } from './nodeFs';
 import { bundledFont } from '../src/shared/export/fonts';
@@ -34,6 +38,8 @@ import { createReviewHost } from '../src/shared/review/host';
 import type { ReviewSharingApi } from '../src/shared/api';
 
 const settings = new SettingsStore(path.join(app.getPath('userData'), 'settings.json'));
+/** The optional online door for AI apps (off until the user turns it on). */
+const aiRemote = new AiRemote({ file: path.join(app.getPath('userData'), 'ai-remote.json'), fs: nodeFs, root: () => projectsRoot(), version: app.getVersion() });
 let drafts: DraftStore;
 let mainWindow: BrowserWindow | null = null;
 let smokeMode = false;
@@ -100,6 +106,39 @@ function ensureSync(): Promise<SyncService> {
     });
   }
   return syncReady;
+}
+
+/**
+ * How an AI app launches the MCP server. The installed app runs it with itself in Node mode, so users need no Node.js;
+ * the file sits outside app.asar (see `asarUnpack`) because an outside program can't read inside the archive.
+ */
+async function aiServer(): Promise<AiServerInfo | null> {
+  const file = path.join(app.getAppPath(), 'dist-electron', 'mcp', 'mdedit-mcp.js').replace(/app\.asar(?=[\\/])/, 'app.asar.unpacked');
+  if (!(await fsp.stat(file).catch(() => null))) return null;
+  const root = path.resolve(projectsRoot());
+  const args = [file, '--root', root];
+  return app.isPackaged ? { root, command: process.execPath, args, env: { ELECTRON_RUN_AS_NODE: '1' } } : { root, command: 'node', args };
+}
+
+/** Saves the AI Kit into the user's Downloads folder (replacing an earlier copy of the same files) and shows it. */
+async function exportAiKit(): Promise<string> {
+  const info = await aiServer();
+  if (!info) throw new Error('This build of MDEdit doesn’t include the AI connection.');
+  const dest = path.join(app.getPath('downloads'), KIT_FOLDER);
+  const files = buildKit({
+    skills: SKILLS,
+    server: await fsp.readFile(info.args[0]),
+    version: app.getVersion(),
+    root: info.root,
+    serverPath: path.join(dest, 'mdedit-mcp.js'),
+  });
+  for (const f of files) {
+    const target = path.join(dest, ...f.path.split('/'));
+    await fsp.mkdir(path.dirname(target), { recursive: true });
+    await fsp.writeFile(target, f.data);
+  }
+  shell.showItemInFolder(path.join(dest, 'README.txt'));
+  return dest;
 }
 
 /** A project in the Root Folder (so the Sharing page can reach it with no folder open) or anything inside the open folder. */
@@ -211,6 +250,12 @@ function registerIpc(): void {
   handle('fs:readFile', (_e, p: string) => readWithStamp(inRoot(p)));
   const reviews = makeReviews(nodeFs);
   handle('review:list', (_e, project: string) => reviews.list(reviewPath(project)));
+  handle('review:delete', (_e, project: string, id: string) => reviews.remove(reviewPath(project), id));
+  handle('ai:server', aiServer);
+  handle('ai:exportKit', exportAiKit);
+  handle('ai:remote:get', () => aiRemote.status());
+  handle('ai:remote:set', (_e, enabled: boolean) => aiRemote.setEnabled(enabled === true));
+  handle('ai:remote:reset', () => aiRemote.resetToken());
   handle('review:save', (_e, project: string, id: string, text: string) => reviews.save(reviewPath(project), id, text));
   handle('fs:statFile', (_e, p: string) => statStamp(inRoot(p)));
   handle('fs:writeFile', (_e, p: string, content: string) => {
@@ -565,6 +610,8 @@ if (!firstInstance) {
     nativeTheme.themeSource = settings.get().theme ?? 'system';
 
     registerIpc();
+    void aiRemote.load(); // comes back up only if the user left it on
+    app.on('before-quit', () => void aiRemote.stop());
     registerWindowChrome(() => mainWindow);
     installMenu({ get: () => settings.get().theme ?? 'system', set: setTheme });
     createWindow();

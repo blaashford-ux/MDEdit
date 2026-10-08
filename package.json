@@ -1,12 +1,14 @@
 {
   "name": "mdedit",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Folder-based Markdown editor that splits files into chapters by Heading 1",
   "main": "dist-electron/electron/main.js",
   "scripts": {
     "dev": "npm run build:electron && concurrently -k \"vite\" \"wait-on http://localhost:5173 && electron .\"",
     "build:electron": "npm run build:assets && node scripts/build-electron.mjs",
     "build:renderer": "vite build",
+    "mcp": "node dist-electron/mcp/mdedit-mcp.js",
+    "build:skills": "node scripts/skills.mjs",
     "build": "npm run build:electron && npm run build:renderer",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.electron.json",
     "test": "vitest run",
@@ -19,6 +21,9 @@
   "build": {
     "appId": "com.blaashford.mdedit",
     "productName": "MDEdit",
+    "asarUnpack": [
+      "dist-electron/mcp/**"
+    ],
     "files": [
       "dist/**",
       "dist-electron/**",
@@ -80,6 +85,7 @@
     "@fontsource/eb-garamond": "^5.3.0",
     "@milkdown/crepe": "^7.22.2",
     "@milkdown/kit": "^7.22.2",
+    "@modelcontextprotocol/sdk": "^1.32.1",
     "@types/mdast": "^4.0.4",
     "@types/node": "^22.0.0",
     "@types/react": "^18.3.0",
@@ -93,6 +99,10 @@
     "esbuild": "^0.21.5",
     "fflate": "^0.8.3",
     "font-list": "^2.1.0",
+    "jsdom": "^25.0.1",
+    "mdast-util-from-markdown": "^2.1.0",
+    "mdast-util-gfm": "^3.1.0",
+    "micromark-extension-gfm": "^3.0.0",
     "pagedjs": "^0.4.3",
     "pdfjs-dist": "^6.4.299",
     "react": "^18.3.0",
@@ -102,7 +112,8 @@
     "unified": "^11.0.5",
     "vite": "^5.4.0",
     "vitest": "^2.1.0",
-    "wait-on": "^8.0.0"
+    "wait-on": "^8.0.0",
+    "zod": "^4.6.5"
   },
   "author": "blaashford-ux",
   "homepage": "https://github.com/blaashford-ux/MDEdit",

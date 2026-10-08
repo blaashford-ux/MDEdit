@@ -1,4 +1,5 @@
 import type { FsPort } from '../fsPort';
+import { mergeReviewFiles, parseReviewFile, serializeReviewFile } from '../review/comments';
 
 /** Where a project keeps the review files of everyone who has commented on it: one JSON file per reviewer. */
 export const REVIEW_DIR = '.mdedit/review';
@@ -29,13 +30,29 @@ export function makeReviews(fs: FsPort) {
       return out;
     },
 
-    /** Writes one reviewer's file (via a temp file, so a crash can't leave half a file). */
+    /** Deletes one reviewer's file. A missing file is fine. */
+    async remove(project: string, id: string): Promise<void> {
+      const clean = safeId(id);
+      if (!clean) throw new Error('A review file needs a reviewer id');
+      await fs.rm(`${dirOf(project)}/${clean}.json`, { force: true });
+    },
+
+    /**
+     * Writes one reviewer's file (via a temp file, so a crash can't leave half a file). Someone else may have added
+     * notes to the same file since the caller read it (an AI reviewer, or the other side of a share), so a valid file is
+     * merged with what is on disk instead of replacing it.
+     */
     async save(project: string, id: string, text: string): Promise<void> {
       const clean = safeId(id);
       if (!clean) throw new Error('A review file needs a reviewer id');
       const dir = dirOf(project);
       await fs.mkdir(dir, { recursive: true });
       const target = `${dir}/${clean}.json`;
+      const incoming = parseReviewFile(text);
+      if (incoming) {
+        const onDisk = parseReviewFile(await fs.readText(target).catch(() => ''));
+        if (onDisk) text = serializeReviewFile(mergeReviewFiles(onDisk, incoming));
+      }
       const tmp = `${target}.${Math.floor(Math.random() * 1e9)}.tmp`;
       try {
         await fs.writeText(tmp, text);
