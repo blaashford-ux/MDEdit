@@ -30,7 +30,7 @@ describe('the MDEdit MCP server', () => {
   it('offers the tools, with read-only ones marked', async () => {
     const { client } = await connect('claude-ai');
     const tools = (await client.listTools()).tools;
-    expect(tools.map((t) => t.name).sort()).toEqual(['add_notes', 'get_notes', 'list_chapters', 'list_files', 'list_projects', 'read_chapter', 'reply_to_note', 'withdraw_note']);
+    expect(tools.map((t) => t.name).sort()).toEqual(['add_notes', 'get_notes', 'list_chapters', 'list_files', 'list_projects', 'read_chapter', 'reply_to_note', 'search_text', 'withdraw_note']);
     expect(tools.find((t) => t.name === 'read_chapter')?.annotations?.readOnlyHint).toBe(true);
     expect(tools.find((t) => t.name === 'add_notes')?.annotations?.readOnlyHint).toBe(false);
   });

@@ -265,6 +265,52 @@ export async function readChapter(ctx: AgentContext, project: string, file: stri
   };
 }
 
+export interface SearchHit {
+  file: string;
+  chapter: number;
+  chapterTitle: string;
+  /** The matched text, and a little of what surrounds it. */
+  match: string;
+  snippet: string;
+}
+
+/**
+ * Finds text across a project's manuscript files (in the same plain text `read_chapter` returns), for checking that a name,
+ * term or spelling is used the same way everywhere. At most `limit` hits (default 30, at most 100).
+ */
+export async function searchText(
+  ctx: AgentContext,
+  project: string,
+  query: string,
+  opts: { file?: string; regex?: boolean; caseSensitive?: boolean; limit?: number } = {}
+): Promise<{ hits: SearchHit[]; truncated: boolean }> {
+  if (typeof query !== 'string' || !query || query.length > 200) throw new AgentError('query must be 1 to 200 characters.');
+  let re: RegExp;
+  try {
+    re = new RegExp(opts.regex ? query : query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), opts.caseSensitive ? 'g' : 'gi');
+  } catch {
+    throw new AgentError('That is not a valid regular expression.');
+  }
+  const limit = Math.min(Math.max(Math.floor(opts.limit ?? 30), 1), 100);
+  const files = opts.file ? [opts.file] : (await listFiles(ctx, project)).map((f) => f.file);
+  const hits: SearchHit[] = [];
+  for (const f of files) {
+    const l = await load(ctx, project, f);
+    for (const c of l.chapters) {
+      re.lastIndex = 0;
+      for (let m = re.exec(c.flat); m; m = re.exec(c.flat)) {
+        if (m[0] === '') {
+          re.lastIndex += 1;
+          continue;
+        }
+        if (hits.length >= limit) return { hits, truncated: true };
+        hits.push({ file: l.rel, chapter: c.index, chapterTitle: c.title, match: m[0], snippet: c.flat.slice(Math.max(0, m.index - 40), m.index + m[0].length + 40).replace(/\n/g, ' ¶ ') });
+      }
+    }
+  }
+  return { hits, truncated: false };
+}
+
 // ---- writing notes ---------------------------------------------------------------------------
 
 export interface NoteInput {

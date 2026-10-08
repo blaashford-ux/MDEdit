@@ -3,8 +3,10 @@
 // sign-in then says it isn't set up in this build.
 import { build } from 'esbuild';
 import { rmSync } from 'node:fs';
+import { writeSkills } from './skills.mjs';
 
 rmSync('dist-electron', { recursive: true, force: true });
+writeSkills(); // the skills' text, for the MCP server's prompts
 
 await build({
   entryPoints: ['electron/main.ts', 'electron/preload.ts'],

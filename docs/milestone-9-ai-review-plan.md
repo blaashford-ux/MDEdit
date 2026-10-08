@@ -1,6 +1,6 @@
 # Milestone 9 — AI reviewers (API + MCP)
 
-Status: **phases 1–3 built; 4 onward not started.** Goal: Claude and GPT can read a project's chapters and leave **comments and suggestions** that appear in MDEdit's Notes panel exactly like a human reviewer's. Three editing passes (developmental, line, copy) are packaged as skills that know how to use it.
+Status: **phases 1–4 built; 5 onward not started.** Goal: Claude and GPT can read a project's chapters and leave **comments and suggestions** that appear in MDEdit's Notes panel exactly like a human reviewer's. Three editing passes (developmental, line, copy) are packaged as skills that know how to use it.
 
 ### Progress and changes from the first draft
 * **Done:** `src/shared/agent/` (tools, flattening), merge-on-save in `src/shared/backend/reviews.ts`, `category`/`origin` fields, `mcp/` server, build to `dist-electron/mcp/mdedit-mcp.js`, setup guide in [AI-REVIEW.md](AI-REVIEW.md). Verified through a real stdio client.
@@ -8,6 +8,7 @@ Status: **phases 1–3 built; 4 onward not started.** Goal: Claude and GPT can r
 * **No `--mcp` flag in the app.** A standalone bundle run by Node avoids the single-instance lock and window startup. Running it with the installed `MDEdit.exe` and `ELECTRON_RUN_AS_NODE=1` (so users need no Node) is unverified; check it on Windows in phase 3 when the settings page generates the config.
 * **`.mdedit/review` is not synced** between devices (`sync/rules.ts` only lets known files through), so AI notes stay on the PC. Sharing for review has its own path.
 * **Phase 3 done:** notes reload every 4 s (a read that began before one of the app's own saves is ignored); AI badge, topic chips, reviewer and topic filters; "Accept all" for one reviewer; **Notes → AI…** dialog with copy-ready settings and per-reviewer delete; the installer unpacks the server (`asarUnpack`) and runs it with `ELECTRON_RUN_AS_NODE`, which works from the built bundle (checked on Linux; confirm on a Windows install). Also fixed a style clash that stacked note cards sideways (`review-list` was also the export-settings list).
+* **Phase 4 done:** three genre-neutral skills in `skills/` built from the author's existing developmental, line and copy editing skills (their craft criteria kept; the genre- and project-specific parts, such as LitRPG conventions, a fixed spelling variant and a fixed content scope, became "follow the author's style sheet and notes"). Each leaves notes through `add_notes` with its own `skill` tag, and has a chat fallback when the tools are missing. They are also served as MCP prompts. Added a `search_text` tool, because copy editing and continuity checks need to find every use of a name or term. **Not yet tried with a live model:** the skills' wording will want tuning after a real pass on a real chapter.
 * **Skills sign with their own tag:** `pass` became an optional `skill`. No skill → "Claude" (`ai-claude`); a skill → "Claude · Line edit" (`ai-claude-line`); any label is accepted.
 * **One server for Claude and GPT.** The AI's name comes from the connecting client; `ai-claude-*` and `ai-gpt-*` files stay separate.
 

@@ -3,7 +3,7 @@ import { MemoryFs } from '../memoryFs';
 import { makeReviews } from '../backend/reviews';
 import { applySuggestion, locateAnchor, newReviewFile, parseReviewFile, serializeReviewFile, type ReviewItem } from '../review/comments';
 import { flattenMarkdown } from './flatten';
-import { addNotes, AgentError, getNotes, listChapters, listFiles, listProjects, readChapter, replyToNote, reviewerFor, withdrawNote, type AgentContext } from './tools';
+import { addNotes, AgentError, getNotes, listChapters, listFiles, listProjects, readChapter, replyToNote, reviewerFor, searchText, withdrawNote, type AgentContext } from './tools';
 
 const CH1 = '# One\n\nShe walked *slowly* to the door. She walked to the door again.\n\n"Don\'t," he said.\n';
 const CH2 = '# Two\n\nThe **river** ran cold.\n\n- apples\n- pears\n';
@@ -53,6 +53,27 @@ describe('reading', () => {
     }
     await expect(listFiles(ctx, '../books')).rejects.toThrow(AgentError);
     await expect(listFiles(ctx, '.hidden')).rejects.toThrow(AgentError);
+  });
+});
+
+describe('searching', () => {
+  it('finds text across files and chapters in the plain text, with where it was', async () => {
+    const r = await searchText(ctx, 'Novel', 'RIVER');
+    expect(r.truncated).toBe(false);
+    expect(r.hits).toEqual([{ file: 'Manuscript/Book.md', chapter: 1, chapterTitle: 'Two', match: 'river', snippet: 'Two ¶ The river ran cold. ¶ apples ¶ pears' }]);
+    expect((await searchText(ctx, 'Novel', 'walked', { caseSensitive: true })).hits.map((h) => h.chapter)).toEqual([0, 0]);
+    expect((await searchText(ctx, 'Novel', 'plain', { file: 'Notes.md' })).hits).toHaveLength(1);
+  });
+
+  it('takes a regular expression, caps the hits, and says when a query is bad', async () => {
+    expect((await searchText(ctx, 'Novel', 'app(le|les)s?\\b', { regex: true })).hits[0].match).toBe('apples');
+    const capped = await searchText(ctx, 'Novel', 'e', { limit: 3 });
+    expect(capped).toMatchObject({ truncated: true });
+    expect(capped.hits).toHaveLength(3);
+    await expect(searchText(ctx, 'Novel', '(', { regex: true })).rejects.toThrow(/regular expression/);
+    await expect(searchText(ctx, 'Novel', '')).rejects.toThrow(AgentError);
+    expect((await searchText(ctx, 'Novel', 'a.b')).hits).toEqual([]); // plain text: the dot is only a dot
+    expect((await searchText(ctx, 'Novel', '.*', { regex: true })).hits.length).toBeGreaterThan(0); // empty matches don't loop forever
   });
 });
 

@@ -14,9 +14,11 @@ import {
   LIMITS,
   readChapter,
   replyToNote,
+  searchText,
   withdrawNote,
   type AgentContext,
 } from '../src/shared/agent/tools';
+import { SKILLS } from './skills.generated';
 
 export interface ServerOptions {
   fs: AgentContext['fs'];
@@ -115,6 +117,25 @@ export function createServer(o: ServerOptions): McpServer {
   );
 
   server.registerTool(
+    'search_text',
+    {
+      description:
+        'Find text across the project\'s manuscript files, as plain text like read_chapter. Use it to check that a name, term, spelling or phrase is used the same way everywhere, or to find every place something is mentioned. ' +
+        'Each hit has the file, chapter and a snippet.',
+      inputSchema: {
+        project,
+        query: z.string().describe('Text to find (up to 200 characters). Case-insensitive unless case_sensitive is set.'),
+        file: file.optional().describe('Search only this file.'),
+        regex: z.boolean().optional().describe('Treat the query as a regular expression.'),
+        case_sensitive: z.boolean().optional(),
+        limit: z.number().int().min(1).max(100).optional().describe('Most hits to return (default 30).'),
+      },
+      annotations: readOnly,
+    },
+    (a) => run((c) => searchText(c, a.project, a.query, { file: a.file, regex: a.regex, caseSensitive: a.case_sensitive, limit: a.limit }))()
+  );
+
+  server.registerTool(
     'get_notes',
     {
       description: 'List review notes in a project, optionally filtered. Use it to see what the author has already resolved or answered.',
@@ -163,6 +184,32 @@ export function createServer(o: ServerOptions): McpServer {
     },
     (a) => run((c) => withdrawNote(c, a.project, a.note_id))()
   );
+
+  // The same instructions the skills carry, for clients that have prompts but not skills (GPT-based ones among them).
+  for (const sk of SKILLS) {
+    server.registerPrompt(
+      sk.id,
+      {
+        title: sk.tag,
+        description: sk.description,
+        argsSchema: {
+          project: z.string().optional().describe('The project to review. Leave out to be asked.'),
+          file: z.string().optional().describe('A manuscript file in the project. Leave out to cover the project, or to be asked.'),
+        },
+      },
+      ({ project: p, file: f }) => ({
+        messages: [
+          {
+            role: 'user' as const,
+            content: {
+              type: 'text' as const,
+              text: `${sk.body}\n\n---\n\nStart now. ${p ? `Review the project "${p}"${f ? `, file "${f}"` : ''}.` : 'Ask me which project to review.'} Leave your notes with add_notes using skill "${sk.tag}".`,
+            },
+          },
+        ],
+      })
+    );
+  }
 
   return server;
 }

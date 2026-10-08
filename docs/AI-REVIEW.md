@@ -26,9 +26,22 @@ Use the full path to `mdedit-mcp.js` below.
 The ChatGPT app and claude.ai on the web can only reach servers on the internet, not a program on your PC; that needs the HTTP option planned for phase 5.
 
 ## Tools
-`list_projects`, `list_files`, `list_chapters`, `read_chapter`, `get_notes`, `add_notes` (up to 50 at a time), `reply_to_note`, `withdraw_note`.
+`list_projects`, `list_files`, `list_chapters`, `read_chapter`, `search_text` (find a name, term or spelling across the book), `get_notes`, `add_notes` (up to 50 at a time), `reply_to_note`, `withdraw_note`.
 
 Quotes in `add_notes` are matched against the plain text `read_chapter` returns (Markdown marks removed, one paragraph per line), which is the same text MDEdit anchors notes to. A quote that is missing, or that matches more than one place, is rejected with the reason so the model can fix it. Suggestions must stay inside one paragraph.
+
+## The editing skills
+Three skills in `skills/` run a full pass and leave the results as notes. They are not tied to a genre: the author's style sheet and notes in the project set the standard, and they look for those first.
+
+| Skill | Leaves | Signed as |
+|---|---|---|
+| `mdedit-developmental-edit` | Comments on structure, pacing, stakes, continuity, character and the book's own rules; one summary comment per chapter | Claude · Developmental edit |
+| `mdedit-line-edit` | One-click suggestions for sentence-level fixes, comments for patterns, a few comments on what works | Claude · Line edit |
+| `mdedit-copy-edit` | Exact suggestions for spelling, grammar, punctuation and consistency; one comment per repeated pattern with the count | Claude · Copy edit |
+
+**Install.** Claude Code: copy the three folders into `~/.claude/skills/`. Claude Desktop and claude.ai: zip each folder and upload it under Settings → Capabilities → Skills. They only apply when the MDEdit tools are connected, and they work alongside any other editing skills you have. **GPT and other clients** without skills: the same instructions are offered as MCP prompts named `developmental_edit`, `line_edit` and `copy_edit` (pick one, give it a project and optionally a file), or paste a `SKILL.md` into custom instructions.
+
+The `SKILL.md` files are the source of truth. After editing one, run `npm run build:skills` to refresh `mcp/skills.generated.ts` (the build does it too); a test fails if they drift apart.
 
 ## Who a note is signed as
 The AI is named from the client ("Claude", "GPT"). `add_notes` and `reply_to_note` take an optional **`skill`**: a skill that passes `"Line edit"` signs its notes **Claude · Line edit**; with no skill the notes are signed just **Claude**. Any label works (`"Dialogue Voice"` gives **Claude · Dialogue Voice**), and `line`, `line-editing` and `Line edit` all mean the same skill. Each signature is its own file, so filtering and deleting work per skill.
