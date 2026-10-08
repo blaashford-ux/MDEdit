@@ -34,6 +34,7 @@ import { MobileBar } from './MobileBar';
 import { AboutDialog } from './AboutDialog';
 import { SyncDialog } from './SyncDialog';
 import { AiDialog } from './AiDialog';
+import { chapterForNote } from './noteChapter';
 import { ReviewPanel } from './ReviewPanel';
 import { ShareDialog } from './ShareDialog';
 import { JoinDialog } from './JoinDialog';
@@ -138,6 +139,44 @@ export function App() {
       { label: 'Suggest a change…', onClick: () => attach('suggestion') }
     ];
   };
+  /** A note that was clicked in another chapter, waiting for that chapter's editor to open so it can be shown. */
+  const pendingNote = useRef<{ id: string; tabId: string; chapter: number } | null>(null);
+  /**
+   * Shows a note, opening the chapter it is in first. Leaving a chapter with unsaved edits goes through the usual
+   * Save / Don't Save / Cancel question, and cancelling stays where you are. Returns a message when it can't be shown.
+   */
+  const goToNote = async (id: string): Promise<string | null> => {
+    const tab = activeTab;
+    const doc = tab && s.docs.get(tab.file);
+    const item = review.items.find((i) => i.id === id);
+    if (!tab || !doc || !item) return null;
+    const texts = doc.chapters.map((c, i) => (i === tab.chapter && tab.draft !== null ? tab.draft : c.raw));
+    const target = chapterForNote(texts, item.anchor, tab.chapter);
+    if (target === null) return 'That text is no longer in the file, so there is nothing to show.';
+    if (target === tab.chapter) {
+      pendingNote.current = null;
+      review.focus(id);
+      return null;
+    }
+    pendingNote.current = { id, tabId: tab.id, chapter: target };
+    await ws.openChapter(tab.file, target);
+    if (ws.tabForFile(tab.file)?.chapter !== target) pendingNote.current = null; // cancelled, or the save failed
+    return null;
+  };
+  // Once the other chapter's editor is up and has drawn its notes, scroll to the one that was clicked.
+  useEffect(() => {
+    const p = pendingNote.current;
+    if (!p || !activeTab || activeTab.id !== p.tabId || activeTab.chapter !== p.chapter) return;
+    let tries = 0;
+    const timer = setInterval(() => {
+      tries += 1;
+      if (navs.current.get(p.tabId)?.review?.reveal(p.id) || tries > 20) {
+        clearInterval(timer);
+        pendingNote.current = null;
+      }
+    }, 100);
+    return () => clearInterval(timer);
+  }, [activeTab?.id, activeTab?.chapter, activeTab?.reloadKey, navVersion, review.items]);
   const openNotes = review.items.filter((i) => i.status === 'open').length;
   const activeKey = activeTab ? chapterKey(activeTab.file, activeTab.chapter) : null;
   useEffect(() => setDrawer(false), [activeKey]);
@@ -1115,6 +1154,7 @@ export function App() {
           request={noteRequest}
           onShare={caps.review && !isReviewer ? () => setShowShare(true) : undefined}
           onAi={caps.ai && !isReviewer ? () => setShowAi(true) : undefined}
+          onGoTo={goToNote}
           onRename={(name) => {
             const next = { ...me, name };
             setMe(next);
