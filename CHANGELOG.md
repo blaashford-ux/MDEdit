@@ -1,6 +1,6 @@
 # Changelog
 
-### Unreleased
+### 0.6.4 — 2026-10-08
 **Fixed**
 - **Phone: Google's file picker no longer shows up blank inside the invitation dialog.** The phone app now lets the picker use Google's cookies (Android blocks them for embedded pages by default). Not yet confirmed on a phone. (Needs the new phone app.)
 
