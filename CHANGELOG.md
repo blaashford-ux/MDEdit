@@ -2,6 +2,7 @@
 
 ### Unreleased
 **Fixed**
+- **Review notes now sync between your devices.** Comments and suggestions (yours and any AI reviewer's) were only kept on the device they were made on; they now travel through Google Drive with the project, and if both devices added notes, both sets are kept. Needs the update on every device.
 - **Windows: another try at "Installer integrity check has failed" when updating from the app.** The installer is now read back once more right before it is run (and refused if it changed), and it is started the way a double-click starts it instead of directly. Each step is also written to `%APPDATA%\MDEdit\update.log`; if it happens again, that file shows whether the installer was intact when MDEdit started it. This is a guess at the cause, not a confirmed fix.
 - **Phone: opening a review invitation now runs Google's file picker in your browser.** Inside the app the picker stayed blank, so the app hands over to the browser; after you pick the two files, tap "Return to MDEdit" and the app carries on. (Needs the new phone app. The Windows app is unchanged.)
 

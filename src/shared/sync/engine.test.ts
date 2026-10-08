@@ -288,6 +288,36 @@ describe('file types', () => {
     expect(r.conflicts).toEqual([]);
   });
 
+  describe('review notes', () => {
+    const f = 'Novel/.mdedit/review/owner.json';
+    const note = (id: string, body: string, at: string) => ({
+      id, kind: 'comment', file: 'Book.md', anchor: { quote: 'hello', prefix: '', suffix: '' }, body, author: 'Me', createdAt: at, updatedAt: at, replies: [],
+    });
+    const file = (...items: unknown[]) => JSON.stringify({ version: 1, reviewer: { id: 'owner', name: 'Me' }, project: 'Novel', items });
+    const ids = async (d: Device) => JSON.parse((await d.read(f))!).items.map((i: { id: string }) => i.id).sort();
+
+    it('carries notes made on one device to the other', async () => {
+      a.put(f, file(note('n1', 'from the PC', '2026-10-05T10:00:00Z')));
+      await a.sync();
+      await b.sync();
+      expect(await ids(b)).toEqual(['n1']);
+    });
+
+    it('keeps the notes made on both devices when each added one', async () => {
+      a.put(f, file(note('n1', 'first', '2026-10-05T10:00:00Z')));
+      await a.sync();
+      await b.sync();
+      a.put(f, file(note('n1', 'first', '2026-10-05T10:00:00Z'), note('n2', 'from the PC', '2026-10-05T11:00:00Z')));
+      b.put(f, file(note('n1', 'first', '2026-10-05T10:00:00Z'), note('n3', 'from the phone', '2026-10-05T11:30:00Z')));
+      await a.sync();
+      const r = await b.sync();
+      await a.sync();
+      expect(r.conflicts).toEqual([]);
+      expect(await ids(a)).toEqual(['n1', 'n2', 'n3']);
+      expect(await ids(b)).toEqual(['n1', 'n2', 'n3']);
+    });
+  });
+
   it('last writer wins for project settings, with no conflict copy', async () => {
     const meta = 'Novel/.mdedit/project.json';
     a.put(meta, '{"status":"planning"}');
