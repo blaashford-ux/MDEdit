@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { parseInviteLink } from '../shared/review/link';
 import type { SharedProject } from '../shared/review/share';
-import { PickerFrame } from './PickerFrame';
+import { PickerFrame, pickerUrl } from './PickerFrame';
 import { useEscape } from './useEscape';
 import { loadIdentity, saveIdentity } from './useReview';
 
@@ -19,6 +19,9 @@ export function JoinDialog({ onJoined, onClose }: Props) {
   });
   const [token, setToken] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Phone: the picker runs in the browser and this dialog waits for it. Cancelling bumps the counter so a late answer is ignored.
+  const [waiting, setWaiting] = useState(false);
+  const attempt = useRef(0);
   const [error, setError] = useState<string | null>(null);
   useEscape(onClose);
   const api = window.mdedit;
@@ -29,7 +32,21 @@ export function JoinDialog({ onJoined, onClose }: Props) {
     setBusy(true);
     setError(null);
     try {
-      setToken(await api.pickerToken());
+      const t = await api.pickerToken();
+      if (invite && api.pickInBrowser) {
+        const mine = ++attempt.current;
+        setWaiting(true);
+        const ids = await api.pickInBrowser(pickerUrl(t, [invite.packageId, invite.commentsId], true)).catch((e) => {
+          if (attempt.current === mine) setError(e instanceof Error ? e.message : String(e));
+          return null;
+        });
+        if (attempt.current !== mine) return;
+        setWaiting(false);
+        if (ids && ids.includes(invite.packageId) && ids.includes(invite.commentsId)) await finish();
+        else if (ids) setError('Select both files so MDEdit can open the project and save your notes.');
+        return;
+      }
+      setToken(t);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -56,7 +73,14 @@ export function JoinDialog({ onJoined, onClose }: Props) {
     <div className="modal-backdrop" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal join-dialog" role="dialog" aria-modal="true" aria-label="Open an invitation">
         <h3>Open an invitation</h3>
-        {token && invite ? (
+        {waiting ? (
+          <>
+            <p className="modal-hint">Google’s file picker is open in your browser. Select both files there, then tap “Return to MDEdit”.</p>
+            <div className="modal-actions">
+              <button type="button" onClick={() => (attempt.current++, setWaiting(false), setBusy(false))}>Cancel</button>
+            </div>
+          </>
+        ) : token && invite ? (
           <PickerFrame
             token={token}
             ids={[invite.packageId, invite.commentsId]}

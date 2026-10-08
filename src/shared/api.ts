@@ -384,6 +384,12 @@ export interface ReviewSharingApi {
   listShared(): Promise<SharedProject[]>;
   /** An access token for Google's file picker, which gives MDEdit access to the files in an invitation. */
   pickerToken(): Promise<string>;
+  /**
+   * Phone only: runs Google's file picker in the phone's own browser and returns the file ids picked (null when cancelled).
+   * Google's picker stays blank when embedded in the app's web view, so the app hands over to the browser and is called back.
+   * Absent where the picker can be embedded (the Windows app).
+   */
+  pickInBrowser?(url: string): Promise<string[] | null>;
   /** Downloads the shared project into "Shared With Me" (after the picker has granted access). */
   joinReview(link: string, name: string): Promise<SharedProject>;
 }

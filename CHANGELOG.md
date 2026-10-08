@@ -1,5 +1,9 @@
 # Changelog
 
+### Unreleased
+**Fixed**
+- **Phone: opening a review invitation now runs Google's file picker in your browser.** Inside the app the picker stayed blank, so the app hands over to the browser; after you pick the two files, tap "Return to MDEdit" and the app carries on. (Needs the new phone app. The Windows app is unchanged.)
+
 ### 0.6.4 — 2026-10-08
 **Fixed**
 - **Phone: Google's file picker no longer shows up blank inside the invitation dialog.** The phone app now lets the picker use Google's cookies (Android blocks them for embedded pages by default). Not yet confirmed on a phone. (Needs the new phone app.)
