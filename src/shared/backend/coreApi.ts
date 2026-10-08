@@ -8,7 +8,7 @@ import { defaultAppDefaults, sanitizeAppDefaults } from '../appDefaults';
 import type { FsPort } from '../fsPort';
 import { makeReviews } from './reviews';
 import { basename, isInside, joinPath, isMarkdownName } from '../paths';
-import { sanitizeProjectsSettings } from '../projects';
+import { sanitizeProjectsSettings, withOpened } from '../projects';
 import { DraftStore } from './drafts';
 import { makeFiles } from './files';
 import { makeFsops } from './fsops';
@@ -169,7 +169,8 @@ export function createCoreApi(o: CoreApiOptions): CoreBackend {
     },
     setLastProject(p) {
       settings.update((s) => {
-        s.projects = { ...settings.projects(), lastProject: typeof p === 'string' ? p : null };
+        const cur = settings.projects();
+        s.projects = { ...cur, lastProject: typeof p === 'string' ? p : null, recentProjects: withOpened(cur.recentProjects, typeof p === 'string' ? p : null) };
       });
     },
 

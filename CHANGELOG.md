@@ -1,5 +1,14 @@
 # Changelog
 
+### 0.6.2 — 2026-10-08
+**Changed**
+- **The project switcher lists your most recently opened projects first.** The "Switch to" list (and the Ctrl+K quick switcher) used to be ordered by project status; now the project you opened most recently comes first, then the one before it, and so on. Projects you haven't opened on this device yet follow, newest edit first. In the Ctrl+K list the project that's open goes last, so Ctrl+K then Enter returns to the one you were in before. The order is remembered on each device and is not synced.
+**New**
+- **Click highlighted text to find its note.** Clicking text that has a comment or suggestion opens the Notes panel if it is closed, marks that note, and scrolls it to the top of the list, even if a filter or "finished" would have hidden it. The text stays where it is.
+
+**Fixed**
+- **Updating MDEdit from About on Windows is safer.** The installer is now saved under a temporary name and only given its real name once it is complete and checked, so a half-written or damaged file can never be started. The check reads the saved file back from disk (not just the data as it arrived), confirms every byte arrived, and compares it with the release's checksums; a mismatch says what went wrong. Asking twice no longer downloads the same file twice, and old installers are cleared out of the temporary folder. This targets the Windows "Installer integrity check has failed" message some people got when updating from the app although the same installer downloaded from the release page worked.
+
 ### 0.6.1 — 2026-10-08
 **New**
 - **Click a note to go to it.** In the Notes panel, clicking a note now scrolls to its text and highlights it, opening the chapter it is in if that is a different one. If the chapter you are leaving has unsaved changes you get the usual Save / Don't Save / Cancel question first (Cancel keeps you where you are). A note whose text has been deleted from the file says so instead of doing nothing.

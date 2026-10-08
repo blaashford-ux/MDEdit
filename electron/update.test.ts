@@ -37,6 +37,42 @@ describe('downloadInstaller', () => {
     await expect(downloadInstaller(info(), { fetchFn: server(`${'0'.repeat(64)}  MDEdit-Setup-0.5.0.exe\n`), dir, onProgress: () => undefined })).rejects.toThrow(/checksum/);
     expect(await fsp.readdir(dir)).toEqual([]);
   });
+  it('refuses a download that arrives short, and leaves nothing behind', async () => {
+    const short = info({ asset: { name: 'MDEdit-Setup-0.5.0.exe', url: BASE + 'MDEdit-Setup-0.5.0.exe', size: bytes.length + 10 } });
+    await expect(downloadInstaller(short, { fetchFn: server(`${sha(bytes)}  MDEdit-Setup-0.5.0.exe\n`), dir, onProgress: () => undefined })).rejects.toThrow(/cut short/);
+    expect(await fsp.readdir(dir)).toEqual([]);
+  });
+  it('only gives the installer its real name once it is complete and verified', async () => {
+    const during: string[][] = [];
+    const file = await downloadInstaller(info(), {
+      fetchFn: server(`${sha(bytes)}  MDEdit-Setup-0.5.0.exe\n`),
+      dir,
+      onProgress: () => void fsp.readdir(dir).then((names) => during.push(names))
+    });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(during.flat().some((n) => n === 'MDEdit-Setup-0.5.0.exe')).toBe(false);
+    expect(during.flat().some((n) => n.endsWith('.partial'))).toBe(true);
+    expect(await fsp.readdir(dir)).toEqual([path.basename(file)]);
+  });
+  it('joins a download that is already running instead of writing the same file twice', async () => {
+    let installerFetches = 0;
+    const counting = (async (url: string) => {
+      if (String(url).endsWith('SHA256SUMS.txt')) return new Response(`${sha(bytes)}  MDEdit-Setup-0.5.0.exe\n`);
+      installerFetches += 1;
+      await new Promise((r) => setTimeout(r, 30));
+      return new Response(bytes);
+    }) as unknown as typeof fetch;
+    const [a, b] = await Promise.all([downloadInstaller(info(), { fetchFn: counting, dir, onProgress: () => undefined }), downloadInstaller(info(), { fetchFn: counting, dir, onProgress: () => undefined })]);
+    expect(a).toBe(b);
+    expect(installerFetches).toBe(1);
+    expect(await fsp.readFile(a)).toEqual(bytes);
+  });
+  it('clears out earlier installers and abandoned partial downloads', async () => {
+    await fsp.writeFile(path.join(dir, 'MDEdit-Setup-0.4.3.exe'), 'old');
+    await fsp.writeFile(path.join(dir, 'MDEdit-Setup-0.5.0.exe.deadbeef.partial'), 'half');
+    const file = await downloadInstaller(info(), { fetchFn: server(`${sha(bytes)}  MDEdit-Setup-0.5.0.exe\n`), dir, onProgress: () => undefined });
+    expect(await fsp.readdir(dir)).toEqual([path.basename(file)]);
+  });
   it('refuses files from anywhere but the project’s releases', async () => {
     const bad = info({ asset: { name: 'x.exe', url: 'https://example.com/x.exe', size: 1 } });
     await expect(downloadInstaller(bad, { fetchFn: server(''), dir, onProgress: () => undefined })).rejects.toThrow(/outside/);

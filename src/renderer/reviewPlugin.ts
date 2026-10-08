@@ -25,8 +25,8 @@ export interface ReviewApi {
    * otherwise the paragraph under the pointer (which is selected so the user can see it). Null over empty text.
    */
   selectionAt(x: number, y: number): { anchor: Anchor; oneBlock: boolean } | null;
-  /** Scrolls to a note and highlights it (without taking focus). */
-  reveal(id: string): boolean;
+  /** Highlights a note and, unless `scroll` is false, scrolls to it (without taking focus). */
+  reveal(id: string, scroll?: boolean): boolean;
   /** Replaces a note's quoted text (single paragraph only); false when it can't be found. */
   replace(id: string, text: string): boolean;
   /** Called when the user clicks highlighted text. */
@@ -176,12 +176,13 @@ export function reviewApiFor(getView: () => EditorView | null): ReviewApi {
       return this.selection();
     },
 
-    reveal(id) {
+    reveal(id, scroll = true) {
       const view = getView();
       if (!view) return false;
       const hit = stateOf(view).found.get(id);
       view.dispatch(view.state.tr.setMeta(reviewKey, { active: hit ? id : null }));
       if (!hit) return false;
+      if (!scroll) return true;
       const at = view.domAtPos(hit.from).node;
       const el = at.nodeType === 3 ? at.parentElement : (at as HTMLElement);
       el?.scrollIntoView({ block: 'center' });
