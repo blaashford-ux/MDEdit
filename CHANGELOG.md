@@ -1,6 +1,6 @@
 # Changelog
 
-### Unreleased
+### 0.6.2 — 2026-10-08
 **Changed**
 - **The project switcher lists your most recently opened projects first.** The "Switch to" list (and the Ctrl+K quick switcher) used to be ordered by project status; now the project you opened most recently comes first, then the one before it, and so on. Projects you haven't opened on this device yet follow, newest edit first. In the Ctrl+K list the project that's open goes last, so Ctrl+K then Enter returns to the one you were in before. The order is remembered on each device and is not synced.
 **New**
