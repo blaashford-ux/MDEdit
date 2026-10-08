@@ -1,5 +1,9 @@
 # Changelog
 
+### Unreleased
+**Fixed**
+- **Updating MDEdit from About on Windows is safer.** The installer is now saved under a temporary name and only given its real name once it is complete and checked, so a half-written or damaged file can never be started. The check reads the saved file back from disk (not just the data as it arrived), confirms every byte arrived, and compares it with the release's checksums; a mismatch says what went wrong. Asking twice no longer downloads the same file twice, and old installers are cleared out of the temporary folder. This targets the Windows "Installer integrity check has failed" message some people got when updating from the app although the same installer downloaded from the release page worked.
+
 ### 0.6.1 — 2026-10-08
 **New**
 - **Click a note to go to it.** In the Notes panel, clicking a note now scrolls to its text and highlights it, opening the chapter it is in if that is a different one. If the chapter you are leaving has unsaved changes you get the usual Save / Don't Save / Cancel question first (Cancel keeps you where you are). A note whose text has been deleted from the file says so instead of doing nothing.
