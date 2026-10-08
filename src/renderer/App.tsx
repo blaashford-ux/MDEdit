@@ -139,6 +139,19 @@ export function App() {
       { label: 'Suggest a change…', onClick: () => attach('suggestion') }
     ];
   };
+  /** The note whose highlighted text was just clicked, so the Notes panel can bring it to the top. `n` makes every click a new request. */
+  const [noteFocus, setNoteFocus] = useState<{ id: string; n: number } | null>(null);
+  const onNoteClicked = useRef<(id: string) => void>(() => undefined);
+  onNoteClicked.current = (id) => {
+    setShowReview(true);
+    setNoteFocus((f) => ({ id, n: (f?.n ?? 0) + 1 }));
+    if (s.activeId) navs.current.get(s.activeId)?.review?.reveal(id, false); // mark the text as the active note without moving the page
+  };
+  useEffect(() => {
+    const api = s.activeId ? navs.current.get(s.activeId)?.review : undefined;
+    api?.onClick((id) => onNoteClicked.current(id));
+    return () => api?.onClick(null);
+  }, [s.activeId, navVersion, activeTab?.chapter, activeTab?.reloadKey]);
   /** A note that was clicked in another chapter, waiting for that chapter's editor to open so it can be shown. */
   const pendingNote = useRef<{ id: string; tabId: string; chapter: number } | null>(null);
   /**
@@ -1155,6 +1168,7 @@ export function App() {
           onShare={caps.review && !isReviewer ? () => setShowShare(true) : undefined}
           onAi={caps.ai && !isReviewer ? () => setShowAi(true) : undefined}
           onGoTo={goToNote}
+          focus={noteFocus}
           onRename={(name) => {
             const next = { ...me, name };
             setMe(next);

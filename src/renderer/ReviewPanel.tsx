@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Anchor } from '../shared/review/comments';
 import type { Identity, ReviewState, ShownItem } from './useReview';
 
@@ -13,6 +13,8 @@ interface Props {
   onShare?(): void;
   /** Desktop owner only: opens the dialog for connecting AI reviewers. */
   onAi?(): void;
+  /** Brings a note to the top of the list and marks it (the text of that note was clicked). A new `n` is a new request. */
+  focus?: { id: string; n: number } | null;
   /** Shows a note in the text, opening its chapter first. Resolves to a message when it can't be shown. */
   onGoTo?(id: string): Promise<string | null>;
   /** A problem or change worth telling the user about (for example, access withdrawn). */
@@ -24,7 +26,7 @@ interface Props {
 const excerpt = (s: string, n = 90) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
 /** Comments and suggestions on the open chapter's file. */
-export function ReviewPanel({ state, me, role, onRename, onClose, onShare, onAi, onGoTo, notice, request }: Props) {
+export function ReviewPanel({ state, me, role, onRename, onClose, onShare, onAi, onGoTo, focus, notice, request }: Props) {
   const [draft, setDraft] = useState<{ anchor: Anchor; oneBlock: boolean } | null>(null);
   const [kind, setKind] = useState<'comment' | 'suggestion'>('comment');
   const [body, setBody] = useState('');
@@ -36,6 +38,30 @@ export function ReviewPanel({ state, me, role, onRename, onClose, onShare, onAi,
   const [who, setWho] = useState('all');
   const [category, setCategory] = useState('all');
   const [confirmAll, setConfirmAll] = useState(false);
+  const [focusedId, setFocusedId] = useState<string | null>(null);
+  const [scrollTick, setScrollTick] = useState(0);
+  const listRef = useRef<HTMLUListElement>(null);
+
+  // The text of a note was clicked: show it whatever the filters say, mark it, and (below) scroll it to the top of the list.
+  useEffect(() => {
+    if (!focus) return;
+    const item = state.items.find((i) => i.id === focus.id);
+    if (!item) return;
+    setWho('all');
+    setCategory('all');
+    if (item.status !== 'open') setShowDone(true);
+    setFocusedId(item.id);
+    setScrollTick((t) => t + 1);
+  }, [focus?.n]);
+  useEffect(() => {
+    if (!focusedId || !scrollTick) return;
+    const list = listRef.current;
+    const row = list && [...list.querySelectorAll<HTMLElement>('[data-note-id]')].find((el) => el.dataset.noteId === focusedId);
+    if (!list || !row) return;
+    list.style.setProperty('--spacer', `${list.clientHeight}px`); // room below the last note, so any note can reach the top
+    const top = list.scrollTop + (row.getBoundingClientRect().top - list.getBoundingClientRect().top);
+    list.scrollTo({ top, behavior: 'smooth' });
+  }, [scrollTick]);
 
   useEffect(() => {
     if (!request) return;
@@ -158,10 +184,10 @@ export function ReviewPanel({ state, me, role, onRename, onClose, onShare, onAi,
         </div>
       )}
 
-      <ul className="review-list">
+      <ul className={`review-list${focusedId ? ' has-focus' : ''}`} ref={listRef}>
         {visible.length === 0 && <li className="review-empty">{state.items.length ? 'No open notes.' : 'No notes on this file yet.'}</li>}
         {visible.map((i) => (
-          <li key={i.id} className={`review-item s-${i.status}${state.detached.has(i.id) ? ' detached' : ''}`}>
+          <li key={i.id} data-note-id={i.id} className={`review-item s-${i.status}${state.detached.has(i.id) ? ' detached' : ''}${i.id === focusedId ? ' focused' : ''}`}>
             <button type="button" className="review-quote" onClick={() => (onGoTo ? void onGoTo(i.id).then(setMessage) : state.focus(i.id))} title="Show in the text">
               {excerpt(i.anchor.quote)}
             </button>

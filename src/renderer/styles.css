@@ -679,3 +679,7 @@ code.path { background: var(--raised); padding: 1px 6px; border-radius: 6px; }
 .ai-remote-field .muted { grid-column: 1 / -1; }
 .ai-remote-field code { overflow: hidden; text-overflow: ellipsis; user-select: all; font: 11px Consolas, monospace; }
 .ai-remote-field button, .ai-remote > button { padding: 3px 10px; font-size: 12px; }
+
+/* The note whose text was clicked: marked, and the list can scroll far enough to put it at the top. */
+.review-item.focused { outline: 2px solid var(--gold); background: color-mix(in srgb, var(--gold) 14%, var(--raised)); }
+.review-list.has-focus::after { content: ""; flex: 0 0 var(--spacer, 0px); }

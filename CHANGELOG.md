@@ -1,6 +1,9 @@
 # Changelog
 
 ### Unreleased
+**New**
+- **Click highlighted text to find its note.** Clicking text that has a comment or suggestion opens the Notes panel if it is closed, marks that note, and scrolls it to the top of the list, even if a filter or "finished" would have hidden it. The text stays where it is.
+
 **Fixed**
 - **Updating MDEdit from About on Windows is safer.** The installer is now saved under a temporary name and only given its real name once it is complete and checked, so a half-written or damaged file can never be started. The check reads the saved file back from disk (not just the data as it arrived), confirms every byte arrived, and compares it with the release's checksums; a mismatch says what went wrong. Asking twice no longer downloads the same file twice, and old installers are cleared out of the temporary folder. This targets the Windows "Installer integrity check has failed" message some people got when updating from the app although the same installer downloaded from the release page worked.
 
