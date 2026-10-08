@@ -22,6 +22,25 @@ async function hashFile(file: string): Promise<string> {
 }
 
 const downloads = new Map<string, Promise<string>>();
+/** What each installer looked like when it was verified, to check again just before it is run. */
+const verified = new Map<string, { sha256: string; size: number }>();
+
+/**
+ * Run just before the installer is started. Reads the whole file again (which also waits out any antivirus scan of the
+ * newly renamed file) and compares it with what was verified after the download. Resolves to a one-line description for
+ * the update log; rejects when the file is no longer what was downloaded, so a damaged installer is never started.
+ */
+export async function checkBeforeLaunch(file: string): Promise<string> {
+  const before = verified.get(file);
+  const st = await fsp.stat(file);
+  const sha = await hashFile(file);
+  const now = `${st.size} bytes, sha256 ${sha}`;
+  if (!before) return `${now} (not downloaded by this session)`;
+  if (before.sha256 !== sha || before.size !== st.size) {
+    throw new Error(`The installer changed after it was downloaded (${before.size} bytes, sha256 ${before.sha256} then; ${now} now), so it was not run.`);
+  }
+  return now;
+}
 
 /**
  * Downloads the release's installer into `dir`, checks it, and resolves to its path. Only files from this project's
@@ -81,6 +100,7 @@ async function download(info: UpdateInfo, deps: DownloadDeps): Promise<string> {
     if (expected && onDisk !== expected) throw new Error('The downloaded installer does not match its checksum, so it was not run.');
     await fsp.rm(target, { force: true });
     await fsp.rename(partial, target);
+    verified.set(target, { sha256: onDisk, size: received });
   } catch (e) {
     await fsp.rm(partial, { force: true });
     throw e;
