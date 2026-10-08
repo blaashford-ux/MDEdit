@@ -27,7 +27,7 @@ import { nodeFs } from './nodeFs';
 import { bundledFont } from '../src/shared/export/fonts';
 import { listInstalledFonts } from './fonts';
 import { sanitizeAppDefaults, type AppDefaults } from '../src/shared/appDefaults';
-import { defaultRootFolder, effectiveDefaults, sanitizeProjectsSettings, type ProjectsConfig } from '../src/shared/projects';
+import { defaultRootFolder, effectiveDefaults, sanitizeProjectsSettings, withOpened, type ProjectsConfig } from '../src/shared/projects';
 import * as projects from './projects';
 import { existingFolder, SettingsStore, type WindowState } from './settings';
 import { downloadInstaller } from './update';
@@ -404,7 +404,8 @@ function registerIpc(): void {
   });
   ipcMain.on('projects:setLast', (_e, p: string | null) => {
     settings.update((s) => {
-      s.projects = { ...settings.projects(), lastProject: typeof p === 'string' ? p : null };
+      const cur = settings.projects();
+      s.projects = { ...cur, lastProject: typeof p === 'string' ? p : null, recentProjects: withOpened(cur.recentProjects, typeof p === 'string' ? p : null) };
     });
   });
 

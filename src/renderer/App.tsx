@@ -20,7 +20,7 @@ import { ProgressDialog } from './ProgressDialog';
 import { QuickSwitcher } from './QuickSwitcher';
 import { WelcomeDialog } from './WelcomeDialog';
 import { localDate, writtenOn } from '../shared/progress';
-import { goalFor, relativeTo } from '../shared/projects';
+import { goalFor, relativeTo, withOpened } from '../shared/projects';
 import { projectNameError, uniqueName, type ProjectStatus, type ProjectSummary, type ProjectsConfig, type RootListing } from '../shared/projects';
 import { RelinkDialog } from './RelinkDialog';
 import { SettingsDialog } from './SettingsDialog';
@@ -79,6 +79,9 @@ export function App() {
   const [ignoredOrphans, setIgnoredOrphans] = useState<Set<string>>(new Set());
   const filterRef = useRef<HTMLInputElement>(null);
   const [pConfig, setPConfig] = useState<ProjectsConfig | null>(null);
+  /** Projects in the order they were opened on this device, most recent first (saved with the settings, kept current here). */
+  const [openedOrder, setOpenedOrder] = useState<string[]>([]);
+  useEffect(() => setOpenedOrder((cur) => (pConfig ? [...cur, ...pConfig.recentProjects.filter((p) => !cur.includes(p))] : cur)), [pConfig?.recentProjects]);
   const [listing, setListing] = useState<RootListing | null>(null);
   const [listing_loading, setListingLoading] = useState(false);
   const [showNewProject, setShowNewProject] = useState(false);
@@ -108,6 +111,7 @@ export function App() {
   const [reviewNotice, setReviewNotice] = useState<string | null>(null);
   const [me, setMe] = useState(loadIdentity);
   const projectPath = s.project?.path ?? null;
+  useEffect(() => setOpenedOrder((cur) => withOpened(cur, projectPath)), [projectPath]);
   const sameDir = (a: string, b: string) => a.replace(/\\/g, '/') === b.replace(/\\/g, '/');
   /** Set when the open project was shared with this person: they can read and annotate it, not edit it. */
   const sharedHere = projectPath ? shared.find((sp) => sameDir(sp.dir, projectPath)) : undefined;
@@ -886,6 +890,7 @@ export function App() {
             isProject={s.project !== null}
             projects={listing?.projects ?? []}
             currentPath={s.project?.path ?? null}
+            openedOrder={openedOrder}
             onOpen={(p) => void openProject(p)}
             onHome={() => void goHome()}
             onNew={() => setShowNewProject(true)}
@@ -1280,6 +1285,7 @@ export function App() {
       <QuickSwitcher
         projects={listing?.projects ?? []}
         currentPath={s.project?.path ?? null}
+        openedOrder={openedOrder}
         onOpen={(p) => void openProject(p)}
         onHome={() => void goHome()}
         onNew={() => (setShowQuick(false), setShowNewProject(true))}
