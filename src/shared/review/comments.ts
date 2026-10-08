@@ -33,6 +33,10 @@ export interface ReviewItem {
   /** Suggestions only: the text that should replace the quote. */
   replacement?: string
   status: ItemStatus
+  /** What kind of point it makes (e.g. "pacing", "spelling"); set by AI reviewers, shown as a chip. Optional. */
+  category?: string
+  /** Who made it. Absent means a person. */
+  origin?: 'human' | 'ai'
   author: string
   createdAt: string
   updatedAt: string
