@@ -1,5 +1,9 @@
 # Changelog
 
+### 0.6.4 — 2026-10-08
+**Fixed**
+- **Phone: Google's file picker no longer shows up blank inside the invitation dialog.** The phone app now lets the picker use Google's cookies (Android blocks them for embedded pages by default). Not yet confirmed on a phone. (Needs the new phone app.)
+
 ### 0.6.3 — 2026-10-08
 **Fixed**
 - **Phone: opening a review invitation no longer fails with "The API developer key is invalid".** The phone app handed Google's file picker to the phone's browser, where Google rejects it. The picker, and the invitation page that runs it, now stay inside the app. (Needs the new phone app on the person opening the invitation.)
