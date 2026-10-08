@@ -29,7 +29,7 @@ const note = (o: Partial<Parameters<typeof addNotes>[3][0]> = {}) => ({ file: 'M
 describe('flattenMarkdown', () => {
   it('gives the text the editor shows: marks removed, one block per line', () => {
     expect(flattenMarkdown(CH2)).toBe('Two\nThe river ran cold.\napples\npears');
-    expect(flattenMarkdown('A [link](http://x.y) and `code` and \\*escaped\\*.\n\nline one  \nline two')).toBe('A link and code and *escaped*.\nline one\nline two');
+    expect(flattenMarkdown('A [link](http://x.y) and `code` and \\*escaped\\*.\n\nline one  \nline two')).toBe('A link and code and *escaped*.\nline one￼line two');
   });
 });
 

@@ -11,8 +11,7 @@ function inline(node: Node): string {
     case 'text':
     case 'inlineCode':
       return node.value ?? '';
-    case 'break':
-      return '\n';
+    case 'break': // a hard line break is a leaf in the editor too
     case 'image':
     case 'imageReference':
       return '￼'; // the editor's placeholder for a non-text leaf
