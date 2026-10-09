@@ -1,6 +1,8 @@
 # Changelog
 
 ### Unreleased
+**New**
+- **Theme customiser.** File → Settings → Appearance lets you change the colours of the light and dark themes separately: window, page, text, accent and highlight, each with a colour picker or a hex code, plus a few ready-made starting points (Paper, Mist, Sage for light; Midnight, Ember, Forest, Black for dark). Panels, buttons and softer text are worked out from your five colours. Changes show immediately; Save keeps them, Cancel puts the old ones back. Each theme has its own reset. Works on Windows and Android.
 **Fixed**
 - **Review notes now sync between your devices.** Comments and suggestions (yours and any AI reviewer's) were only kept on the device they were made on; they now travel through Google Drive with the project, and if both devices added notes, both sets are kept. Needs the update on every device.
 - **Windows: another try at "Installer integrity check has failed" when updating from the app.** The installer is now read back once more right before it is run (and refused if it changed), and it is started the way a double-click starts it instead of directly. Each step is also written to `%APPDATA%\MDEdit\update.log`; if it happens again, that file shows whether the installer was intact when MDEdit started it. This is a guess at the cause, not a confirmed fix.

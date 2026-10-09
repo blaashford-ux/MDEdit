@@ -15,7 +15,7 @@ import { createFile, createFolder, renameNode } from './fsops';
 import { sidecarPathFor } from '../src/shared/export/sidecar';
 import { appendFileSync, promises as fsp } from 'node:fs';
 import { installMenu } from './menu';
-import { chromeOptions, registerWindowChrome, shellColor, watchWindow } from './windowChrome';
+import { chromeOptions, registerWindowChrome, setChromeTheme, shellColor, watchWindow } from './windowChrome';
 import { confirmDelete, confirmMarkEdited, confirmOverwrite, confirmRecover, confirmUnsaved } from './prompts';
 import { scanFolder } from './scan';
 import type { AiServerInfo } from '../src/shared/agent/config';
@@ -30,6 +30,7 @@ import { sanitizeAppDefaults, type AppDefaults } from '../src/shared/appDefaults
 import { defaultRootFolder, effectiveDefaults, sanitizeProjectsSettings, withOpened, type ProjectsConfig } from '../src/shared/projects';
 import * as projects from './projects';
 import { existingFolder, SettingsStore, type WindowState } from './settings';
+import { sanitizeThemeCustom } from '../src/shared/theme';
 import { checkBeforeLaunch, downloadInstaller } from './update';
 import { fetchLatestRelease, type UpdateInfo } from '../src/shared/update';
 import type { SyncService } from '../src/shared/sync/service';
@@ -424,6 +425,14 @@ function registerIpc(): void {
         s.prefs = { ...s.prefs, sidebarWidth: patch.sidebarWidth };
       });
     }
+    if (patch && 'themeCustom' in patch) {
+      const themeCustom = sanitizeThemeCustom(patch.themeCustom);
+      settings.update((s) => {
+        const { themeCustom: _old, ...rest } = s.prefs ?? {};
+        s.prefs = themeCustom ? { ...rest, themeCustom } : rest;
+      });
+      setChromeTheme(themeCustom); // the title-bar buttons and the window background follow the custom colours
+    }
   });
   handle('session:get', (_e, folder: string) => settings.get().sessions?.[folder] ?? null);
   ipcMain.on('session:save', (_e, folder: string, session: Session) => {
@@ -616,6 +625,7 @@ if (!firstInstance) {
     await settings.load();
     drafts = new DraftStore(path.join(app.getPath('userData'), 'drafts'));
     nativeTheme.themeSource = settings.get().theme ?? 'system';
+    setChromeTheme(settings.get().prefs?.themeCustom);
 
     registerIpc();
     void aiRemote.load(); // comes back up only if the user left it on

@@ -3,6 +3,7 @@
  * behaviour as the Windows main process (electron/main.ts). The Android app uses this directly; the UI shell supplies
  * the dialogs. Paths are plain strings in the platform's style ("/" on the phone).
  */
+import { sanitizeThemeCustom } from '../theme';
 import type { CoreApi, UnsavedChoice } from '../api';
 import { defaultAppDefaults, sanitizeAppDefaults } from '../appDefaults';
 import type { FsPort } from '../fsPort';
@@ -181,6 +182,13 @@ export function createCoreApi(o: CoreApiOptions): CoreBackend {
       if (typeof patch?.sidebarWidth === 'number' && Number.isFinite(patch.sidebarWidth)) {
         settings.update((s) => {
           s.prefs = { ...s.prefs, sidebarWidth: patch.sidebarWidth };
+        });
+      }
+      if (patch && 'themeCustom' in patch) {
+        const themeCustom = sanitizeThemeCustom(patch.themeCustom);
+        settings.update((s) => {
+          const { themeCustom: _old, ...rest } = s.prefs ?? {};
+          s.prefs = themeCustom ? { ...rest, themeCustom } : rest;
         });
       }
     },

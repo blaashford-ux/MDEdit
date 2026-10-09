@@ -1,4 +1,5 @@
 import type { DirNode, DraftRecord, EditorMode, FileStamp, Session, WorkspaceApi } from '../shared/api';
+import { applyThemeCustom } from './applyTheme';
 import {
   chapterBody,
   clampLevel,
@@ -350,6 +351,7 @@ export class Workspace {
       if (this.appLevel !== this.state.chapterLevel) this.set({ chapterLevel: this.appLevel });
       const prefs = await this.api.getPrefs();
       if (typeof prefs.sidebarWidth === 'number') this.setSidebarWidth(prefs.sidebarWidth, false);
+      applyThemeCustom(prefs.themeCustom);
       if (opts.restoreFolder !== false) {
         const folder = await this.api.getLastFolder();
         if (folder) await this.openPath(folder, true);

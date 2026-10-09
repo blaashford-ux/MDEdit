@@ -132,8 +132,12 @@ export interface Session {
   expanded: string[];
 }
 
+import type { ThemeCustom } from './theme';
+
 export interface Prefs {
   sidebarWidth?: number;
+  /** Colours the user changed in the light and dark themes (File → Settings → Appearance). */
+  themeCustom?: ThemeCustom;
 }
 
 /** Unsaved text autosaved for crash recovery. One per file (the open chapter's edits). */
