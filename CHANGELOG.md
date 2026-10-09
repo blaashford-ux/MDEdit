@@ -1,6 +1,6 @@
 # Changelog
 
-### Unreleased
+### 0.6.5 — 2026-10-09
 **New**
 - **Zone Mode (Windows).** The Zone button at the right end of the chapter bar (or F8, or View → Zone Mode) takes the app full screen and shows only the file you're working on, with its chapter bar: previous/next chapter, scene breaks, Notes, Save. No sidebar, tabs, title bar or status bar. The Zone button stays in the same place in both modes; press it again, F8 or F11 to leave.
 - **Next chapter on the last chapter adds a new one.** The button turns into a "+" on the last chapter, and clicking it (or Ctrl+PgDn) opens the usual New chapter dialog to add one after it. Works on the phone too; read-only shared projects can't add chapters.
