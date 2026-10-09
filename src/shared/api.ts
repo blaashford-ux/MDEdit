@@ -36,6 +36,7 @@ export interface FileStamp {
 
 /** Commands the native application menu can trigger in the renderer. */
 export type MenuAction =
+  | 'zone-mode'
   | 'change-folder'
   | 'refresh'
   | 'save'
@@ -132,8 +133,12 @@ export interface Session {
   expanded: string[];
 }
 
+import type { ThemeCustom } from './theme';
+
 export interface Prefs {
   sidebarWidth?: number;
+  /** Colours the user changed in the light and dark themes (File → Settings → Appearance). */
+  themeCustom?: ThemeCustom;
 }
 
 /** Unsaved text autosaved for crash recovery. One per file (the open chapter's edits). */
@@ -304,7 +309,8 @@ export interface DesktopApi {
   clickMenu(id: string): void;
   windowInfo(): Promise<WindowInfo>;
   onWindowState(cb: (info: WindowInfo) => void): () => void;
-  windowControl(action: 'minimize' | 'maximize' | 'close'): void;
+  /** 'fullscreen' and 'windowed' set the full-screen state outright (Zone Mode uses them). */
+  windowControl(action: 'minimize' | 'maximize' | 'close' | 'fullscreen' | 'windowed'): void;
   /** Native menu item clicked. Returns an unsubscribe function. */
   onMenuAction(cb: (action: MenuAction) => void): () => void;
 }
@@ -384,6 +390,12 @@ export interface ReviewSharingApi {
   listShared(): Promise<SharedProject[]>;
   /** An access token for Google's file picker, which gives MDEdit access to the files in an invitation. */
   pickerToken(): Promise<string>;
+  /**
+   * Phone only: runs Google's file picker in the phone's own browser and returns the file ids picked (null when cancelled).
+   * Google's picker stays blank when embedded in the app's web view, so the app hands over to the browser and is called back.
+   * Absent where the picker can be embedded (the Windows app).
+   */
+  pickInBrowser?(url: string): Promise<string[] | null>;
   /** Downloads the shared project into "Shared With Me" (after the picker has granted access). */
   joinReview(link: string, name: string): Promise<SharedProject>;
 }

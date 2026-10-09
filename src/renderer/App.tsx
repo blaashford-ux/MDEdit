@@ -101,6 +101,35 @@ export function App() {
 
   // Comments and suggestions on the open file (stored per reviewer inside the project).
   const [showReview, setShowReview] = useState(false);
+  // Zone Mode: full screen with only the open file and its navigation bar. It lasts as long as the window stays full screen,
+  // so leaving full screen another way (F11, Esc from the OS) ends it too.
+  const [zone, setZone] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
+  const zoneArmed = useRef(false); // true once the window has actually gone full screen for this zone session
+  const wasFullscreen = useRef(false); // full screen before Zone Mode, to go back to it
+  useEffect(() => {
+    if (!caps.windowChrome) return;
+    void window.mdedit.windowInfo().then((i) => setFullscreen(i.fullscreen));
+    return window.mdedit.onWindowState((i) => setFullscreen(i.fullscreen));
+  }, [caps.windowChrome]);
+  useEffect(() => {
+    if (!zone) {
+      zoneArmed.current = false;
+      return;
+    }
+    if (fullscreen) zoneArmed.current = true;
+    else if (zoneArmed.current) setZone(false);
+  }, [zone, fullscreen]);
+  const toggleZone = () => {
+    if (zone) {
+      setZone(false);
+      if (!wasFullscreen.current) window.mdedit.windowControl('windowed');
+      return;
+    }
+    wasFullscreen.current = fullscreen;
+    setZone(true);
+    if (!fullscreen) window.mdedit.windowControl('fullscreen');
+  };
   const [showShare, setShowShare] = useState(false);
   const [showAi, setShowAi] = useState(false);
   const [textMenu, setTextMenu] = useState<{ x: number; y: number; sel: { anchor: Anchor; oneBlock: boolean } } | null>(null);
@@ -419,6 +448,15 @@ export function App() {
       }
     });
 
+  /** Next chapter; on the last chapter there is no next one, so the new-chapter dialog opens to add one after it. */
+  const nextOrNewChapter = () => {
+    const tab = s.tabs.find((t) => t.id === s.activeId);
+    const doc = tab ? s.docs.get(tab.file) : undefined;
+    if (!tab || !doc) return;
+    if (tab.chapter < doc.chapters.length - 1) void ws.gotoChapter(1);
+    else if (!isReviewer) promptNewChapter(tab.file, tab.chapter);
+  };
+
   /** Moves a chapter and keeps the tree focus on it. */
   const moveRow = async (row: Row, delta: -1 | 1) => {
     const idx = await ws.moveChapter(row.path, row.chapter!, delta);
@@ -725,7 +763,8 @@ export function App() {
     'close-tab': () => s.activeId && void ws.closeTab(s.activeId),
     'next-tab': () => ws.cycleTab(1),
     'prev-tab': () => ws.cycleTab(-1),
-    'next-chapter': () => void ws.gotoChapter(1),
+    'next-chapter': nextOrNewChapter,
+    'zone-mode': () => caps.windowChrome && toggleZone(),
     'prev-chapter': () => void ws.gotoChapter(-1),
     'undo-action': () => void ws.undoAction(),
     'redo-action': () => void ws.redoAction(),
@@ -776,6 +815,7 @@ export function App() {
       else if (e.ctrlKey && e.key === 'PageDown') name = 'next-chapter';
       else if (e.ctrlKey && e.key === 'PageUp') name = 'prev-chapter';
       else if (e.key === 'F5') name = 'refresh';
+      else if (e.key === 'F8' && !mod && !e.altKey && !e.shiftKey) name = 'zone-mode';
       if (!name) return;
       e.preventDefault();
       act.current[name]();
@@ -840,8 +880,8 @@ export function App() {
   const toolbarBusy = s.refreshing;
 
   return (
-    <div className={`frame${caps.windowChrome ? '' : ' mobile'}${drawer ? ' drawer-open' : ''}`}>
-    {caps.windowChrome ? (
+    <div className={`frame${caps.windowChrome ? '' : ' mobile'}${drawer ? ' drawer-open' : ''}${zone ? ' zone' : ''}`}>
+    {caps.windowChrome ? (zone ? null :
       <TitleBar title={titleText} dirty={activeDirty} />
     ) : (
       <MobileBar
@@ -882,7 +922,7 @@ export function App() {
         ))}
       </div>
     ) : (
-    <div className="app" style={{ gridTemplateColumns: `${s.sidebarWidth}px 6px minmax(0, 1fr)` }}>
+    <div className="app" style={{ gridTemplateColumns: zone ? 'minmax(0, 1fr)' : `${s.sidebarWidth}px 6px minmax(0, 1fr)` }}>
       <aside className="sidebar">
         <div className="toolbar">
           <ProjectSwitcher
@@ -1003,7 +1043,7 @@ export function App() {
           </div>
         )}
 
-        <Tabs tabs={s.tabs} activeId={s.activeId} onActivate={(id) => ws.activateTab(id)} onClose={(id) => void ws.closeTab(id)} />
+        {!zone && <Tabs tabs={s.tabs} activeId={s.activeId} onActivate={(id) => ws.activateTab(id)} onClose={(id) => void ws.closeTab(id)} />}
 
         <div className="panes">
           {s.tabs.length === 0 && (
@@ -1045,10 +1085,16 @@ export function App() {
                     <button aria-label="Previous chapter" title="Previous chapter (Ctrl+PgUp)" disabled={tab.chapter === 0} onClick={() => void ws.gotoChapter(-1)}>
                       <Icon name="left" />
                     </button>
-                    <button aria-label="Next chapter" title="Next chapter (Ctrl+PgDn)" disabled={tab.chapter >= doc.chapters.length - 1} onClick={() => void ws.gotoChapter(1)}>
-                      <Icon name="right" />
-                    </button>
-                    {!caps.windowChrome && (
+                    {tab.chapter >= doc.chapters.length - 1 ? (
+                      <button aria-label="New chapter" title="This is the last chapter: add a new one after it (Ctrl+PgDn)" disabled={isReviewer} onClick={nextOrNewChapter}>
+                        <Icon name="plus" />
+                      </button>
+                    ) : (
+                      <button aria-label="Next chapter" title="Next chapter (Ctrl+PgDn)" onClick={nextOrNewChapter}>
+                        <Icon name="right" />
+                      </button>
+                    )}
+                    {!caps.windowChrome && !zone && (
                       <button aria-label="Go to line" onClick={promptGoToLine}>
                         Line…
                       </button>
@@ -1069,7 +1115,7 @@ export function App() {
                         Notes{openNotes > 0 ? ` (${openNotes})` : ''}
                       </button>
                     )}
-                    {!isReviewer && (
+                    {!isReviewer && !zone && (
                     <button
                       onClick={() => ws.setMode(tab.id, tab.mode === 'visual' ? 'source' : 'visual')}
                       title="Switch between formatted and raw Markdown (Ctrl+Shift+M)"
@@ -1080,6 +1126,11 @@ export function App() {
                     <button className="save-btn" onClick={() => void ws.save(tab.id)} disabled={!dirty}>
                       Save (Ctrl+S)
                     </button>
+                    {caps.windowChrome && (
+                      <button className="zone-btn" aria-label="Zone Mode" aria-pressed={zone} title={zone ? 'Leave Zone Mode (F8)' : 'Zone Mode: full screen, just this file (F8)'} onClick={toggleZone}>
+                        <Icon name={zone ? 'shrink' : 'expand'} /> Zone
+                      </button>
+                    )}
                   </div>
                 </div>
                 {active && find.open && (
@@ -1134,7 +1185,7 @@ export function App() {
           })}
         </div>
 
-        {activeTab && activeDoc && activeChapter && (
+        {!zone && activeTab && activeDoc && activeChapter && (
           <StatusBar
             chapterIndex={activeTab.chapter}
             chapterCount={activeDoc.chapters.length}

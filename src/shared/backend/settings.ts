@@ -2,6 +2,7 @@ import type { Prefs, Session, ThemeSource } from '../api';
 import { defaultAppDefaults, sanitizeAppDefaults, type AppDefaults } from '../appDefaults';
 import type { FsPort } from '../fsPort';
 import { defaultProjectsSettings, sanitizeProjectsSettings, type ProjectsSettings } from '../projects';
+import { sanitizeThemeCustom } from '../theme';
 import { makeFiles } from './files';
 
 export interface WindowState {
@@ -62,7 +63,10 @@ export function sanitizeSettings(data: unknown): Settings {
       ...(w.maximized === true ? { maximized: true } : {})
     };
   }
-  if (isObj(data.prefs) && isNum(data.prefs.sidebarWidth)) out.prefs = { sidebarWidth: data.prefs.sidebarWidth };
+  if (isObj(data.prefs)) {
+    const themeCustom = sanitizeThemeCustom(data.prefs.themeCustom);
+    if (isNum(data.prefs.sidebarWidth) || themeCustom) out.prefs = { ...(isNum(data.prefs.sidebarWidth) ? { sidebarWidth: data.prefs.sidebarWidth } : {}), ...(themeCustom ? { themeCustom } : {}) };
+  }
   if (isObj(data.appDefaults)) out.appDefaults = sanitizeAppDefaults(data.appDefaults);
   if (isObj(data.projects)) out.projects = sanitizeProjectsSettings(data.projects);
   if (isObj(data.sessions)) {

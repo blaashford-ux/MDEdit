@@ -14,6 +14,7 @@ import { createCapacitorFs, type FilesystemLike } from './capacitorFs';
 import { DialogHost, mobileDialogs } from './dialogs';
 import { AppUpdate } from './appUpdate';
 import { DriveAuth } from './driveAuth';
+import { pickInBrowser } from './externalBrowser';
 import { seededPreviewFs } from './sampleProject';
 import { desktopOnlyStubs } from './stubs';
 
@@ -81,7 +82,7 @@ async function start(): Promise<void> {
     accessToken: () => sync.accessToken(),
   });
   const core = onChange(backend.api, () => sync.syncSoon());
-  window.mdedit = { ...core, ...desktopOnlyStubs, ...bindSync(sync), ...reviews, ...androidUpdates(), capabilities: MOBILE_CAPABILITIES } satisfies MdeditApi;
+  window.mdedit = { ...core, ...desktopOnlyStubs, ...bindSync(sync), ...reviews, ...(native ? { pickInBrowser } : {}), ...androidUpdates(), capabilities: MOBILE_CAPABILITIES } satisfies MdeditApi;
 
   // Keep the latest version available: on start, when the app comes back to the front, and every minute while it is open.
   const visible = () => document.visibilityState === 'visible';

@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { UpdateInfo } from '../src/shared/update';
-import { downloadInstaller } from './update';
+import { checkBeforeLaunch, downloadInstaller } from './update';
 
 const BASE = 'https://github.com/blaashford-ux/MDEdit/releases/download/v0.5.0/';
 const bytes = Buffer.from('pretend installer');
@@ -79,5 +79,14 @@ describe('downloadInstaller', () => {
   });
   it('needs an installer in the release', async () => {
     await expect(downloadInstaller(info({ asset: null }), { fetchFn: server(''), dir, onProgress: () => undefined })).rejects.toThrow(/no Windows installer/);
+  });
+});
+
+describe('checkBeforeLaunch', () => {
+  it('accepts the file that was downloaded and refuses one that changed afterwards', async () => {
+    const file = await downloadInstaller(info(), { fetchFn: server(`${sha(bytes)}  MDEdit-Setup-0.5.0.exe\n`), dir, onProgress: () => undefined });
+    await expect(checkBeforeLaunch(file)).resolves.toContain(sha(bytes));
+    await fsp.appendFile(file, 'x');
+    await expect(checkBeforeLaunch(file)).rejects.toThrow(/changed after it was downloaded/);
   });
 });

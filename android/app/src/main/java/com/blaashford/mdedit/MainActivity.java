@@ -9,6 +9,7 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(AppUpdatePlugin.class);
+        registerPlugin(ExternalBrowserPlugin.class);
         registerPlugin(DriveAuthPlugin.class); // must be registered before super.onCreate
         super.onCreate(savedInstanceState);
         // Google's file picker (docs.google.com) runs in an iframe inside the invitation page (github.io), inside this page: a

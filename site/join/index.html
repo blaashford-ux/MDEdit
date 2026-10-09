@@ -15,6 +15,7 @@
   code { display: block; padding: 10px; margin: 10px 0; background: var(--bg); border-radius: 8px; word-break: break-all; font-size: 13px; color: var(--fg); }
   button { font: inherit; padding: 10px 16px; border: 0; border-radius: 10px; background: var(--accent); color: #fff; cursor: pointer; }
   #picker-msg { padding: 24px; text-align: center; }
+  .btn { display: inline-block; padding: 12px 20px; border-radius: 10px; background: var(--accent); color: #fff; text-decoration: none; }
 </style>
 </head>
 <body>
@@ -40,7 +41,18 @@ if (params.get('mode') === 'pick') {
   document.getElementById('landing').hidden = true;
   var msg = document.getElementById('picker-msg');
   msg.hidden = false;
-  var send = function (data) { parent.postMessage(Object.assign({ source: 'mdedit-picker' }, data), '*'); };
+  // Embedded in the app (Windows) the result goes to the parent window. On the phone the page runs in the browser (Google's picker
+  // stays blank inside the app's web view) and hands the result back to the app with an mdedit:// link.
+  var ret = params.get('ret') === '1';
+  var send = function (data) {
+    if (!ret) return parent.postMessage(Object.assign({ source: 'mdedit-picker' }, data), '*');
+    var back = 'mdedit://picked?' + (data.picked ? 'ids=' + encodeURIComponent(data.picked.join(',')) : data.cancelled ? 'cancelled=1' : 'error=1');
+    msg.innerHTML = '';
+    var a = document.createElement('a');
+    a.href = back; a.textContent = 'Return to MDEdit'; a.className = 'btn';
+    msg.appendChild(a);
+    location.href = back;
+  };
   var ids = [params.get('p'), params.get('c')].filter(Boolean);
   var token = params.get('t');
   var script = document.createElement('script');
@@ -58,7 +70,7 @@ if (params.get('mode') === 'pick') {
         .setAppId(APP_ID)
         .setCallback(function (d) {
           if (d.action === google.picker.Action.PICKED) {
-            msg.textContent = 'Done.';
+            if (!ret) msg.textContent = 'Done.';
             send({ picked: (d.docs || []).map(function (x) { return x.id; }) });
           } else if (d.action === google.picker.Action.CANCEL) send({ cancelled: true });
         })

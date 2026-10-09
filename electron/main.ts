@@ -13,9 +13,9 @@ import { runSmokeTest } from './smokeTest';
 import { loadDetails, renameSidecar, saveDetails, setMarked, existingSidecar } from './export/sidecar';
 import { createFile, createFolder, renameNode } from './fsops';
 import { sidecarPathFor } from '../src/shared/export/sidecar';
-import { promises as fsp } from 'node:fs';
+import { appendFileSync, promises as fsp } from 'node:fs';
 import { installMenu } from './menu';
-import { chromeOptions, registerWindowChrome, shellColor, watchWindow } from './windowChrome';
+import { chromeOptions, registerWindowChrome, setChromeTheme, shellColor, watchWindow } from './windowChrome';
 import { confirmDelete, confirmMarkEdited, confirmOverwrite, confirmRecover, confirmUnsaved } from './prompts';
 import { scanFolder } from './scan';
 import type { AiServerInfo } from '../src/shared/agent/config';
@@ -30,7 +30,8 @@ import { sanitizeAppDefaults, type AppDefaults } from '../src/shared/appDefaults
 import { defaultRootFolder, effectiveDefaults, sanitizeProjectsSettings, withOpened, type ProjectsConfig } from '../src/shared/projects';
 import * as projects from './projects';
 import { existingFolder, SettingsStore, type WindowState } from './settings';
-import { downloadInstaller } from './update';
+import { sanitizeThemeCustom } from '../src/shared/theme';
+import { checkBeforeLaunch, downloadInstaller } from './update';
 import { fetchLatestRelease, type UpdateInfo } from '../src/shared/update';
 import type { SyncService } from '../src/shared/sync/service';
 import { createDesktopSync } from './syncHost';
@@ -424,6 +425,14 @@ function registerIpc(): void {
         s.prefs = { ...s.prefs, sidebarWidth: patch.sidebarWidth };
       });
     }
+    if (patch && 'themeCustom' in patch) {
+      const themeCustom = sanitizeThemeCustom(patch.themeCustom);
+      settings.update((s) => {
+        const { themeCustom: _old, ...rest } = s.prefs ?? {};
+        s.prefs = themeCustom ? { ...rest, themeCustom } : rest;
+      });
+      setChromeTheme(themeCustom); // the title-bar buttons and the window background follow the custom colours
+    }
   });
   handle('session:get', (_e, folder: string) => settings.get().sessions?.[folder] ?? null);
   ipcMain.on('session:save', (_e, folder: string, session: Session) => {
@@ -471,6 +480,13 @@ function registerIpc(): void {
         if (!e.sender.isDestroyed()) e.sender.send('update:progress', p);
       }
     });
+    // Read it back once more right before running it: waits out any antivirus scan, and refuses a file that has changed.
+    try {
+      updateLog(`downloaded ${path.basename(file)}: ${await checkBeforeLaunch(file)}`);
+    } catch (err) {
+      updateLog(`not run: ${err instanceof Error ? err.message : String(err)}`);
+      throw err;
+    }
     // Start the installer only after we have exited (so no file is in use). Quitting goes through the usual
     // unsaved-changes prompt; if the user cancels that, `guardClose` clears this again.
     installerToRun = file;
@@ -609,6 +625,7 @@ if (!firstInstance) {
     await settings.load();
     drafts = new DraftStore(path.join(app.getPath('userData'), 'drafts'));
     nativeTheme.themeSource = settings.get().theme ?? 'system';
+    setChromeTheme(settings.get().prefs?.themeCustom);
 
     registerIpc();
     void aiRemote.load(); // comes back up only if the user left it on
@@ -627,9 +644,22 @@ if (!firstInstance) {
   });
 }
 
+/** One line per update step in %APPDATA%\MDEdit\update.log, so a failed update can be diagnosed afterwards. */
+function updateLog(line: string): void {
+  try {
+    appendFileSync(path.join(app.getPath('userData'), 'update.log'), `${new Date().toISOString()} v${app.getVersion()} ${line}\n`);
+  } catch {
+    /* logging must never get in the way of updating */
+  }
+}
+
 app.on('quit', () => {
   if (!installerToRun) return;
-  spawn(installerToRun, [], { detached: true, stdio: 'ignore' }).unref();
+  updateLog(`starting ${installerToRun}`);
+  // Started the way a double-click starts it (through the shell). Started directly from here it failed its own
+  // integrity check now and then, while the same file run by hand was fine.
+  const [cmd, args] = process.platform === 'win32' ? ['explorer.exe', [installerToRun]] : [installerToRun, []];
+  spawn(cmd, args, { detached: true, stdio: 'ignore' }).on('error', (e) => updateLog(`start failed: ${e.message}`)).unref();
 });
 
 let finalSyncStarted = false;

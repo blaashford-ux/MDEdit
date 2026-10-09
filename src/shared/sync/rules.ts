@@ -10,6 +10,8 @@ export type FileClass =
   | 'progress'
   /** Edited-chapter marks: merged chapter by chapter, newest change wins. */
   | 'marks'
+  /** A reviewer's notes file (.mdedit/review/<id>.json): merged note by note, so notes made on two devices both survive. */
+  | 'notes'
   /** Project / export settings: last writer wins (a conflict copy would confuse the project scan). */
   | 'meta'
   /** Anything else small (images…): last writer wins. */
@@ -40,6 +42,8 @@ export function classify(rel: string, opts: { includeExports?: boolean } = {}): 
   // Inside a hidden `.mdedit` folder only the known files travel; anything else there is per device (drafts, caches).
   const hidden = segments.findIndex((s) => s.toLowerCase() === '.mdedit');
   if (hidden >= 0) {
+    // Review notes: one file per reviewer (and per AI pass) in .mdedit/review.
+    if (hidden === segments.length - 3 && segments[hidden + 1].toLowerCase() === 'review') return /^[\w.-]+\.json$/i.test(name) ? 'notes' : null;
     if (hidden !== segments.length - 2) return null;
     if (/^progress(-[0-9a-f]+)?\.json$/i.test(name)) return 'progress';
     if (/^edited\.json$/i.test(name)) return 'marks';
