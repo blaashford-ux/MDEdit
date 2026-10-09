@@ -36,6 +36,7 @@ export interface FileStamp {
 
 /** Commands the native application menu can trigger in the renderer. */
 export type MenuAction =
+  | 'zone-mode'
   | 'change-folder'
   | 'refresh'
   | 'save'
@@ -308,7 +309,8 @@ export interface DesktopApi {
   clickMenu(id: string): void;
   windowInfo(): Promise<WindowInfo>;
   onWindowState(cb: (info: WindowInfo) => void): () => void;
-  windowControl(action: 'minimize' | 'maximize' | 'close'): void;
+  /** 'fullscreen' and 'windowed' set the full-screen state outright (Zone Mode uses them). */
+  windowControl(action: 'minimize' | 'maximize' | 'close' | 'fullscreen' | 'windowed'): void;
   /** Native menu item clicked. Returns an unsubscribe function. */
   onMenuAction(cb: (action: MenuAction) => void): () => void;
 }

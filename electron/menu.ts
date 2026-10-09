@@ -94,6 +94,7 @@ export function installMenu(theme: ThemeHooks): void {
         { role: 'zoomOut' },
         { role: 'resetZoom' },
         { type: 'separator' },
+        { label: 'Zone Mode\tF8', click: send('zone-mode') },
         { role: 'togglefullscreen' },
         ...(app.isPackaged ? [] : ([{ type: 'separator' }, { role: 'toggleDevTools' }] as MenuItemConstructorOptions[]))
       ]

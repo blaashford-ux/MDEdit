@@ -2,6 +2,8 @@
 
 ### Unreleased
 **New**
+- **Zone Mode (Windows).** The Zone button at the right end of the chapter bar (or F8, or View → Zone Mode) takes the app full screen and shows only the file you're working on, with its chapter bar: previous/next chapter, scene breaks, Notes, Save. No sidebar, tabs, title bar or status bar. The Zone button stays in the same place in both modes; press it again, F8 or F11 to leave.
+- **Next chapter on the last chapter adds a new one.** The button turns into a "+" on the last chapter, and clicking it (or Ctrl+PgDn) opens the usual New chapter dialog to add one after it. Works on the phone too; read-only shared projects can't add chapters.
 - **Theme customiser.** File → Settings → Appearance lets you change the colours of the light and dark themes separately: window, page, text, accent and highlight, each with a colour picker or a hex code, plus a few ready-made starting points (Paper, Mist, Sage for light; Midnight, Ember, Forest, Black for dark). Panels, buttons and softer text are worked out from your five colours. Changes show immediately; Save keeps them, Cancel puts the old ones back. Each theme has its own reset. Works on Windows and Android.
 **Fixed**
 - **Review notes now sync between your devices.** Comments and suggestions (yours and any AI reviewer's) were only kept on the device they were made on; they now travel through Google Drive with the project, and if both devices added notes, both sets are kept. Needs the update on every device.

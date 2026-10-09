@@ -73,6 +73,8 @@ export function registerWindowChrome(getWindow: () => BrowserWindow | null): voi
     if (action === 'minimize') win.minimize();
     else if (action === 'maximize') win.isMaximized() ? win.unmaximize() : win.maximize();
     else if (action === 'close') win.close();
+    else if (action === 'fullscreen') win.setFullScreen(true);
+    else if (action === 'windowed') win.setFullScreen(false);
   });
   ipcMain.handle('menu:describe', () => describeMenu());
   ipcMain.on('menu:click', (_e, id: unknown) => {

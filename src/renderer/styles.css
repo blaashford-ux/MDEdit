@@ -713,3 +713,8 @@ code.path { background: var(--raised); padding: 1px 6px; border-radius: 6px; }
 .tp-button { padding: 4px 10px; border-radius: var(--radius); background: var(--raised); }
 .tp-button.primary { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
 .tp-dirty { color: var(--dirty); margin-left: auto; }
+
+/* ---- Zone Mode: full screen, just the open file and its navigation bar ---- */
+.frame.zone .sidebar, .frame.zone .splitter { display: none; }
+.frame.zone .content { margin: 10px; }
+.zone-btn[aria-pressed='true'] { background: var(--accent-soft); color: var(--fg); }
