@@ -77,3 +77,40 @@ describe('clicking the text of a note', () => {
     await act(async () => root.unmount());
   });
 });
+
+describe('the "This chapter only" switch', () => {
+  const mount = async (items: ShownItem[], inChapter: Set<string> | null) => {
+    const root = createRoot(host);
+    await act(async () => root.render(createElement(ReviewPanel, { state: state(items), me: { id: 'owner', name: 'Me' }, role: 'owner', onRename: () => undefined, onClose: () => undefined, inChapter })));
+    return root;
+  };
+  const sw = () => host.querySelector<HTMLInputElement>('input[role=switch]');
+  beforeEach(() => localStorage.clear());
+
+  it('is not offered for a one-chapter file', async () => {
+    const root = await mount([note('a')], null);
+    expect(sw()).toBeNull();
+    await act(async () => root.unmount());
+  });
+
+  it('limits the list to the notes in the open chapter, and remembers the choice', async () => {
+    const items = ['a', 'b', 'c'].map((id) => note(id));
+    const root = await mount(items, new Set(['b']));
+    expect(rows().map((r) => r.dataset.noteId)).toEqual(['a', 'b', 'c']); // off by default
+    await act(async () => sw()!.click());
+    expect(rows().map((r) => r.dataset.noteId)).toEqual(['b']);
+    expect(localStorage.getItem('mdedit.notes.chapterOnly')).toBe('1');
+    await act(async () => root.unmount());
+    const again = await mount(items, new Set(['b']));
+    expect(sw()!.checked).toBe(true); // still on the next time the panel opens
+    expect(rows().map((r) => r.dataset.noteId)).toEqual(['b']);
+    await act(async () => again.unmount());
+  });
+
+  it('says so when the chapter has no open notes', async () => {
+    localStorage.setItem('mdedit.notes.chapterOnly', '1');
+    const root = await mount([note('a')], new Set());
+    expect(host.querySelector('.review-empty')?.textContent).toBe('No open notes in this chapter.');
+    await act(async () => root.unmount());
+  });
+});

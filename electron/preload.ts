@@ -12,6 +12,7 @@ const api: MdeditApi = {
   exchangeReviews: (project) => ipcRenderer.invoke('review:exchange', project),
   listShared: () => ipcRenderer.invoke('review:listShared'),
   pickerToken: () => ipcRenderer.invoke('review:pickerToken'),
+  pickInBrowser: (url) => ipcRenderer.invoke('review:pickInBrowser', url),
   joinReview: (link, name) => ipcRenderer.invoke('review:join', link, name),
   getSyncStatus: () => ipcRenderer.invoke('sync:status'),
   connectSync: () => ipcRenderer.invoke('sync:connect'),

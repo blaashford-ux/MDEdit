@@ -43,13 +43,18 @@ if (params.get('mode') === 'pick') {
   msg.hidden = false;
   // Embedded in the app (Windows) the result goes to the parent window. On the phone the page runs in the browser (Google's picker
   // stays blank inside the app's web view) and hands the result back to the app with an mdedit:// link.
-  var ret = params.get('ret') === '1';
+  // ret=1: hand back with an mdedit://picked link (phone). ret=http://127.0.0.1:<port>/picked?state=...: hand back to the
+  // desktop app's local listener. Anything else is ignored, so this page can never send a result to some other address.
+  var retParam = params.get('ret');
+  var loopback = /^http:\/\/127\.0\.0\.1:\d{2,5}\/picked\?state=[A-Za-z0-9_-]{8,64}$/.test(retParam || '');
+  var ret = retParam === '1' || loopback;
   var send = function (data) {
     if (!ret) return parent.postMessage(Object.assign({ source: 'mdedit-picker' }, data), '*');
-    var back = 'mdedit://picked?' + (data.picked ? 'ids=' + encodeURIComponent(data.picked.join(',')) : data.cancelled ? 'cancelled=1' : 'error=1');
+    var answer = data.picked ? 'ids=' + encodeURIComponent(data.picked.join(',')) : data.cancelled ? 'cancelled=1' : 'error=1';
+    var back = loopback ? retParam + '&' + answer : 'mdedit://picked?' + answer;
     msg.innerHTML = '';
     var a = document.createElement('a');
-    a.href = back; a.textContent = 'Return to MDEdit'; a.className = 'btn';
+    a.href = back; a.textContent = loopback ? 'Back to MDEdit' : 'Return to MDEdit'; a.className = 'btn';
     msg.appendChild(a);
     location.href = back;
   };
