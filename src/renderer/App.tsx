@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { flattenMarkdown } from '../shared/agent/flatten';
+import { locateAnchor } from '../shared/review/comments';
 import type { MenuAction, SyncStatus } from '../shared/api';
 import { basename, dirname, validateName } from '../shared/paths';
 import { collectFiles, collectOrphans, findNode } from '../shared/tree';
@@ -224,6 +226,15 @@ export function App() {
     return () => clearInterval(timer);
   }, [activeTab?.id, activeTab?.chapter, activeTab?.reloadKey, navVersion, review.items]);
   const openNotes = review.items.filter((i) => i.status === 'open').length;
+  // Which notes are in the open chapter's text, for the Notes panel's "This chapter only" switch. Worked out from the (deferred)
+  // chapter text, so typing is never held up by it. Null when the file is a single chapter, where the switch means nothing.
+  const chapterText = useDeferredValue(activeTab && activeDoc ? (activeTab.draft ?? activeDoc.chapters[activeTab.chapter]?.raw ?? '') : '');
+  const multiChapter = !!activeDoc && activeDoc.chapters.length > 1;
+  const notesInChapter = useMemo(() => {
+    if (!showReview || !multiChapter) return null;
+    const flat = flattenMarkdown(chapterText);
+    return new Set(review.items.filter((i) => locateAnchor(flat, i.anchor) !== null).map((i) => i.id));
+  }, [showReview, multiChapter, chapterText, review.items]);
   const activeKey = activeTab ? chapterKey(activeTab.file, activeTab.chapter) : null;
   useEffect(() => setDrawer(false), [activeKey]);
   // the pane element outlives a chapter change within a tab, so its scroll position would carry over: always start a chapter at the top
@@ -1225,6 +1236,7 @@ export function App() {
           onAi={caps.ai && !isReviewer ? () => setShowAi(true) : undefined}
           onGoTo={goToNote}
           focus={noteFocus}
+          inChapter={notesInChapter}
           onRename={(name) => {
             const next = { ...me, name };
             setMe(next);

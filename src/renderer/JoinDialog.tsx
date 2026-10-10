@@ -75,7 +75,7 @@ export function JoinDialog({ onJoined, onClose }: Props) {
         <h3>Open an invitation</h3>
         {waiting ? (
           <>
-            <p className="modal-hint">Google’s file picker is open in your browser. Select both files there, then tap “Return to MDEdit”.</p>
+            <p className="modal-hint">Google’s file picker is open in your browser. Select both files there; if the browser doesn’t switch back by itself, come back to MDEdit (on the phone, tap “Return to MDEdit”).</p>
             <div className="modal-actions">
               <button type="button" onClick={() => (attempt.current++, setWaiting(false), setBusy(false))}>Cancel</button>
             </div>

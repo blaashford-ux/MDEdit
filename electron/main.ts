@@ -31,6 +31,7 @@ import { defaultRootFolder, effectiveDefaults, sanitizeProjectsSettings, withOpe
 import * as projects from './projects';
 import { existingFolder, SettingsStore, type WindowState } from './settings';
 import { sanitizeThemeCustom } from '../src/shared/theme';
+import { pickInBrowser } from './pickerBrowser';
 import { checkBeforeLaunch, downloadInstaller } from './update';
 import { fetchLatestRelease, type UpdateInfo } from '../src/shared/update';
 import type { SyncService } from '../src/shared/sync/service';
@@ -468,6 +469,7 @@ function registerIpc(): void {
   handle('review:stop', async (_e, project: string) => (await reviewHost()).stopSharing(reviewPath(project)));
   handle('review:listShared', async () => (await reviewHost()).listShared());
   handle('review:pickerToken', async () => (await reviewHost()).pickerToken());
+  handle('review:pickInBrowser', (_e, url: unknown) => pickInBrowser(String(url), (u) => shell.openExternal(u)));
   handle('review:join', async (_e, link: string, name: string) => (await reviewHost()).joinReview(link, name));
   // ---- Updating from the latest GitHub release ----
   handle('update:version', () => app.getVersion());

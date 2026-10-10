@@ -1,5 +1,11 @@
 # Changelog
 
+### 0.6.6 — 2026-10-10
+**New**
+- **Notes: "This chapter only" switch.** A toggle at the top of the Notes panel limits the list to the notes in the chapter you are reading. It combines with the "from" and "about" filters, "Apply all" only touches the notes shown, and MDEdit remembers the switch. It only appears for files with more than one chapter.
+**Fixed**
+- **Windows: Google's file picker (opening an invitation) now opens in your browser instead of inside the app.** Embedded two frames deep inside the app the picker showed up blank. MDEdit now opens the invitation page in your default browser and waits for the answer on a local address (127.0.0.1, like Google sign-in does); after picking the two files the browser tells MDEdit and the app carries on. The phone already worked this way since 0.6.5.
+
 ### 0.6.5 — 2026-10-09
 **New**
 - **Zone Mode (Windows).** The Zone button at the right end of the chapter bar (or F8, or View → Zone Mode) takes the app full screen and shows only the file you're working on, with its chapter bar: previous/next chapter, scene breaks, Notes, Save. No sidebar, tabs, title bar or status bar. The Zone button stays in the same place in both modes; press it again, F8 or F11 to leave.

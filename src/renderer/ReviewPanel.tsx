@@ -13,6 +13,8 @@ interface Props {
   onShare?(): void;
   /** Desktop owner only: opens the dialog for connecting AI reviewers. */
   onAi?(): void;
+  /** Ids of the notes that are in the open chapter's text; null when the file has only one chapter (then there is nothing to restrict). */
+  inChapter?: Set<string> | null;
   /** Brings a note to the top of the list and marks it (the text of that note was clicked). A new `n` is a new request. */
   focus?: { id: string; n: number } | null;
   /** Shows a note in the text, opening its chapter first. Resolves to a message when it can't be shown. */
@@ -26,7 +28,16 @@ interface Props {
 const excerpt = (s: string, n = 90) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
 /** Comments and suggestions on the open chapter's file. */
-export function ReviewPanel({ state, me, role, onRename, onClose, onShare, onAi, onGoTo, focus, notice, request }: Props) {
+const CHAPTER_ONLY_KEY = 'mdedit.notes.chapterOnly';
+const readChapterOnly = (): boolean => {
+  try {
+    return localStorage.getItem(CHAPTER_ONLY_KEY) === '1';
+  } catch {
+    return false;
+  }
+};
+
+export function ReviewPanel({ state, me, role, onRename, onClose, onShare, onAi, onGoTo, focus, inChapter, notice, request }: Props) {
   const [draft, setDraft] = useState<{ anchor: Anchor; oneBlock: boolean } | null>(null);
   const [kind, setKind] = useState<'comment' | 'suggestion'>('comment');
   const [body, setBody] = useState('');
@@ -37,6 +48,7 @@ export function ReviewPanel({ state, me, role, onRename, onClose, onShare, onAi,
   const [replyText, setReplyText] = useState('');
   const [who, setWho] = useState('all');
   const [category, setCategory] = useState('all');
+  const [chapterOnly, setChapterOnly] = useState(readChapterOnly);
   const [confirmAll, setConfirmAll] = useState(false);
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const [scrollTick, setScrollTick] = useState(0);
@@ -98,7 +110,10 @@ export function ReviewPanel({ state, me, role, onRename, onClose, onShare, onAi,
   const categories = [...new Set(state.items.map((i) => i.category).filter((c): c is string => !!c))].sort();
   const whoNow = reviewers.some(([id]) => id === who) ? who : 'all';
   const categoryNow = categories.includes(category) ? category : 'all';
-  const matching = state.items.filter((i) => (whoNow === 'all' || i.reviewerId === whoNow) && (categoryNow === 'all' || i.category === categoryNow));
+  const thisChapterOnly = chapterOnly && !!inChapter;
+  const matching = state.items.filter(
+    (i) => (whoNow === 'all' || i.reviewerId === whoNow) && (categoryNow === 'all' || i.category === categoryNow) && (!thisChapterOnly || inChapter!.has(i.id))
+  );
   const visible = matching.filter((i) => showDone || i.status === 'open');
   const doneCount = matching.length - matching.filter((i) => i.status === 'open').length;
   const applicable = role === 'owner' && whoNow !== 'all' ? matching.filter((i) => i.kind === 'suggestion' && i.status === 'open') : [];
@@ -154,6 +169,26 @@ export function ReviewPanel({ state, me, role, onRename, onClose, onShare, onAi,
         </div>
       )}
 
+      {inChapter && (
+        <label className="switch review-chapter-switch" title="Show only the notes that are in the chapter you are reading">
+          <input
+            type="checkbox"
+            role="switch"
+            checked={chapterOnly}
+            onChange={(e) => {
+              setChapterOnly(e.target.checked);
+              setConfirmAll(false);
+              try {
+                localStorage.setItem(CHAPTER_ONLY_KEY, e.target.checked ? '1' : '0');
+              } catch {
+                /* the choice just isn't remembered */
+              }
+            }}
+          />
+          <span className="switch-track" aria-hidden="true" />
+          <span>This chapter only</span>
+        </label>
+      )}
       {(reviewers.length > 1 || categories.length > 0) && (
         <div className="review-filters">
           {reviewers.length > 1 && (
@@ -185,7 +220,7 @@ export function ReviewPanel({ state, me, role, onRename, onClose, onShare, onAi,
       )}
 
       <ul className={`review-list${focusedId ? ' has-focus' : ''}`} ref={listRef}>
-        {visible.length === 0 && <li className="review-empty">{state.items.length ? 'No open notes.' : 'No notes on this file yet.'}</li>}
+        {visible.length === 0 && <li className="review-empty">{thisChapterOnly ? 'No open notes in this chapter.' : state.items.length ? 'No open notes.' : 'No notes on this file yet.'}</li>}
         {visible.map((i) => (
           <li key={i.id} data-note-id={i.id} className={`review-item s-${i.status}${state.detached.has(i.id) ? ' detached' : ''}${i.id === focusedId ? ' focused' : ''}`}>
             <button type="button" className="review-quote" onClick={() => (onGoTo ? void onGoTo(i.id).then(setMessage) : state.focus(i.id))} title="Show in the text">
