@@ -1,6 +1,6 @@
 # Changelog
 
-### Unreleased
+### 0.6.6 — 2026-10-10
 **New**
 - **Notes: "This chapter only" switch.** A toggle at the top of the Notes panel limits the list to the notes in the chapter you are reading. It combines with the "from" and "about" filters, "Apply all" only touches the notes shown, and MDEdit remembers the switch. It only appears for files with more than one chapter.
 **Fixed**
