@@ -22,6 +22,7 @@ import { goalFor, relativeTo } from '../shared/projects';
 import { projectNameError, uniqueName, type ProjectStatus, type ProjectSummary, type ProjectsConfig, type RootListing } from '../shared/projects';
 import { RelinkDialog } from './RelinkDialog';
 import { ReportView } from './ReportView';
+import { FormatBar } from './FormatBar';
 import { extractAnalysis } from '../shared/analysis/embed';
 import { SettingsDialog } from './SettingsDialog';
 import type { MarkdownDoc } from '../shared/chapters';
@@ -988,6 +989,10 @@ export function App() {
             );
           })}
         </div>
+
+        {!caps.windowChrome && activeTab?.mode === 'visual' && navs.current.get(activeTab.id)?.format && !(activeDoc && reportOf(activeDoc) && !rawReports.has(activeTab.id)) && (
+          <FormatBar key={activeTab.id} format={navs.current.get(activeTab.id)!.format!} />
+        )}
 
         {activeTab && activeDoc && activeChapter && (
           <StatusBar

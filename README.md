@@ -133,6 +133,9 @@ automatically. See [docs/RELEASING.md](docs/RELEASING.md).
 ## Changelog
 
 ### 0.7.0 — 2026-10-11
+**Fixed (phone)**
+- **Selecting text works the way the system does it.** The formatted editor's floating toolbar, hover handles and virtual caret are off on the phone: they put a second menu over the selection, fought the selection handles, and a long press could select far too much. Selection is now Android's own (handles and Cut / Copy / Paste menu), and formatting (bold, italic, headings, quote, lists, scene break, undo/redo) is a bar docked above the keyboard that appears while you are typing.
+
 **New**
 - **Analyze Text** on a file's right-click menu. It reads the manuscript (including unsaved edits to the open chapter) in the background, so you can keep writing, then adds `<name> - Analysis.md` next to it and opens it in a new tab without switching to it. Running it again makes `… Analysis 2.md`, so earlier reports are kept for comparison.
 - The report file is Markdown with its results stored in a one-line comment at the end. In MDEdit it opens as a **formatted report page**: stat tiles, bar and column charts, per-chapter sparklines, a reading-level gauge, a who-appears-where heat map, tables and highlighted examples, following the light or dark theme. **Save as HTML** writes a single self-contained web page; **Save as PDF** writes a PDF (desktop). **Edit as Markdown** shows the file's text, which is also readable on its own (text charts included) in any Markdown editor.

@@ -588,3 +588,11 @@ code.path { background: var(--raised); padding: 1px 6px; border-radius: 6px; }
 .report-bar .spacer { flex: 1; }
 .report-msg { color: var(--muted); font-size: 13px; }
 .report-frame { flex: 1; min-height: 0; width: 100%; border: 0; background: transparent; }
+
+/* phone: selection belongs to the system (handles + its own menu); formatting lives in a bar above the keyboard */
+.frame.mobile .editor .milkdown .ProseMirror { -webkit-tap-highlight-color: transparent; touch-action: manipulation; -webkit-user-select: text; user-select: text; padding-bottom: 88px; }
+.format-bar { position: fixed; left: 0; right: 0; z-index: 40; display: flex; gap: 2px; padding: 4px 6px; overflow-x: auto; background: var(--shell); border-top: 1px solid var(--faint); box-shadow: 0 -4px 14px rgba(8, 4, 26, 0.25); -webkit-overflow-scrolling: touch; }
+.fb-btn { flex: 1 0 auto; min-width: 44px; height: 42px; padding: 0 10px; background: transparent; color: var(--fg); border-radius: 10px; font-size: 17px; touch-action: manipulation; }
+.fb-btn:active { background: var(--raised); }
+.fb-btn.b { font-weight: 800; }
+.fb-btn.i { font-style: italic; font-family: Georgia, serif; }
