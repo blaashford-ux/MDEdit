@@ -136,6 +136,31 @@ describe('sharing a project for review', () => {
     expect(await join.sync(joined.dir)).toEqual({ changed: false, revoked: true });
   });
 
+  it('shares the package again when a new reviewer is invited after the last one was removed', async () => {
+    const { drive, share } = setup();
+    const a = await share.invite('/root/Novel', 'Novel', 'Sam');
+    const packageId = parseInviteLink(a.link)!.packageId;
+    await share.revoke('/root/Novel', 'Novel', a.id);
+    expect(drive.links.has(packageId)).toBe(false); // the last reviewer is gone, so the package is closed
+    const b = await share.invite('/root/Novel', 'Novel', 'Mihael');
+    expect(parseInviteLink(b.link)!.packageId).toBe(packageId); // the same package is re-used...
+    expect(drive.links.get(packageId)).toBe('reader'); // ...so it has to be opened again
+  });
+
+  it('repairs an invitation whose package was left private, when the owner next exchanges notes', async () => {
+    const { drive, ownerFs, share } = setup();
+    const a = await share.invite('/root/Novel', 'Novel', 'Sam');
+    const packageId = parseInviteLink(a.link)!.packageId;
+    await drive.unshare(packageId); // how existing invitations were left
+    const later = new ReviewShare({ fs: ownerFs, drive: () => drive, stateFile: '/state/shares.json' }); // the next time the app runs
+    const r = await later.pull('/root/Novel', 'Novel');
+    expect(r.errors).toEqual([]);
+    expect(drive.links.get(packageId)).toBe('reader');
+    drive.calls.length = 0;
+    await later.pull('/root/Novel', 'Novel');
+    expect(drive.calls.filter((c) => c.startsWith('share:'))).toEqual([]); // checked once per session, not every minute
+  });
+
   it('lists the shared projects and can remove every reviewer at once', async () => {
     const { share, drive } = setup();
     expect(await share.list()).toEqual([]);
