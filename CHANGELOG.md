@@ -1,6 +1,6 @@
 # Changelog
 
-### Unreleased
+### 0.6.7 — 2026-10-11
 **Fixed**
 - **Sharing: a reviewer invited after you removed the previous reviewer could not open the project.** Removing a project's last reviewer closes the shared copy of the manuscript, and the next invitation re-used that copy without opening it again, so the reviewer's file picker offered only their comments file. Inviting now opens the shared copy again, and MDEdit repairs invitations already sent that way (when it next exchanges notes for that project).
 - **Editing stage: "Mark Edited?" is now asked when you press Next chapter on the last chapter.** There the button adds a new chapter and opens the New chapter dialog, so a saved chapter was only offered afterwards, and not at all if you cancelled the dialog. It now asks first, once (not again until you save again), then opens the dialog.
