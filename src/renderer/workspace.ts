@@ -17,7 +17,9 @@ import type { Progress } from '../shared/progress';
 import { chapterIds, isChapterEdited, relativeTo, withChapterEdited, type ProjectMeta } from '../shared/projects';
 import { chapterLabel } from './treeRows';
 import { basename, dirname, isInside, remapPath } from '../shared/paths';
-import { collectFiles, collectOrphans, flattenPaths } from '../shared/tree';
+import { collectFiles, collectOrphans, findNode, flattenPaths } from '../shared/tree';
+import { analyzeManuscript, type ChapterInput } from '../shared/analysis/analyze';
+import { renderReport } from '../shared/analysis/report';
 
 export type Conflict = { kind: 'changed'; text: string; stamp: FileStamp } | { kind: 'missing' };
 
@@ -87,6 +89,7 @@ export const SIDEBAR_DEFAULT = 300;
 
 const sameStamp = (a: FileStamp, b: FileStamp) => a.mtimeMs === b.mtimeMs && a.size === b.size;
 const stripExt = (name: string) => name.replace(/\.(md|markdown)$/i, '');
+const localDay = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
 /**
  * All document state and logic: the folder tree, open tabs (one per file), unsaved drafts,
@@ -124,6 +127,7 @@ export class Workspace {
   private sessionTimer: ReturnType<typeof setTimeout> | undefined;
   private lastSession = '';
   private lastDirty = '';
+  private analyzing = new Set<string>();
   private readonly draftDelay: number;
   private readonly sessionDelay: number;
 
@@ -915,6 +919,67 @@ export class Workspace {
       this.set({ error: String(e instanceof Error ? e.message : e) });
       return false;
     }
+  }
+
+  // ---- text analysis --------------------------------------------------------------------
+
+  isAnalyzing(file: string): boolean {
+    return this.analyzing.has(file);
+  }
+
+  /**
+   * Analyses a manuscript's prose in the background and writes the report beside it as a new Markdown file,
+   * which opens in a tab without taking focus. Returns the report's path, or null if it could not be made.
+   */
+  async analyzeFile(file: string): Promise<string | null> {
+    if (this.analyzing.has(file)) {
+      this.set({ notice: `${basename(file)} is already being analysed.` });
+      return null;
+    }
+    this.analyzing.add(file);
+    this.set({ notice: `Analysing ${basename(file)} in the background. The report will open in a new tab when it is ready.` });
+    try {
+      const { text } = await this.api.readFile(file);
+      const doc = this.split(text);
+      const open = this.tabForFile(file);
+      const chapters: ChapterInput[] = doc.chapters.map((c, i) => ({
+        title: c.title,
+        isPreamble: c.isPreamble,
+        raw: open && open.draft !== null && open.chapter === i ? open.draft : c.raw
+      }));
+      // a preamble with no prose (just a title page or nothing) would only add an empty row
+      const inputs = chapters.filter((c) => !c.isPreamble || /\p{L}/u.test(c.raw.replace(/^\s*#.*$/gm, '')));
+      const analysis = await analyzeManuscript(inputs);
+      const report = renderReport(analysis, { source: basename(file), generated: localDay(new Date()), level: this.state.chapterLevel });
+      const dir = dirname(file);
+      const folder = this.state.root ? findNode(this.state.root, dir) : undefined;
+      const taken = folder && folder.kind === 'dir' ? folder.children.map((c) => c.name.toLowerCase()) : [];
+      const stem = stripExt(basename(file));
+      let name = `${stem} - Analysis.md`;
+      for (let n = 2; taken.includes(name.toLowerCase()) && n < 1000; n++) name = `${stem} - Analysis ${n}.md`;
+      const created = await this.api.createFile(dir, name, report);
+      await this.refresh();
+      this.expandPath(created);
+      await this.openInBackground(created, file);
+      this.set({ notice: `Analysis of ${basename(file)} is ready: ${basename(created)}` });
+      return created;
+    } catch (e) {
+      this.set({ notice: null, error: `Could not analyse ${basename(file)}: ${e instanceof Error ? e.message : e}` });
+      return null;
+    } finally {
+      this.analyzing.delete(file);
+    }
+  }
+
+  /** Opens `file` as a new tab (next to `after`'s tab, if it has one) without switching to it. */
+  async openInBackground(file: string, after?: string): Promise<void> {
+    if (this.tabForFile(file)) return;
+    await this.loadDoc(file);
+    const created = this.newTab(file, 0);
+    const tabs = this.state.tabs.slice();
+    const at = after ? tabs.findIndex((t) => t.file === after) : -1;
+    tabs.splice(at >= 0 ? at + 1 : tabs.length, 0, created);
+    this.set({ tabs });
   }
 
   /** Creates a folder and reveals it in the tree. Returns its path, or null on failure. */

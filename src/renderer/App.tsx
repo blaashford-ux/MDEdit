@@ -342,6 +342,7 @@ export function App() {
         : [];
       return [
         ...manuscriptItems,
+        { label: 'Analyze Text', disabled: ws.isAnalyzing(row.path), onClick: () => void ws.analyzeFile(row.path) },
         ...(caps.export ? exportItems : []),
         { label: 'Rename…', hint: 'F2', onClick: () => promptRename(row) },
         ...reveal,
