@@ -121,8 +121,10 @@ export function createDriveRest(o: DriveRestOptions): DriveApi {
 
     async shareByLink(id, role) {
       const base = `${FILES}/${encodeURIComponent(id)}`;
-      // Writers must not be able to hand the file on (or change who has access).
-      await call(`${base}?fields=id`, jsonInit('PATCH', { writersCanShare: false, copyRequiresWriterPermission: true }));
+      // Writers must not be able to hand the file on (or change who has access). "Copying requires writer permission" also
+      // stops viewers downloading ("This file cannot be downloaded by the user"), so it is only set for a file people write to:
+      // a read-only link has to stay downloadable, and is switched back on for files that were shared before this was understood.
+      await call(`${base}?fields=id`, jsonInit('PATCH', { writersCanShare: false, copyRequiresWriterPermission: role === 'writer' }));
       const perms = (await (await call(`${base}/permissions?fields=permissions(id,type,role)`)).json()) as { permissions?: { id: string; type: string; role: string }[] };
       const anyone = perms.permissions?.find((p) => p.type === 'anyone');
       if (anyone) {
