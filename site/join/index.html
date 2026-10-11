@@ -69,7 +69,7 @@ if (params.get('mode') === 'pick') {
       new google.picker.PickerBuilder()
         .addView(view)
         .enableFeature(google.picker.Feature.MULTISELECT_ENABLED)
-        .setTitle('Select both files to open this project')
+        .setTitle(ids.length > 1 ? 'Select both files (Ctrl or Shift + click for the second) to open this project' : 'Select the remaining file to open this project')
         .setOAuthToken(token)
         .setDeveloperKey(API_KEY)
         .setAppId(APP_ID)

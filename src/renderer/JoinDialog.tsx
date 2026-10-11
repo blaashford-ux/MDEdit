@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { parseInviteLink } from '../shared/review/link';
 import type { SharedProject } from '../shared/review/share';
 import { PickerFrame, pickerUrl } from './PickerFrame';
+import { pickAll, shortIds } from './pickFiles';
 import { useEscape } from './useEscape';
 import { loadIdentity, saveIdentity } from './useReview';
 
@@ -21,6 +22,7 @@ export function JoinDialog({ onJoined, onClose }: Props) {
   const [busy, setBusy] = useState(false);
   // Phone: the picker runs in the browser and this dialog waits for it. Cancelling bumps the counter so a late answer is ignored.
   const [waiting, setWaiting] = useState(false);
+  const [waitingFor, setWaitingFor] = useState(2);
   const attempt = useRef(0);
   const [error, setError] = useState<string | null>(null);
   useEscape(onClose);
@@ -35,15 +37,23 @@ export function JoinDialog({ onJoined, onClose }: Props) {
       const t = await api.pickerToken();
       if (invite && api.pickInBrowser) {
         const mine = ++attempt.current;
-        setWaiting(true);
-        const ids = await api.pickInBrowser(pickerUrl(t, [invite.packageId, invite.commentsId], true)).catch((e) => {
-          if (attempt.current === mine) setError(e instanceof Error ? e.message : String(e));
-          return null;
+        const need = [invite.packageId, invite.commentsId];
+        // Ask for the files still missing, so picking just one of the two is not a dead end.
+        const outcome = await pickAll(need, async (missing) => {
+          if (attempt.current !== mine) return null; // cancelled meanwhile
+          setWaiting(true);
+          setWaitingFor(missing.length);
+          return api.pickInBrowser!(pickerUrl(t, missing, true)).catch((e) => {
+            if (attempt.current === mine) setError(e instanceof Error ? e.message : String(e));
+            return null;
+          });
         });
         if (attempt.current !== mine) return;
         setWaiting(false);
-        if (ids && ids.includes(invite.packageId) && ids.includes(invite.commentsId)) await finish();
-        else if (ids) setError('Select both files so MDEdit can open the project and save your notes.');
+        if (outcome.done) await finish();
+        else if (!outcome.cancelled) {
+          setError(`Google’s picker didn’t return the project’s files (asked for ${shortIds(need)}; it returned ${outcome.got.map(shortIds).join(' / ')}). Try the invitation link again, and tell the person who sent it if this keeps happening.`);
+        }
         return;
       }
       setToken(t);
@@ -75,7 +85,7 @@ export function JoinDialog({ onJoined, onClose }: Props) {
         <h3>Open an invitation</h3>
         {waiting ? (
           <>
-            <p className="modal-hint">Google’s file picker is open in your browser. Select both files there; if the browser doesn’t switch back by itself, come back to MDEdit (on the phone, tap “Return to MDEdit”).</p>
+            <p className="modal-hint">{waitingFor > 1 ? 'Google’s file picker is open in your browser. Select both files there' : 'One more file to go: Google’s file picker is open again in your browser. Select the file it shows'}; if the browser doesn’t switch back by itself, come back to MDEdit (on the phone, tap “Return to MDEdit”).</p>
             <div className="modal-actions">
               <button type="button" onClick={() => (attempt.current++, setWaiting(false), setBusy(false))}>Cancel</button>
             </div>
