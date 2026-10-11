@@ -394,10 +394,12 @@ export interface ProjectsSettings {
   /** Open the project that was open last time when the app starts. */
   reopenLast: boolean;
   lastProject: string | null;
+  /** Project paths in the order they were opened on this device, most recent first (kept short). */
+  recentProjects: string[];
 }
 
 export function defaultProjectsSettings(): ProjectsSettings {
-  return { rootFolder: null, setupDone: false, templates: defaultTemplates(), defaultTemplateId: 'novel', reopenLast: true, lastProject: null };
+  return { rootFolder: null, setupDone: false, templates: defaultTemplates(), defaultTemplateId: 'novel', reopenLast: true, lastProject: null, recentProjects: [] };
 }
 
 export function sanitizeProjectsSettings(raw: unknown): ProjectsSettings {
@@ -411,8 +413,33 @@ export function sanitizeProjectsSettings(raw: unknown): ProjectsSettings {
     templates,
     defaultTemplateId: templates.some((t) => t.id === wanted) ? wanted : templates[0].id,
     reopenLast: raw.reopenLast !== false,
-    lastProject: typeof raw.lastProject === 'string' && raw.lastProject ? raw.lastProject.slice(0, 1000) : null
+    lastProject: typeof raw.lastProject === 'string' && raw.lastProject ? raw.lastProject.slice(0, 1000) : null,
+    recentProjects: Array.isArray(raw.recentProjects) ? raw.recentProjects.filter((p): p is string => typeof p === 'string' && !!p).map((p) => p.slice(0, 1000)).slice(0, MAX_RECENT) : []
   };
+}
+
+export const MAX_RECENT = 30;
+
+const samePath = (a: string, b: string) => a.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase() === b.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+
+/** The list of recently opened projects with `opened` moved to the front (once, whatever its spelling), or unchanged for null. */
+export function withOpened(recent: string[], opened: string | null): string[] {
+  if (!opened) return recent;
+  return [opened, ...recent.filter((p) => !samePath(p, opened))].slice(0, MAX_RECENT);
+}
+
+/**
+ * Projects for a "switch to" list: the ones opened on this device first, most recently opened first, then the rest by
+ * when their files were last edited. Archived projects and `exceptPath` (the open one) are left out.
+ */
+export function byRecentlyOpened<T extends { path: string; lastEdited: number | null; meta: { archived?: boolean } }>(projects: T[], recent: string[], exceptPath: string | null = null): T[] {
+  const rank = (p: T) => {
+    const i = recent.findIndex((r) => samePath(r, p.path));
+    return i < 0 ? Number.POSITIVE_INFINITY : i;
+  };
+  return projects
+    .filter((p) => !p.meta.archived && !(exceptPath && samePath(p.path, exceptPath)))
+    .sort((a, b) => (rank(a) === rank(b) ? (b.lastEdited ?? 0) - (a.lastEdited ?? 0) : rank(a) - rank(b)));
 }
 
 /** What the renderer gets: the settings plus where the Root really is. */

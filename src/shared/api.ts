@@ -2,6 +2,9 @@ import type { AppDefaults } from './appDefaults';
 import type { Origin } from './export/layers';
 import type { BookDetails } from './export/model';
 import type { Progress } from './progress';
+import type { AiRemoteStatus, AiServerInfo } from './agent/config';
+import type { ReviewerRecord, ShareStatus, ShareSummary, SharedProject } from './review/share';
+import type { UpdateInfo, UpdateProgress } from './update';
 import type { ProjectMeta, ProjectsConfig, ProjectsSettings, ProjectSummary, RootListing } from './projects';
 
 export interface FileNode {
@@ -33,6 +36,7 @@ export interface FileStamp {
 
 /** Commands the native application menu can trigger in the renderer. */
 export type MenuAction =
+  | 'zone-mode'
   | 'change-folder'
   | 'refresh'
   | 'save'
@@ -59,7 +63,8 @@ export type MenuAction =
   | 'prev-tab'
   | 'next-chapter'
   | 'prev-chapter'
-  | 'sync';
+  | 'sync'
+  | 'about';
 
 export type ExportKind = 'epub' | 'pdf' | 'docx';
 
@@ -128,8 +133,12 @@ export interface Session {
   expanded: string[];
 }
 
+import type { ThemeCustom } from './theme';
+
 export interface Prefs {
   sidebarWidth?: number;
+  /** Colours the user changed in the light and dark themes (File → Settings → Appearance). */
+  themeCustom?: ThemeCustom;
 }
 
 /** Unsaved text autosaved for crash recovery. One per file (the open chapter's edits). */
@@ -200,6 +209,12 @@ export interface CoreApi {
   moveProjects(newRoot: string): Promise<{ moved: string[]; failed: { name: string; error: string }[] }>;
   /** Remembers which project is open (so it can be reopened at startup). */
   setLastProject(path: string | null): void;
+
+  /** Review files (comments and suggestions), one per reviewer, kept inside the project. */
+  listReviews(project: string): Promise<{ id: string; text: string }[]>;
+  saveReview(project: string, reviewerId: string, text: string): Promise<void>;
+  /** Removes one reviewer's whole file (all the notes they wrote). */
+  deleteReview(project: string, reviewerId: string): Promise<void>;
 
   getPrefs(): Promise<Prefs>;
   setPrefs(patch: Partial<Prefs>): void;
@@ -272,6 +287,15 @@ export interface DesktopApi {
   pickFolder(): Promise<string | null>;
   /** Shows the item in File Explorer. */
   reveal(path: string): void;
+  /** How an AI app starts MDEdit's MCP server; null when this build doesn't include it. */
+  getAiServer(): Promise<AiServerInfo | null>;
+  /** Writes the AI Kit (Claude extension, skills, server, settings) into Downloads, shows it, and returns the folder. */
+  exportAiKit(): Promise<string>;
+  /** Online access for apps that can't run a program on this PC (ChatGPT, Custom GPTs). Off until the user turns it on. */
+  getAiRemote(): Promise<AiRemoteStatus>;
+  setAiRemote(enabled: boolean): Promise<AiRemoteStatus>;
+  /** Replaces the access token, so any app using the old one is locked out. */
+  resetAiRemoteToken(): Promise<AiRemoteStatus>;
 
   /** Markdown files given on the command line (double-click / "Open with"); each is returned once. */
   takeLaunchFiles(): Promise<string[]>;
@@ -290,9 +314,24 @@ export interface DesktopApi {
   clickMenu(id: string): void;
   windowInfo(): Promise<WindowInfo>;
   onWindowState(cb: (info: WindowInfo) => void): () => void;
-  windowControl(action: 'minimize' | 'maximize' | 'close'): void;
+  /** 'fullscreen' and 'windowed' set the full-screen state outright (Zone Mode uses them). */
+  windowControl(action: 'minimize' | 'maximize' | 'close' | 'fullscreen' | 'windowed'): void;
   /** Native menu item clicked. Returns an unsubscribe function. */
   onMenuAction(cb: (action: MenuAction) => void): () => void;
+}
+
+/** Updating the app from its latest GitHub release (the Windows installer, or the Android APK). */
+export interface UpdateApi {
+  /** The running app's version, e.g. "0.4.3". */
+  getAppVersion(): Promise<string>;
+  /** Asks GitHub for the newest release and the file that fits this device. Rejects with a readable message if offline. */
+  checkForUpdate(): Promise<UpdateInfo>;
+  /**
+   * Downloads the release's file for this device, checks it against the release's checksums and hands it to the system
+   * installer (Windows: the app closes and the installer opens; Android: the system install screen opens).
+   */
+  installUpdate(info: UpdateInfo): Promise<void>;
+  onUpdateProgress(cb: (p: UpdateProgress) => void): () => void;
 }
 
 export interface SyncSummary {
@@ -339,6 +378,33 @@ export interface SyncApi {
   onSyncStatus(cb: (s: SyncStatus) => void): () => void;
 }
 
+/** Sharing a project with reviewers over Google Drive, and joining projects others have shared. */
+export interface ReviewSharingApi {
+  getShareStatus(project: string): Promise<ShareStatus>;
+  /** Every project that currently has reviewers. */
+  listShares(): Promise<ShareSummary[]>;
+  /** Removes every reviewer of a project (their notes stay in it). */
+  stopSharing(project: string): Promise<void>;
+  /** Makes a private comments file for a new reviewer and returns their invitation link (also publishes the text). */
+  inviteReviewer(project: string, name: string): Promise<ReviewerRecord>;
+  /** Closes a reviewer's file; their notes stay in the project. */
+  revokeReviewer(project: string, reviewerId: string): Promise<void>;
+  /** Exchanges notes (and, for the owner, the latest text) with Drive for one open project. A no-op when nothing is shared. */
+  exchangeReviews(project: string): Promise<{ changed: boolean; revoked: boolean; errors: string[] }>;
+  /** Projects other people shared with this person. */
+  listShared(): Promise<SharedProject[]>;
+  /** An access token for Google's file picker, which gives MDEdit access to the files in an invitation. */
+  pickerToken(): Promise<string>;
+  /**
+   * Phone only: runs Google's file picker in the phone's own browser and returns the file ids picked (null when cancelled).
+   * Google's picker stays blank when embedded in the app's web view, so the app hands over to the browser and is called back.
+   * Absent where the picker can be embedded (the Windows app).
+   */
+  pickInBrowser?(url: string): Promise<string[] | null>;
+  /** Downloads the shared project into "Shared With Me" (after the picker has granted access). */
+  joinReview(link: string, name: string): Promise<SharedProject>;
+}
+
 /** Which optional parts of the app a platform provides, so the UI can leave out what is missing. */
 export interface Capabilities {
   /** Export for KDP (`ExportApi`). */
@@ -353,11 +419,17 @@ export interface Capabilities {
   fonts: boolean;
   /** Google Drive sync (`SyncApi`). */
   sync: boolean;
+  /** Sharing for review (`ReviewSharingApi`); needs sync. */
+  review: boolean;
+  /** Updating from the latest GitHub release (`UpdateApi`). */
+  update: boolean;
+  /** Connecting AI reviewers (the MCP server); needs the desktop app. */
+  ai: boolean;
 }
 
-export const DESKTOP_CAPABILITIES: Capabilities = { export: true, windowChrome: true, folderPicker: true, launchFiles: true, fonts: true, sync: true };
+export const DESKTOP_CAPABILITIES: Capabilities = { export: true, windowChrome: true, folderPicker: true, launchFiles: true, fonts: true, sync: true, review: true, update: true, ai: true };
 /** The phone: the editor and projects, nothing desktop-specific. */
-export const MOBILE_CAPABILITIES: Capabilities = { export: false, windowChrome: false, folderPicker: false, launchFiles: false, fonts: false, sync: true };
+export const MOBILE_CAPABILITIES: Capabilities = { export: false, windowChrome: false, folderPicker: false, launchFiles: false, fonts: false, sync: true, review: true, update: true, ai: false };
 
 /**
  * What `Workspace` (the editor's state and logic) needs: the core, plus a few desktop extras it uses when present
@@ -371,7 +443,7 @@ export type WorkspaceApi = CoreApi &
  * The full surface the renderer talks to. On the phone the `ExportApi` / `DesktopApi` parts are inert stubs and the
  * UI checks `capabilities` before showing anything that needs them.
  */
-export type MdeditApi = CoreApi & ExportApi & DesktopApi & SyncApi & { capabilities: Capabilities };
+export type MdeditApi = CoreApi & ExportApi & DesktopApi & SyncApi & ReviewSharingApi & UpdateApi & { capabilities: Capabilities };
 
 declare global {
   interface Window {

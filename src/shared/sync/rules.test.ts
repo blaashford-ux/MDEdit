@@ -15,6 +15,15 @@ describe('classify', () => {
     expect(classify('Novel/.mdedit/progress-3fa9c01b22de.json')).toBe('progress');
   });
 
+  it('syncs reviewers’ notes files, and nothing else in .mdedit/review', () => {
+    expect(classify('Novel/.mdedit/review/owner.json')).toBe('notes');
+    expect(classify('Novel/.mdedit/review/ai-claude-line-edit.json')).toBe('notes');
+    expect(classify('Novel/.mdedit/review/owner.json.bak')).toBeNull();
+    expect(classify('Novel/.mdedit/review/sub/x.json')).toBeNull();
+    expect(classify('Novel/.mdedit/review/notes.txt')).toBeNull();
+    expect(classify('Shared With Me/Novel/.mdedit/review/owner.json')).toBeNull();
+  });
+
   it('syncs other small files as assets', () => {
     expect(classify('Novel/Research/map.png')).toBe('asset');
   });
@@ -39,6 +48,10 @@ describe('classify', () => {
     expect(classify('Novel/Exports/book.epub')).toBeNull();
     expect(classify('Novel/Exports/book.epub', { includeExports: true })).toBe('asset');
     expect(classify('Novel/Manuscript/Exports/a.md')).toBe('prose'); // only a project's own Exports folder
+  });
+
+  it('never syncs projects shared with you', () => {
+    expect(classify('Shared With Me/Novel/Book.md')).toBeNull();
   });
 });
 

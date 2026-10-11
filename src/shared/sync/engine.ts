@@ -8,6 +8,7 @@ import type { FsPort } from '../fsPort';
 import { md5Hex } from '../md5';
 import { joinParts } from '../paths';
 import { mergeMarks, sanitizeMarks } from '../editedMarks';
+import { mergeReviewFiles, parseReviewFile, serializeReviewFile } from '../review/comments';
 import { localDate, mergeProgress, sanitizeProgress } from '../progress';
 import { DRIVE_ROOT_NAME, type DriveApi, type DriveFile } from './drive';
 import { isCompliantPath, nameKey } from './names';
@@ -300,6 +301,20 @@ export async function syncOnce(o: SyncOptions): Promise<SyncReport> {
           };
           const merged = mergeMarks(parse(await fs.readText(full(a.path))), parse(await drive.download(a.id)));
           const text = JSON.stringify(merged, null, 2) + '\n';
+          await writeLocal(a.path, text);
+          await drive.updateFile(a.id, text);
+          remember(a.path, text, a.id);
+          report.merged.push(a.path);
+          return;
+        }
+        case 'mergeNotes': {
+          if (!(await unchanged(a.path))) return skip(a.path);
+          const mine = await fs.readText(full(a.path));
+          const theirs = await drive.download(a.id);
+          const a1 = parseReviewFile(mine);
+          const b1 = parseReviewFile(theirs);
+          // A copy that can't be read gives way to the one that can; if neither can, the other device's copy is kept.
+          const text = a1 && b1 ? serializeReviewFile(mergeReviewFiles(a1, b1)) : a1 ? mine : theirs;
           await writeLocal(a.path, text);
           await drive.updateFile(a.id, text);
           remember(a.path, text, a.id);

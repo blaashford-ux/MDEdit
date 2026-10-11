@@ -107,11 +107,11 @@ export function SettingsReview({ layer }: { layer: LayerEditor }) {
       {rows.length === 0 ? (
         <p className="muted small">None — everything follows the app’s defaults.</p>
       ) : (
-        <ul className="review-list">
+        <ul className="layer-review-list">
           {rows.map((r) => (
             <li key={r.path}>
               <span className="review-name">{pathLabel(r.path)}</span>
-              <span className="review-value">{valueLabel(getPath(layer.details, r.path))}</span>
+              <span className="layer-review-value">{valueLabel(getPath(layer.details, r.path))}</span>
               <span className={'layer-tag' + (r.own ? ' own' : '')}>{r.own ? 'This book' : 'Project'}</span>
               {r.own ? (
                 <button type="button" className="layer-reset" title={`Go back to the ${ORIGIN_LABEL[r.origin]}: ${valueLabel(layer.inheritedValue(r.path))}`} onClick={() => layer.reset(r.path)}>

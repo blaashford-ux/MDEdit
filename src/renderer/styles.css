@@ -180,6 +180,8 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline-offs
 
 .context-menu { position: fixed; z-index: 40; min-width: 210px; padding: 6px; background: var(--panel); border-radius: 12px; box-shadow: var(--shadow-pop); outline: none; }
 .context-menu button { display: flex; justify-content: space-between; gap: 24px; width: 100%; text-align: left; background: none; padding: 6px 12px; border-radius: 8px; }
+/* Press-and-hold targets: no system callout or text-selection bubble on top of the app's own menu */
+.tree .row, .project-card { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
 .context-menu button.hot { background: var(--raised); }
 .context-menu button.danger { color: var(--danger); }
 .context-menu .hint { color: var(--faint); }
@@ -506,9 +508,9 @@ code.path { background: var(--raised); padding: 1px 6px; border-radius: 6px; }
 .layer-tag { display: inline-flex; align-items: baseline; gap: 6px; margin-left: 8px; font-size: 11px; font-weight: 400; color: var(--muted); }
 .layer-tag.own { color: var(--accent, #2b6cb0); font-weight: 600; }
 .layer-reset { font-size: 11px; padding: 0 6px; line-height: 1.5; }
-.review-list { list-style: none; margin: 0; padding: 0; }
-.review-list li { display: grid; grid-template-columns: minmax(140px, 1fr) minmax(80px, 1fr) auto auto; gap: 8px; align-items: baseline; padding: 3px 0; border-bottom: 1px solid var(--border, rgba(128, 128, 128, 0.25)); font-size: 13px; }
-.review-list .review-value { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.layer-review-list { list-style: none; margin: 0; padding: 0; }
+.layer-review-list li { display: grid; grid-template-columns: minmax(140px, 1fr) minmax(80px, 1fr) auto auto; gap: 8px; align-items: baseline; padding: 3px 0; border-bottom: 1px solid var(--border, rgba(128, 128, 128, 0.25)); font-size: 13px; }
+.layer-review-list .layer-review-value { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ---- phone layout: used when the platform has no window chrome (Android) ---- */
 .frame.mobile { height: 100dvh; position: relative; }
@@ -517,6 +519,7 @@ code.path { background: var(--raised); padding: 1px 6px; border-radius: 6px; }
 .mobilebar .mb-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; font-size: 15px; }
 .mb-btn { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; padding: 0 10px; background: transparent; color: var(--fg); border-radius: 12px; }
 .mb-btn.text { font-size: 14px; }
+.mb-btn.on { background: var(--accent); color: var(--accent-ink); }
 .mb-btn.primary:not(:disabled) { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
 .mb-btn:disabled { opacity: 0.4; }
 
@@ -561,6 +564,53 @@ code.path { background: var(--raised); padding: 1px 6px; border-radius: 6px; }
 .sb-sync.s-error, .sb-sync.s-confirm { color: var(--danger); }
 .sb-sync.s-syncing { opacity: 0.75; }
 
+/* ---- comments and suggestions ---- */
+.review-mark { background: color-mix(in srgb, var(--gold) 28%, transparent); border-bottom: 2px solid var(--gold); cursor: pointer; }
+.review-mark.review-suggestion { background: color-mix(in srgb, var(--accent) 22%, transparent); border-bottom-color: var(--accent); }
+.review-mark.review-active { background: color-mix(in srgb, var(--gold) 50%, transparent); }
+.review-panel { position: fixed; z-index: 35; top: 96px; right: 16px; bottom: 56px; width: 340px; max-width: calc(100vw - 32px); display: flex; flex-direction: column; gap: 8px; padding: 14px; overflow: hidden; background: var(--panel); border-radius: 16px; box-shadow: var(--shadow-pop); }
+.review-head { display: flex; align-items: center; justify-content: space-between; }
+.review-head h3 { margin: 0; font-size: 15px; }
+.review-head button { background: transparent; color: var(--muted); padding: 2px 8px; font-size: 18px; }
+.review-begin .primary { width: 100%; }
+.review-msg { margin: 6px 0 0; font-size: 12px; color: var(--gold); }
+.review-compose { display: flex; flex-direction: column; gap: 8px; }
+.review-compose blockquote { margin: 0; padding: 6px 10px; font-size: 12px; color: var(--muted); border-left: 3px solid var(--gold); background: var(--raised); border-radius: 6px; }
+.review-compose label { display: block; font-size: 12px; color: var(--muted); }
+.review-compose textarea, .review-replybox textarea { display: block; width: 100%; margin-top: 4px; padding: 8px 10px; font: inherit; color: var(--fg); background: var(--raised); border: 0; border-radius: 8px; resize: vertical; }
+.review-kinds { display: flex; gap: 14px; }
+.review-kinds input { display: inline; width: auto; margin: 0 4px 0 0; }
+.review-list { flex: 1; min-height: 0; margin: 0; padding: 0; overflow: auto; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.review-empty { padding: 12px 4px; font-size: 13px; color: var(--muted); }
+.review-item { padding: 10px; background: var(--raised); border-radius: 12px; font-size: 13px; }
+.review-item.s-resolved, .review-item.s-accepted, .review-item.s-rejected { opacity: 0.6; }
+.review-item.detached { outline: 1px dashed var(--faint); }
+.review-quote { display: block; width: 100%; padding: 0 0 4px; text-align: left; background: transparent; color: var(--muted); font-style: italic; }
+.review-meta { font-size: 11px; color: var(--muted); }
+.review-lost { color: var(--danger); }
+.review-diff { margin-top: 4px; }
+.review-diff del { color: var(--danger); }
+.review-diff ins { color: var(--accent); text-decoration: none; font-weight: 600; }
+.review-body, .review-reply { margin: 6px 0 0; white-space: pre-wrap; }
+.review-reply { padding-left: 10px; border-left: 2px solid var(--faint); color: var(--muted); }
+.review-actions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+.review-actions button { padding: 3px 9px; font-size: 12px; background: var(--panel); }
+.review-replybox { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; align-items: flex-end; }
+.review-foot { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--muted); }
+.review-name input { display: inline-block; width: 140px; margin-left: 6px; padding: 3px 8px; background: var(--raised); }
+.frame.mobile .review-panel { top: auto; left: 8px; right: 8px; bottom: 8px; width: auto; max-height: 62dvh; }
+
+/* ---- sharing for review ---- */
+.picker-frame { display: block; width: 100%; height: min(70vh, 560px); border: 0; border-radius: 12px; background: var(--raised); }
+.join-dialog, .share-dialog { width: 460px; }
+.share-list { margin: 8px 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.share-list li { display: flex; align-items: center; gap: 6px; padding: 6px 8px; background: var(--raised); border-radius: 10px; }
+.share-list .grow-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.share-add { display: flex; gap: 6px; margin-top: 8px; }
+.share-add input { margin-top: 0; }
+.share-note { margin: 6px 0; font-size: 12px; color: var(--accent); word-break: break-all; }
+.shared-with-me > button { margin-top: 8px; }
+.review-head .review-share { margin-left: auto; margin-right: 6px; padding: 3px 10px; font-size: 12px; background: var(--raised); color: var(--fg); }
 /* ---- line numbers: every tenth line faint, the hovered line in full ---- */
 /* line numbers sit in the margin to the right of the editor, outside the text */
 .line-gutter { position: absolute; left: calc(100% + 8px); top: 0; bottom: 0; width: 44px; overflow: hidden; pointer-events: none; font: 12px 'Cascadia Mono', Consolas, monospace; font-variant-numeric: tabular-nums; }
@@ -595,4 +645,102 @@ code.path { background: var(--raised); padding: 1px 6px; border-radius: 6px; }
 .fb-btn { flex: 1 0 auto; min-width: 44px; height: 42px; padding: 0 10px; background: transparent; color: var(--fg); border-radius: 10px; font-size: 17px; touch-action: manipulation; }
 .fb-btn:active { background: var(--raised); }
 .fb-btn.b { font-weight: 800; }
+.fb-btn.word { font-size: 14px; font-weight: 600; padding: 0 12px; }
 .fb-btn.i { font-style: italic; font-family: Georgia, serif; }
+.about-head { display: flex; align-items: center; gap: 14px; margin-bottom: 8px; }
+.about-head h3 { margin: 0; }
+.about-version { color: var(--muted); font-size: 13px; }
+.about-update { margin: 12px 0 4px; font-size: 13px; }
+.about-update p { margin: 4px 0; }
+.about-notes summary { cursor: pointer; color: var(--muted); }
+.about-notes pre { max-height: 180px; margin: 6px 0 0; padding: 8px 10px; overflow: auto; white-space: pre-wrap; background: var(--raised); border-radius: 10px; font: inherit; font-size: 12px; }
+.share-sub { display: block; font-size: 11px; }
+.share-list li { flex-wrap: wrap; }
+.share-dialog { width: 520px; }
+.share-dialog .danger { background: var(--danger); color: #fff; }
+.frame.mobile .share-dialog, .frame.mobile .join-dialog { width: auto; }
+.share-list li .grow-text { flex: 1 1 100%; }
+.share-list li button { padding: 4px 10px; font-size: 12px; }
+
+/* ---- find bar on the phone: wrap instead of running off the right edge, so Close is always reachable ---- */
+.frame.mobile .find-bar { margin-right: 0; max-width: 100%; box-sizing: border-box; }
+.frame.mobile .find-row { flex-wrap: wrap; row-gap: 6px; }
+.frame.mobile .find-row .find-input { flex: 1 1 calc(100% - 36px); min-width: 0; max-width: none; } /* the box takes the first line, the options wrap below */
+.frame.mobile .find-scope { order: 5; flex: 1 1 100%; max-width: 100%; }
+.frame.mobile .find-bar button { min-height: 36px; }
+
+/* AI reviewers */
+.review-ai { display: inline-block; margin-right: 6px; padding: 0 5px; font-size: 10px; font-weight: 700; letter-spacing: 0.04em; color: var(--bg, #fff); background: var(--accent); border-radius: 4px; }
+.review-cat { margin-left: 6px; padding: 0 6px; font-size: 10px; color: var(--muted); border: 1px solid var(--faint); border-radius: 999px; }
+.review-filters { display: flex; gap: 6px; }
+.review-filters select { flex: 1; min-width: 0; padding: 4px 6px; font-size: 12px; background: var(--raised); color: var(--fg); border: 0; border-radius: 8px; }
+.review-bulk { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-size: 12px; }
+.review-bulk button { padding: 3px 10px; font-size: 12px; background: var(--raised); }
+.review-bulk .primary { background: var(--accent); }
+.ai-dialog { width: 560px; max-height: calc(100dvh - 48px); overflow: auto; }
+.ai-dialog h4 { margin: 14px 0 4px; font-size: 13px; }
+.ai-snippet { margin: 8px 0; }
+.ai-snippet-head { display: flex; align-items: baseline; gap: 8px; }
+.ai-snippet-head button { margin-left: auto; padding: 3px 10px; font-size: 12px; }
+.ai-snippet pre { margin: 4px 0 0; padding: 8px 10px; overflow: auto; max-height: 120px; font: 11px/1.4 Consolas, monospace; user-select: all; background: var(--raised); border-radius: 8px; white-space: pre-wrap; word-break: break-all; }
+.frame.mobile .ai-dialog { width: auto; }
+
+.ai-kit { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin: 10px 0 4px; }
+
+.ai-remote { margin: 12px 0 0; padding: 8px 10px; background: var(--raised); border-radius: 10px; }
+.ai-remote summary { cursor: pointer; font-weight: 600; font-size: 13px; }
+.ai-remote-row { display: flex; align-items: center; gap: 10px; margin: 8px 0; }
+.ai-on { color: var(--accent); font-weight: 600; }
+.ai-remote-field { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: center; margin: 6px 0; }
+.ai-remote-field .muted { grid-column: 1 / -1; }
+.ai-remote-field code { overflow: hidden; text-overflow: ellipsis; user-select: all; font: 11px Consolas, monospace; }
+.ai-remote-field button, .ai-remote > button { padding: 3px 10px; font-size: 12px; }
+
+/* The note whose text was clicked: marked, and the list can scroll far enough to put it at the top. */
+.review-item.focused { outline: 2px solid var(--gold); background: color-mix(in srgb, var(--gold) 14%, var(--raised)); }
+.review-list.has-focus::after { content: ""; flex: 0 0 var(--spacer, 0px); }
+
+/* ---- Settings → Appearance ---- */
+.appearance .subtabs { margin-top: 10px; }
+.theme-presets { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 4px 0 14px; }
+.theme-chip { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 6px; border: 2px solid; font-size: 11px; font-weight: 700; }
+.theme-layout { display: flex; flex-direction: column-reverse; gap: 14px; }
+.theme-rows { display: flex; flex-direction: column; gap: 10px; }
+.theme-row { display: grid; grid-template-columns: minmax(0, 1fr) 84px auto; align-items: center; gap: 8px; }
+.theme-row-main { display: flex; align-items: center; gap: 10px; min-width: 0; cursor: pointer; }
+.theme-row-main input[type='color'] { flex: none; width: 38px; height: 38px; padding: 2px; border: 0; border-radius: 10px; background: var(--raised); cursor: pointer; }
+.theme-row-text { display: flex; flex-direction: column; min-width: 0; }
+.theme-hex { padding: 6px 8px; font-family: 'Cascadia Mono', Consolas, monospace; font-size: 12.5px; }
+.theme-hex[aria-invalid='true'] { outline: 2px solid var(--danger); }
+.theme-reset { padding: 4px 8px; font-size: 12px; }
+/* The preview paints with its own copy of the variables, so it shows the theme being edited, not the one in use. */
+.theme-preview { display: grid; grid-template-columns: 34% 1fr; min-height: 210px; border-radius: var(--radius-lg); overflow: hidden; background: var(--shell); color: var(--fg); box-shadow: var(--shadow-card); font-size: 12.5px; }
+.tp-side { display: flex; flex-direction: column; gap: 3px; padding: 10px 8px; }
+.tp-title { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 4px; }
+.tp-item { padding: 4px 8px; border-radius: 8px; color: var(--muted); }
+.tp-item.selected { background: var(--selected); color: var(--fg); font-weight: 600; }
+.tp-card { margin: 8px 8px 8px 0; padding: 10px 12px; border-radius: 12px; background: var(--bg); color: var(--fg); }
+.tp-card h5 { margin: 0 0 6px; font-size: 14px; text-transform: none; letter-spacing: 0; color: var(--fg); }
+.tp-card p { margin: 0 0 8px; line-height: 1.5; }
+.tp-card mark { background: var(--accent-soft); color: var(--fg); border-radius: 3px; padding: 0 2px; }
+.tp-card em { color: var(--gold); font-style: normal; }
+.tp-muted { color: var(--muted); }
+.tp-buttons { display: flex; align-items: center; gap: 6px; margin-top: 10px; }
+.tp-button { padding: 4px 10px; border-radius: var(--radius); background: var(--raised); }
+.tp-button.primary { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.tp-dirty { color: var(--dirty); margin-left: auto; }
+
+/* ---- Zone Mode: full screen, just the open file and its navigation bar ---- */
+.frame.zone .sidebar, .frame.zone .splitter { display: none; }
+.frame.zone .content { margin: 10px; }
+.zone-btn[aria-pressed='true'] { background: var(--accent-soft); color: var(--fg); }
+
+/* ---- toggle switch (Notes: This chapter only) ---- */
+.switch { display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
+.switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.switch-track { position: relative; flex: none; width: 34px; height: 20px; border-radius: 999px; background: var(--hover); transition: background 0.12s; }
+.switch-track::after { content: ''; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%; background: var(--fg); opacity: 0.75; transition: transform 0.12s, background 0.12s, opacity 0.12s; }
+.switch input:checked + .switch-track { background: var(--accent); }
+.switch input:checked + .switch-track::after { transform: translateX(14px); background: var(--accent-ink); opacity: 1; }
+.switch input:focus-visible + .switch-track { outline: 2px solid var(--focus); outline-offset: 2px; }
+.review-chapter-switch { padding: 2px 4px 6px; font-size: 12.5px; }

@@ -19,7 +19,9 @@ const PATHS = {
   save: 'M5 4h11l3 3v13H5V4Zm3 0v5h7V4M8 20v-6h8v6',
   check: 'm5 12.5 4.5 4.5L19 7',
   target: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Zm0-5a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm0-3a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z',
-  scene: 'M4 12h4m4 0h.01M16 12h4'
+  scene: 'M4 12h4m4 0h.01M16 12h4',
+  expand: 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5',
+  shrink: 'M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5'
 } as const;
 
 export type IconName = keyof typeof PATHS;

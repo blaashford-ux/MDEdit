@@ -1,5 +1,5 @@
 import { Crepe, CrepeFeature } from '@milkdown/crepe';
-import { editorViewCtx } from '@milkdown/kit/core';
+import { editorViewCtx, editorViewOptionsCtx } from '@milkdown/kit/core';
 import { Selection } from '@milkdown/kit/prose/state';
 import { $prose, callCommand, replaceAll } from '@milkdown/kit/utils';
 import {
@@ -19,6 +19,7 @@ import { blockLines } from '../shared/lines';
 import { pickScene } from '../shared/sceneBreaks';
 import { LineGutter, lineMarksFromBlocks, type LineMark, type PlacedBlock } from './LineGutter';
 import { findApiFor, findPlugin } from './findPlugin';
+import { reviewApiFor, reviewPlugin } from './reviewPlugin';
 import type { SceneNav } from './sceneNav';
 
 interface Props {
@@ -40,6 +41,10 @@ interface Props {
    * Anything typed while the save was in flight stays dirty.
    */
   saved: { version: number; markdown: string } | null;
+  /** Right-click in the text (the browser's own menu is suppressed when this is given). */
+  onContextMenu?(at: { x: number; y: number }): void;
+  /** Reviewers read the chapter and annotate it, but can't change it. */
+  readOnly?: boolean;
   /** Hands the parent a way to jump between scene breaks (null on unmount). */
   onNav?(nav: SceneNav | null): void;
   /** The file line this chapter starts on, so the gutter shows file-wide line numbers. */
@@ -49,7 +54,7 @@ interface Props {
 /** The phone: no window chrome, so no mouse hover to hang floating menus on. */
 const TOUCH = typeof window !== 'undefined' && window.mdedit?.capabilities?.windowChrome === false;
 
-export function Editor({ initial, restore, onChange, saved, onNav, firstLine }: Props) {
+export function Editor({ initial, restore, onChange, saved, onNav, firstLine, readOnly, onContextMenu }: Props) {
   const wrap = useRef<HTMLDivElement>(null);
   const host = useRef<HTMLDivElement>(null);
   const [marks, setMarks] = useState<LineMark[]>([]);
@@ -62,7 +67,7 @@ export function Editor({ initial, restore, onChange, saved, onNav, firstLine }: 
   const baseline = useRef<string | null>(null);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
-  const mountProps = useRef({ initial, restore });
+  const mountProps = useRef({ initial, restore, readOnly: readOnly === true });
   const onNavRef = useRef(onNav);
   onNavRef.current = onNav;
 
@@ -99,7 +104,9 @@ export function Editor({ initial, restore, onChange, saved, onNav, firstLine }: 
         scheduleMeasure();
       });
     });
+    if (mountProps.current.readOnly) crepe.editor.config((ctx) => ctx.update(editorViewOptionsCtx, (prev) => ({ ...prev, editable: () => false })));
     crepe.editor.use($prose(() => findPlugin)); // highlights for Find & Replace
+    crepe.editor.use($prose(() => reviewPlugin)); // highlights for comments and suggestions
     const getView = () => (crepeRef.current ? crepeRef.current.editor.action((ctx) => ctx.get(editorViewCtx)) : null);
     /**
      * Gives each top-level block its source line. While the chapter is unedited that is the file's own
@@ -180,6 +187,7 @@ export function Editor({ initial, restore, onChange, saved, onNav, firstLine }: 
           return true;
         },
         find: findApiFor(getView),
+        review: reviewApiFor(getView),
         go: (dir) => {
           const view = getView();
           if (!view) return false;
@@ -224,7 +232,18 @@ export function Editor({ initial, restore, onChange, saved, onNav, firstLine }: 
 
   return (
     <div className="editor-wrap" ref={wrap}>
-      <div className="editor" ref={host} />
+      <div
+        className="editor"
+        ref={host}
+        onContextMenu={
+          onContextMenu
+            ? (e) => {
+                e.preventDefault();
+                onContextMenu({ x: e.clientX, y: e.clientY });
+              }
+            : undefined
+        }
+      />
       <LineGutter marks={marks} scroll={0} host={wrap} />
     </div>
   );

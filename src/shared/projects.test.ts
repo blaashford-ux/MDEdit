@@ -227,3 +227,39 @@ describe('edited chapters', () => {
     expect(sanitizeProjectMeta({}, 'S', '2026-10-05').editedChapters).toEqual({});
   });
 });
+
+import { byRecentlyOpened, MAX_RECENT, withOpened } from './projects';
+describe('the order of the switch-to list', () => {
+  const p = (name: string, lastEdited: number | null, archived = false) => ({ path: `/r/${name}`, name, lastEdited, meta: { archived } });
+  const A = p('A', 300), B = p('B', 100), C = p('C', 200), D = p('D', null), E = p('E', 900, true);
+
+  it('puts the most recently opened first, then the rest by their latest edit', () => {
+    expect(byRecentlyOpened([A, B, C, D], ['/r/B', '/r/D']).map((x) => x.name)).toEqual(['B', 'D', 'A', 'C']);
+    expect(byRecentlyOpened([A, B, C, D], []).map((x) => x.name)).toEqual(['A', 'C', 'B', 'D']); // nothing opened yet: newest edit first
+  });
+
+  it('leaves out archived projects and the one that is open, and ignores paths that no longer exist', () => {
+    expect(byRecentlyOpened([A, B, C, E], ['/r/E', '/r/gone', '/r/C', '/r/A'], '/r/A').map((x) => x.name)).toEqual(['C', 'B']);
+  });
+
+  it('matches paths however they are written (slashes, case, trailing slash)', () => {
+    const win = { path: 'C:\\Books\\Novel', name: 'Novel', lastEdited: 1, meta: {} };
+    expect(byRecentlyOpened([A, win], ['c:/books/novel/']).map((x) => x.name)).toEqual(['Novel', 'A']);
+    expect(byRecentlyOpened([A, win], [], 'c:/BOOKS/novel').map((x) => x.name)).toEqual(['A']);
+  });
+
+  it('keeps a most-recent-first list of opened projects without repeats, and not too long', () => {
+    expect(withOpened(['/r/B', '/r/A'], '/r/A')).toEqual(['/r/A', '/r/B']);
+    expect(withOpened(['/r/B'], '/R/b/')).toEqual(['/R/b/']);
+    expect(withOpened(['/r/B'], null)).toEqual(['/r/B']);
+    const many = Array.from({ length: MAX_RECENT + 5 }, (_, i) => `/r/${i}`);
+    expect(withOpened(many, '/r/new')).toHaveLength(MAX_RECENT);
+    expect(withOpened(many, '/r/new')[0]).toBe('/r/new');
+  });
+
+  it('is saved with the settings, and tidied when read back', () => {
+    expect(defaultProjectsSettings().recentProjects).toEqual([]);
+    expect(sanitizeProjectsSettings({ recentProjects: ['/a', 5, '', null, '/b'] }).recentProjects).toEqual(['/a', '/b']);
+    expect(sanitizeProjectsSettings({ recentProjects: 'nope' }).recentProjects).toEqual([]);
+  });
+});
