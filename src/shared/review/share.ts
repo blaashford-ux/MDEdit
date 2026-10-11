@@ -143,10 +143,25 @@ export class ReviewShare {
     return rec;
   }
 
+  /** Projects whose package was confirmed link-readable during this session (so the check is not repeated every minute). */
+  private readonly packageChecked = new Set<string>();
+
+  /**
+   * Makes sure the package can be opened by link. Removing the last reviewer takes that access away, and a later invitation
+   * re-uses the same package, so it has to be given again: without it the reviewer's picker offers only their comments file
+   * and the project can't be opened. Harmless when the access is already there.
+   */
+  private async ensurePackageShared(project: string, packageId: string, force = false): Promise<void> {
+    if (!force && this.packageChecked.has(`${project}:${packageId}`)) return;
+    await this.o.drive().shareByLink(packageId, 'reader');
+    this.packageChecked.add(`${project}:${packageId}`);
+  }
+
   /** Adds a reviewer: makes their comments file and returns the link to send them. */
   async invite(dir: string, project: string, reviewerName: string): Promise<ReviewerRecord> {
     await this.load();
     const rec = await this.publish(dir, project);
+    await this.ensurePackageShared(project, rec.packageId, true);
     const id = this.newId();
     const name = reviewerName.trim() || 'Reviewer';
     const file = await this.o.drive().createFile(
@@ -176,7 +191,10 @@ export class ReviewShare {
     await this.pull(dir, project).catch(() => undefined);
     await this.o.drive().unshare(who.commentsId).catch(() => undefined);
     const left = rec.reviewers.filter((r) => r.id !== reviewerId);
-    if (left.length === 0) await this.o.drive().unshare(rec.packageId).catch(() => undefined);
+    if (left.length === 0) {
+      await this.o.drive().unshare(rec.packageId).catch(() => undefined);
+      this.packageChecked.delete(`${project}:${rec.packageId}`);
+    }
     this.state.projects[project] = { ...rec, reviewers: left };
     await this.save();
   }
@@ -187,6 +205,8 @@ export class ReviewShare {
     const rec = this.state.projects[project];
     const out = { changed: false, errors: [] as string[] };
     if (!rec) return out;
+    // An invitation that was sent while the package was private is repaired here, once per session.
+    if (rec.reviewers.length > 0) await this.ensurePackageShared(project, rec.packageId).catch((e) => out.errors.push(e instanceof Error ? e.message : String(e)));
     const reviews = makeReviews(this.o.fs);
     const local = new Map((await reviews.list(dir)).map((r) => [r.id, r.text]));
     for (const who of rec.reviewers) {

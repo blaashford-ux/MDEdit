@@ -1,5 +1,11 @@
 # Changelog
 
+### 0.6.7 — 2026-10-11
+**Fixed**
+- **Sharing: a reviewer invited after you removed the previous reviewer could not open the project.** Removing a project's last reviewer closes the shared copy of the manuscript, and the next invitation re-used that copy without opening it again, so the reviewer's file picker offered only their comments file. Inviting now opens the shared copy again, and MDEdit repairs invitations already sent that way (when it next exchanges notes for that project).
+- **Editing stage: "Mark Edited?" is now asked when you press Next chapter on the last chapter.** There the button adds a new chapter and opens the New chapter dialog, so a saved chapter was only offered afterwards, and not at all if you cancelled the dialog. It now asks first, once (not again until you save again), then opens the dialog.
+- **Opening an invitation: picking only one of the two files no longer sends you back to the start.** Google's picker lets you tick one or both files; if only one came back, MDEdit now opens the picker again for just the other file (each pick is remembered), and the picker's title says how to pick two (Ctrl or Shift + click). If Google returns something unexpected, the message now says what it returned, so it can be diagnosed.
+
 ### 0.6.6 — 2026-10-10
 **New**
 - **Notes: "This chapter only" switch.** A toggle at the top of the Notes panel limits the list to the notes in the chapter you are reading. It combines with the "from" and "about" filters, "Apply all" only touches the notes shown, and MDEdit remembers the switch. It only appears for files with more than one chapter.

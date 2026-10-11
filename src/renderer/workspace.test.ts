@@ -1123,6 +1123,38 @@ describe('edited chapters (Editing stage)', () => {
     expect(api.markEditedAsked).toEqual([]);
   });
 
+  it('adding a chapter after the last one (Next chapter on the last chapter) offers to mark the saved chapter too', async () => {
+    await openEditing();
+    const last = 2; // BOOK has three chapters
+    await ws.openChapter(A, last);
+    await saveChapter(A, '# Three\nfinal polish');
+    api.markEditedAnswers = [true];
+    expect(await ws.newChapter(A, last, 'Four')).toBe(true);
+    expect(api.markEditedAsked).toEqual(['Three']);
+    expect(ws.isChapterEdited(A, last)).toBe(true);
+    expect(tabOf(A).chapter).toBe(last + 1);
+  });
+
+  it('Next chapter on the last chapter asks first (and only once), so cancelling the new-chapter dialog does not skip it', async () => {
+    await openEditing();
+    await ws.openChapter(A, 2);
+    await saveChapter(A, '# Three\nfinal');
+    api.markEditedAnswers = [false];
+    await ws.offerMarkEdited(tabOf(A).id); // what the button does before opening the New chapter dialog
+    expect(api.markEditedAsked).toEqual(['Three']);
+    expect(edited()).toEqual({});
+    await ws.offerMarkEdited(tabOf(A).id); // asking again without saving does not nag
+    expect(api.markEditedAsked).toEqual(['Three']);
+    expect(await ws.newChapter(A, 2, 'Four')).toBe(true); // leaving for the new chapter does not ask a second time
+    expect(api.markEditedAsked).toEqual(['Three']);
+    await ws.openChapter(A, 2);
+    await saveChapter(A, '# Three\nfinal, again'); // saving again makes it ask again
+    api.markEditedAnswers = [true];
+    await ws.offerMarkEdited(tabOf(A).id);
+    expect(api.markEditedAsked).toEqual(['Three', 'Three']);
+    expect(ws.isChapterEdited(A, 2)).toBe(true);
+  });
+
   it('closing a saved chapter’s tab offers too', async () => {
     await openEditing();
     await ws.openChapter(A, 1);

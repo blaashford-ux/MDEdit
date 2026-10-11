@@ -38,6 +38,8 @@ export interface Tab {
   autosavedAt: number | null;
   /** The open chapter has been saved since it was opened (so leaving it can offer "Mark Edited"). */
   savedHere: boolean;
+  /** "Not Yet" was answered for this saved chapter, so it is not asked about again until it is saved again or left. */
+  markDeclined: boolean;
 }
 
 export interface WorkspaceState {
@@ -461,7 +463,8 @@ export class Workspace {
       reloadKey: 0,
       conflict: null,
       autosavedAt: null,
-      savedHere: false
+      savedHere: false,
+      markDeclined: false
     };
   }
 
@@ -525,7 +528,7 @@ export class Workspace {
       if (!tab) return;
       const doc = this.state.docs.get(file);
       const target = Math.max(0, Math.min(chapter, (doc?.chapters.length ?? 1) - 1));
-      this.patchTab(tab.id, (t) => ({ chapter: target, draft: null, conflict: null, savedHere: false, reloadKey: t.reloadKey + 1 }));
+      this.patchTab(tab.id, (t) => ({ chapter: target, draft: null, conflict: null, savedHere: false, markDeclined: false, reloadKey: t.reloadKey + 1 }));
     }
     this.set({ activeId: tab.id, notice: null });
   }
@@ -597,13 +600,14 @@ export class Workspace {
   }
 
   /** In the Editing stage, leaving a chapter you saved offers to mark it edited (once; nothing is asked for a chapter already marked). */
-  private async offerMarkEdited(tabId: string): Promise<void> {
+  async offerMarkEdited(tabId: string): Promise<void> {
     const tab = this.tab(tabId);
     const project = this.state.project;
-    if (!tab || !project || project.meta.status !== 'editing' || !tab.savedHere || tab.draft !== null) return;
+    if (!tab || !project || project.meta.status !== 'editing' || !tab.savedHere || tab.draft !== null || tab.markDeclined) return;
     const ref = this.chapterRef(tab.file, tab.chapter);
     if (!ref || isChapterEdited(project.meta, ref.rel, ref.id)) return;
     if (await this.api.confirmMarkEdited(ref.title)) await this.setChapterEdited(tab.file, tab.chapter, true);
+    else this.patchTab(tabId, { markDeclined: true });
   }
 
   private removeTabs(ids: string[]): void {
@@ -767,6 +771,7 @@ export class Workspace {
         autosavedAt: null,
         saved: { version: (t.saved?.version ?? 0) + 1, markdown: text },
         savedHere: true,
+        markDeclined: false,
         ...(restructured ? { chapter: idx, reloadKey: t.reloadKey + 1 } : {})
       }));
       this.dropDraft(tab.file);
