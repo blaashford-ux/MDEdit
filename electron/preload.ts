@@ -41,6 +41,7 @@ const api: MdeditApi = {
   },
   revealOutput: (p) => ipcRenderer.send('export:reveal', p),
   openOutput: (p) => ipcRenderer.invoke('export:open', p),
+  saveReport: (kind, name, html) => ipcRenderer.invoke('report:save', kind, name, html),
   takeLaunchFiles: () => ipcRenderer.invoke('app:takeLaunchFiles'),
   onLaunchFiles: (cb) => {
     const handler = () => cb();

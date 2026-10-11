@@ -21,6 +21,8 @@ import { localDate, writtenOn } from '../shared/progress';
 import { goalFor, relativeTo } from '../shared/projects';
 import { projectNameError, uniqueName, type ProjectStatus, type ProjectSummary, type ProjectsConfig, type RootListing } from '../shared/projects';
 import { RelinkDialog } from './RelinkDialog';
+import { ReportView } from './ReportView';
+import { extractAnalysis } from '../shared/analysis/embed';
 import { SettingsDialog } from './SettingsDialog';
 import type { MarkdownDoc } from '../shared/chapters';
 import { locateRow } from '../shared/rows';
@@ -39,6 +41,13 @@ import { Workspace } from './workspace';
 import './styles.css';
 
 const POLL_MS = 2000;
+
+const reportCache = new WeakMap<MarkdownDoc, ReturnType<typeof extractAnalysis>>();
+/** The analysis a text-analysis report carries at the end of its last chapter (null for any other file). */
+function reportOf(doc: MarkdownDoc): ReturnType<typeof extractAnalysis> {
+  if (!reportCache.has(doc)) reportCache.set(doc, extractAnalysis(doc.chapters[doc.chapters.length - 1]?.raw ?? ''));
+  return reportCache.get(doc) ?? null;
+}
 
 const cleanError = (e: unknown) => String(e instanceof Error ? e.message : e).replace(/^Error invoking remote method '[^']*': (\w*Error: )?/, '');
 
@@ -75,6 +84,17 @@ export function App() {
   const [started, setStarted] = useState(false);
   const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
   const [showSync, setShowSync] = useState(false);
+  /** Report tabs the user switched to the Markdown text (the default is the formatted report). */
+  const [rawReports, setRawReports] = useState<Set<string>>(new Set());
+  const showRaw = (id: string, raw: boolean) => {
+    setRawReports((cur) => {
+      const next = new Set(cur);
+      if (raw) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+    ws.setMode(id, raw ? 'source' : 'visual');
+  };
 
   const activeTab = s.tabs.find((t) => t.id === s.activeId);
 
@@ -589,7 +609,11 @@ export function App() {
     'next-scene': () => gotoScene(1),
     'prev-scene': () => gotoScene(-1),
     settings: () => setShowSettings(true),
-    'toggle-mode': () => activeTab && ws.setMode(activeTab.id, activeTab.mode === 'visual' ? 'source' : 'visual'),
+    'toggle-mode': () => {
+      if (!activeTab) return;
+      if (activeDoc && reportOf(activeDoc)) showRaw(activeTab.id, !rawReports.has(activeTab.id));
+      else ws.setMode(activeTab.id, activeTab.mode === 'visual' ? 'source' : 'visual');
+    },
     export: () => {
       const target = activeTab && markedFiles.includes(activeTab.file) ? activeTab.file : markedFiles[0];
       if (target) setExportFile(target);
@@ -854,6 +878,14 @@ export function App() {
             if (!doc || !chapter) return null;
             const active = tab.id === s.activeId;
             const dirty = tab.draft !== null;
+            const report = reportOf(doc);
+            if (report && !rawReports.has(tab.id)) {
+              return (
+                <section key={tab.id} className="pane report" hidden={!active} aria-label={basename(tab.file)}>
+                  <ReportView file={tab.file} report={report} canSave={caps.export} onEdit={() => showRaw(tab.id, true)} />
+                </section>
+              );
+            }
             return (
               <section key={tab.id} className="pane" hidden={!active} aria-label={basename(tab.file)}>
                 {tab.conflict?.kind === 'changed' && (
@@ -898,6 +930,11 @@ export function App() {
                     <button aria-label="Next scene break" title="Next scene break (Ctrl+↓)" onClick={() => gotoScene(1)}>
                       <Icon name="down" /> Scene
                     </button>
+                    {report && (
+                      <button onClick={() => showRaw(tab.id, false)} title="Back to the formatted report">
+                        Report
+                      </button>
+                    )}
                     <button
                       onClick={() => ws.setMode(tab.id, tab.mode === 'visual' ? 'source' : 'visual')}
                       title="Switch between formatted and raw Markdown (Ctrl+Shift+M)"

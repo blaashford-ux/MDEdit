@@ -20,6 +20,7 @@ import { basename, dirname, isInside, remapPath } from '../shared/paths';
 import { collectFiles, collectOrphans, findNode, flattenPaths } from '../shared/tree';
 import { analyzeManuscript, type ChapterInput } from '../shared/analysis/analyze';
 import { renderReport } from '../shared/analysis/report';
+import { embedAnalysis } from '../shared/analysis/embed';
 
 export type Conflict = { kind: 'changed'; text: string; stamp: FileStamp } | { kind: 'missing' };
 
@@ -950,7 +951,8 @@ export class Workspace {
       // a preamble with no prose (just a title page or nothing) would only add an empty row
       const inputs = chapters.filter((c) => !c.isPreamble || /\p{L}/u.test(c.raw.replace(/^\s*#.*$/gm, '')));
       const analysis = await analyzeManuscript(inputs);
-      const report = renderReport(analysis, { source: basename(file), generated: localDay(new Date()), level: this.state.chapterLevel });
+      const meta = { source: basename(file), generated: localDay(new Date()) };
+      const report = renderReport(analysis, { ...meta, level: this.state.chapterLevel }) + embedAnalysis(analysis, meta);
       const dir = dirname(file);
       const folder = this.state.root ? findNode(this.state.root, dir) : undefined;
       const taken = folder && folder.kind === 'dir' ? folder.children.map((c) => c.name.toLowerCase()) : [];

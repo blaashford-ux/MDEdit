@@ -262,6 +262,35 @@ function registerIpc(): void {
     if (exportedFiles.has(path.resolve(p))) shell.showItemInFolder(path.resolve(p));
   });
   handle('export:open', (_e, p: string) => (exportedFiles.has(path.resolve(p)) ? shell.openPath(path.resolve(p)) : Promise.resolve('Not an exported file')));
+  handle('report:save', async (e, kind: string, suggested: string, html: string) => {
+    if ((kind !== 'html' && kind !== 'pdf') || typeof html !== 'string' || typeof suggested !== 'string') throw new Error('Bad report request');
+    const win = winOf(e);
+    const base = path.basename(suggested).replace(/[<>:"/\\|?*\x00-\x1f]/g, '_') || 'Analysis';
+    const name = base.replace(/\.(html?|pdf)$/i, '') + (kind === 'pdf' ? '.pdf' : '.html');
+    const opts = {
+      defaultPath: path.join(openRoot ?? app.getPath('documents'), name),
+      filters: kind === 'pdf' ? [{ name: 'PDF', extensions: ['pdf'] }] : [{ name: 'Web page', extensions: ['html'] }]
+    };
+    const res = win ? await dialog.showSaveDialog(win, opts) : await dialog.showSaveDialog(opts);
+    if (res.canceled || !res.filePath) return null;
+    if (kind === 'html') {
+      await fsp.writeFile(res.filePath, html, 'utf8');
+      return res.filePath;
+    }
+    const tmp = await fsp.mkdtemp(path.join(os.tmpdir(), 'mdedit-report-'));
+    const printer = new BrowserWindow({ show: false, width: 1000, height: 1400, webPreferences: { sandbox: true, contextIsolation: true, javascript: false, spellcheck: false } });
+    try {
+      const page = path.join(tmp, 'report.html');
+      await fsp.writeFile(page, html, 'utf8');
+      await printer.loadFile(page);
+      const pdf = await printer.webContents.printToPDF({ printBackground: true, pageSize: 'Letter', margins: { marginType: 'default' } });
+      await fsp.writeFile(res.filePath, pdf);
+      return res.filePath;
+    } finally {
+      if (!printer.isDestroyed()) printer.destroy();
+      await fsp.rm(tmp, { recursive: true, force: true }).catch(() => undefined);
+    }
+  });
   handle('fonts:installed', () => listInstalledFonts());
   handle('fonts:preview', async (_e, family: string) => {
     const b = bundledFont(String(family));

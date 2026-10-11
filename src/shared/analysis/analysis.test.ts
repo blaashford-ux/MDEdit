@@ -157,3 +157,49 @@ describe('renderReport', () => {
     expect(sparkline([0, 5, 10])).toBe('▁▄█');
   });
 });
+
+describe('report page', () => {
+  it('survives the round trip through the Markdown comment', async () => {
+    const { embedAnalysis, extractAnalysis } = await import('./embed');
+    const a = await run([{ title: 'A -- B', raw: '# A -- B\n\n"Hi --> there," Mara said -- slowly. <b>Mara</b> left.\n' }]);
+    const md = renderReport(a, { source: 'x.md', generated: '2026-10-11' }) + embedAnalysis(a, { source: 'x.md', generated: '2026-10-11' });
+    expect(md.trimEnd().split('\n').pop()).toMatch(/^<!-- mdedit-analysis v1 \{.*\} -->$/);
+    expect(md.match(/-->/g)).toHaveLength(1); // only the comment's own end
+    const back = extractAnalysis(md);
+    expect(back?.meta.source).toBe('x.md');
+    expect(back?.analysis.chapters[0].title).toBe('A -- B');
+    expect(back?.analysis.totals.words).toBe(a.totals.words);
+    expect(extractAnalysis('# Just a chapter\n\ntext')).toBeNull();
+    expect(extractAnalysis('<!-- mdedit-analysis v1 {"nope":1} -->')).toBeNull();
+  });
+
+  it('does not count the embedded data as words', async () => {
+    const { embedAnalysis } = await import('./embed');
+    const { countWords } = await import('../words');
+    const a = await run(SAMPLE);
+    const md = renderReport(a, { source: 'x.md', generated: '2026-10-11' });
+    expect(countWords(md + embedAnalysis(a, { source: 'x.md', generated: '2026-10-11' }))).toBe(countWords(md));
+  });
+
+  it('draws every section as a self-contained page, and escapes manuscript text', async () => {
+    const { renderReportHtml } = await import('./html');
+    const a = await run([
+      { title: '<img src=x onerror=alert(1)>', raw: SAMPLE[0].raw.replace(/^# .*/, '# x') },
+      SAMPLE[1]
+    ]);
+    const html = renderReportHtml(a, { source: '<script>alert(1)</script>.md', generated: '2026-10-11' });
+    expect(html.startsWith('<!doctype html>')).toBe(true);
+    for (const id of ['summary', 'overview', 'dialogue', 'sentences', 'reading', 'words', 'adverbs', 'passive', 'filler', 'pov', 'characters', 'punctuation']) expect(html).toContain(`id="${id}"`);
+    expect(html).toContain('<svg');
+    expect(html).not.toContain('<script');
+    expect(html).not.toContain('<img src=x');
+    expect(html).toContain('&lt;img src=x');
+    expect(html).toContain('prefers-color-scheme:dark');
+  });
+
+  it('copes with an empty analysis', async () => {
+    const { renderReportHtml } = await import('./html');
+    const a = await run([{ title: '', raw: '' }]);
+    expect(renderReportHtml(a, { source: 'e.md', generated: '2026-10-11' })).toContain('no prose');
+  });
+});

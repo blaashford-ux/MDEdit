@@ -188,6 +188,11 @@ export class FakeApi implements MdeditApi {
   onExportProgress = () => () => undefined;
   revealOutput = () => undefined;
   openOutput = async () => '';
+  reports: { kind: string; name: string; html: string }[] = [];
+  saveReport = async (kind: 'html' | 'pdf', name: string, html: string) => {
+    this.reports.push({ kind, name, html });
+    return `/saved/${name}`;
+  };
 
   pickFolder = async () => this.pickResult;
   getLastFolder = async () => this.lastFolder;

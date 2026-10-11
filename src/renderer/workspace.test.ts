@@ -1180,6 +1180,7 @@ describe('text analysis', () => {
     const report = await ws.analyzeFile(`${ROOT}/sub/novel.md`);
     expect(report).toBe(`${ROOT}/sub/novel - Analysis.md`);
     expect(api.text(report!)).toContain('Text analysis: novel.md');
+    expect(api.text(report!)).toMatch(/<!-- mdedit-analysis v1 \{.*\} -->\s*$/);
     expect(state().tabs.map((t) => t.file)).toContain(report);
     expect(state().activeId).toBe(active);
     expect(state().notice).toContain('is ready');

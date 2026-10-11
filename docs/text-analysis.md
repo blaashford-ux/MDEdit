@@ -2,7 +2,9 @@
 
 **Right-click a file → Analyze Text.** MDEdit reads the file (using the unsaved text of the chapter you have open), works through it a chapter at a time so the editor stays responsive, and then writes `<name> - Analysis.md` in the same folder. The report opens in a new tab next to the file's tab; focus stays where it was. A second run writes `… Analysis 2.md` and so on, so you can compare drafts.
 
-The report is plain Markdown, so you can read it in the editor, keep it in the project, annotate it, or delete it. Every major section is a heading at the project's chapter level, so each section appears as a "chapter" in the file list. Charts are drawn with block characters inside code blocks (they stay aligned in Source mode and in any Markdown viewer).
+The report is a Markdown file, so it lives in the project, syncs like any other file, and can be annotated or deleted. In MDEdit it opens as a **formatted report page** (charts, tables, hover tooltips on every bar and square, light and dark). The toolbar above it has **Save as HTML** (one self-contained page you can open in any browser or send to someone), **Save as PDF** (desktop app), and **Edit as Markdown**, which shows the file's text; a **Report** button in the editor toolbar goes back. The Markdown is complete on its own too: the same numbers as tables and block-character charts.
+
+The page is drawn from the results stored in a one-line `<!-- mdedit-analysis v1 {…} -->` comment at the very end of the file (it adds nothing to the word count). Delete that line and the file simply opens as ordinary Markdown. Edit the rest of the text freely; the formatted page always shows the stored results, so re-run the analysis after editing the manuscript. Every major section is a heading at the project's chapter level, so each section appears as a "chapter" in the file list. In the Markdown text, charts are drawn with block characters inside code blocks.
 
 ## What it measures
 
@@ -39,4 +41,4 @@ Average sentence over 22 words or under 9; reading level above grade 10; more th
 
 ## Where the code lives
 
-`src/shared/analysis/`: `text.ts` (parsing, sentences, dialogue), `lexicon.ts` (word lists), `analyze.ts` (the measures), `report.ts` (the Markdown report). `Workspace.analyzeFile` (in `src/renderer/workspace.ts`) runs it and opens the result in the background. The analysis yields to the UI between chapters, so it needs no worker thread and works the same on Windows and Android.
+`src/shared/analysis/`: `text.ts` (parsing, sentences, dialogue), `lexicon.ts` (word lists), `analyze.ts` (the measures), `report.ts` (the Markdown report), `embed.ts` (the stored results), `html.ts` (the formatted page, shared by the in-app view and the saved HTML/PDF; no scripts, inline SVG). `src/renderer/ReportView.tsx` shows it; `report:save` in `electron/main.ts` writes the HTML or PDF. `Workspace.analyzeFile` (in `src/renderer/workspace.ts`) runs it and opens the result in the background. The analysis yields to the UI between chapters, so it needs no worker thread and works the same on Windows and Android.
