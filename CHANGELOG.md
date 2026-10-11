@@ -2,6 +2,7 @@
 
 ### Unreleased
 **Fixed**
+- **Editing stage: "Mark Edited?" is now asked when you press Next chapter on the last chapter.** There the button adds a new chapter and opens the New chapter dialog, so a saved chapter was only offered afterwards, and not at all if you cancelled the dialog. It now asks first, once (not again until you save again), then opens the dialog.
 - **Opening an invitation: picking only one of the two files no longer sends you back to the start.** Google's picker lets you tick one or both files; if only one came back, MDEdit now opens the picker again for just the other file (each pick is remembered), and the picker's title says how to pick two (Ctrl or Shift + click). If Google returns something unexpected, the message now says what it returned, so it can be diagnosed.
 
 ### 0.6.6 — 2026-10-10

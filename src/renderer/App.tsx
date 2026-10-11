@@ -465,7 +465,8 @@ export function App() {
     const doc = tab ? s.docs.get(tab.file) : undefined;
     if (!tab || !doc) return;
     if (tab.chapter < doc.chapters.length - 1) void ws.gotoChapter(1);
-    else if (!isReviewer) promptNewChapter(tab.file, tab.chapter);
+    // Moving on from the last chapter counts as leaving it, so the Editing stage's "Mark Edited?" comes first, then the dialog.
+    else if (!isReviewer) void ws.offerMarkEdited(tab.id).then(() => promptNewChapter(tab.file, tab.chapter));
   };
 
   /** Moves a chapter and keeps the tree focus on it. */
