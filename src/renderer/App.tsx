@@ -7,8 +7,6 @@ import { collectFiles, collectOrphans, findNode } from '../shared/tree';
 import { countWords } from '../shared/words';
 import { BookDetailsDialog } from './BookDetailsDialog';
 import { ContextMenu, type MenuItem } from './ContextMenu';
-import { editMenuItems, isEditable } from './editMenu';
-import { longPressProps } from './longPress';
 import { Editor } from './Editor';
 import { Icon } from './Icon';
 import { ExportDialog } from './ExportDialog';
@@ -25,6 +23,9 @@ import { localDate, writtenOn } from '../shared/progress';
 import { goalFor, relativeTo, withOpened } from '../shared/projects';
 import { projectNameError, uniqueName, type ProjectStatus, type ProjectSummary, type ProjectsConfig, type RootListing } from '../shared/projects';
 import { RelinkDialog } from './RelinkDialog';
+import { ReportView } from './ReportView';
+import { EditBar } from './EditBar';
+import { extractAnalysis } from '../shared/analysis/embed';
 import { SettingsDialog } from './SettingsDialog';
 import type { MarkdownDoc } from '../shared/chapters';
 import { locateRow } from '../shared/rows';
@@ -54,6 +55,13 @@ import './styles.css';
 
 const POLL_MS = 2000;
 
+const reportCache = new WeakMap<MarkdownDoc, ReturnType<typeof extractAnalysis>>();
+/** The analysis a text-analysis report carries at the end of its last chapter (null for any other file). */
+function reportOf(doc: MarkdownDoc): ReturnType<typeof extractAnalysis> {
+  if (!reportCache.has(doc)) reportCache.set(doc, extractAnalysis(doc.chapters[doc.chapters.length - 1]?.raw ?? ''));
+  return reportCache.get(doc) ?? null;
+}
+
 const cleanError = (e: unknown) => String(e instanceof Error ? e.message : e).replace(/^Error invoking remote method '[^']*': (\w*Error: )?/, '');
 
 export function App() {
@@ -65,7 +73,6 @@ export function App() {
   const [focusKey, setFocusKey] = useState<string | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; row: Row } | null>(null);
   /** Cut / Copy / Paste / Select all for the editor, opened by press-and-hold or right-click on the text. */
-  const [editMenu, setEditMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
   const [prompt, setPrompt] = useState<PromptSpec | null>(null);
   const [bookFile, setBookFile] = useState<string | null>(null);
   const [relink, setRelink] = useState<string | null>(null);
@@ -94,6 +101,17 @@ export function App() {
   const [started, setStarted] = useState(false);
   const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
   const [showSync, setShowSync] = useState(false);
+  /** Report tabs the user switched to the Markdown text (the default is the formatted report). */
+  const [rawReports, setRawReports] = useState<Set<string>>(new Set());
+  const showRaw = (id: string, raw: boolean) => {
+    setRawReports((cur) => {
+      const next = new Set(cur);
+      if (raw) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+    ws.setMode(id, raw ? 'source' : 'visual');
+  };
   const [showAbout, setShowAbout] = useState(false);
 
   const activeTab = s.tabs.find((t) => t.id === s.activeId);
@@ -163,16 +181,10 @@ export function App() {
     setShowReview(true);
     setNoteRequest((r) => ({ id: (r?.id ?? 0) + 1, kind, sel }));
   };
-  /** The phone's press-and-hold menu entries for notes: the note attaches when picked (to the selection, or the paragraph pressed). */
-  const noteItems = (tabId: string, x: number, y: number): MenuItem[] => {
-    const attach = (kind: 'comment' | 'suggestion') => {
-      const sel = navs.current.get(tabId)?.review?.selectionAt(x, y);
-      if (sel && (kind === 'comment' || sel.oneBlock)) openNote(kind, sel);
-    };
-    return [
-      { label: 'Add comment…', onClick: () => attach('comment') },
-      { label: 'Suggest a change…', onClick: () => attach('suggestion') }
-    ];
+  /** Attaches a note to the text selected now (the phone's Comment / Suggest buttons). */
+  const noteFromSelection = (tabId: string, kind: 'comment' | 'suggestion') => {
+    const sel = navs.current.get(tabId)?.review?.selection();
+    if (sel && (kind === 'comment' || sel.oneBlock)) openNote(kind, sel);
   };
   /** The note whose highlighted text was just clicked, so the Notes panel can bring it to the top. `n` makes every click a new request. */
   const [noteFocus, setNoteFocus] = useState<{ id: string; n: number } | null>(null);
@@ -536,6 +548,7 @@ export function App() {
         : [];
       return [
         ...manuscriptItems,
+        { label: 'Analyze Text', disabled: ws.isAnalyzing(row.path), onClick: () => void ws.analyzeFile(row.path) },
         ...(caps.export ? exportItems : []),
         { label: 'Rename…', hint: 'F2', onClick: () => promptRename(row) },
         ...reveal,
@@ -788,7 +801,11 @@ export function App() {
     'next-scene': () => gotoScene(1),
     'prev-scene': () => gotoScene(-1),
     settings: () => setShowSettings(true),
-    'toggle-mode': () => activeTab && ws.setMode(activeTab.id, activeTab.mode === 'visual' ? 'source' : 'visual'),
+    'toggle-mode': () => {
+      if (!activeTab) return;
+      if (activeDoc && reportOf(activeDoc)) showRaw(activeTab.id, !rawReports.has(activeTab.id));
+      else ws.setMode(activeTab.id, activeTab.mode === 'visual' ? 'source' : 'visual');
+    },
     export: () => {
       const target = activeTab && markedFiles.includes(activeTab.file) ? activeTab.file : markedFiles[0];
       if (target) setExportFile(target);
@@ -1067,8 +1084,16 @@ export function App() {
             if (!doc || !chapter) return null;
             const active = tab.id === s.activeId;
             const dirty = tab.draft !== null;
+            const report = reportOf(doc);
+            if (report && !rawReports.has(tab.id)) {
+              return (
+                <section key={tab.id} className="pane report" hidden={!active} aria-label={basename(tab.file)}>
+                  <ReportView file={tab.file} report={report} canSave={caps.export} onEdit={() => showRaw(tab.id, true)} />
+                </section>
+              );
+            }
             return (
-              <section key={tab.id} className="pane" hidden={!active} aria-label={basename(tab.file)} {...(caps.windowChrome ? {} : longPressProps((x, y, target) => setEditMenu({ x, y, items: [...editMenuItems(target, () => openFind(false)), ...(tab.mode === 'visual' && projectPath && target.closest('.ProseMirror') ? noteItems(tab.id, x, y) : [])] }), isEditable))}>
+              <section key={tab.id} className="pane" hidden={!active} aria-label={basename(tab.file)}>
                 {tab.conflict?.kind === 'changed' && (
                   <div className="banner warn" role="alert">
                     {basename(tab.file)} was changed on disk while you have unsaved edits.{' '}
@@ -1117,6 +1142,11 @@ export function App() {
                     <button aria-label="Next scene break" title="Next scene break (Ctrl+↓)" onClick={() => gotoScene(1)}>
                       <Icon name="down" /> Scene
                     </button>
+                    {report && (
+                      <button onClick={() => showRaw(tab.id, false)} title="Back to the formatted report">
+                        Report
+                      </button>
+                    )}
                     {tab.mode === 'visual' && projectPath && (
                       <button
                         aria-label="Comments and suggestions"
@@ -1197,6 +1227,16 @@ export function App() {
           })}
         </div>
 
+        {!caps.windowChrome && activeTab && !(activeDoc && reportOf(activeDoc) && !rawReports.has(activeTab.id)) && (
+          <EditBar
+            key={activeTab.id}
+            format={activeTab.mode === 'visual' ? navs.current.get(activeTab.id)?.format : undefined}
+            onComment={activeTab.mode === 'visual' && projectPath ? () => noteFromSelection(activeTab.id, 'comment') : undefined}
+            onSuggest={activeTab.mode === 'visual' && projectPath ? () => noteFromSelection(activeTab.id, 'suggestion') : undefined}
+            onFind={() => openFind(false)}
+          />
+        )}
+
         {!zone && activeTab && activeDoc && activeChapter && (
           <StatusBar
             chapterIndex={activeTab.chapter}
@@ -1258,7 +1298,6 @@ export function App() {
         />
       )}
       {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItems(menu.row)} onClose={() => setMenu(null)} />}
-      {editMenu && <ContextMenu keepFocus x={editMenu.x} y={editMenu.y} items={editMenu.items} onClose={() => setEditMenu(null)} />}
       {prompt && <PromptDialog spec={prompt} onClose={() => setPrompt(null)} />}
       {relink && (
         <RelinkDialog sidecar={relink} candidates={relinkCandidates} onLink={(md) => ws.relinkSidecar(relink, md)} onClose={() => setRelink(null)} />

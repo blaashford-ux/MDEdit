@@ -1,5 +1,17 @@
 # Changelog
 
+### 0.7.0 — 2026-10-11
+**New**
+- **Analyze Text** on a file's right-click menu. It reads the manuscript (including unsaved edits to the open chapter) in the background, then adds `<name> - Analysis.md` next to it and opens it in a new tab without switching to it. Running it again makes `… Analysis 2.md`, so earlier reports are kept for comparison.
+- The report opens as a **formatted page**: stat tiles, bar and column charts, per-chapter sparklines, a reading-level gauge, heat maps, tables and highlighted examples, following the light or dark theme. **Save as HTML** writes one self-contained page; **Save as PDF** writes a PDF (desktop). **Edit as Markdown** shows the file's text, which is complete on its own (tables and block-character charts). The page is drawn from results stored in a one-line comment at the end of the file.
+- It covers: dialogue share and tags; sentence length, rhythm and openers; reading level (Flesch, Flesch–Kincaid, Gunning Fog, Coleman–Liau, ARI, SMOG); repeated words, close echoes and repeated two- and three-word phrases; adverbs; passive voice with examples; filler, filter and crutch words ("just", "really", "that", "seemed", "felt", stock gestures); point of view, tense and possible head-hopping; characters (mentions, where they appear, tagged lines); punctuation habits.
+
+**Notes**
+- **People can use topics too.** The note form has an optional **Topic** (free text, with suggestions: the topics already in the project plus a standard set), and each note's topic chip is a button to change or clear it (**+ topic** when it has none). The author can retag any note, including AI notes that came without one; a reviewer can retag their own. Topics are stored the same way the AI tools store them, so the **All topics** filter covers both.
+
+**Fixed (phone)**
+- **Selecting text works the way the system does it.** Press and hold no longer opens an app menu over the text (it covered the selection handles, and "Select all" sat under the finger). Selection is Android's own: its handles and menu. The formatted editor's floating toolbar, hover handles and virtual caret are off on the phone too. Instead a bar docked above the keyboard appears while you type: with text selected it offers Cut, Copy, Paste, Comment, Suggest, Bold, Italic and Find; with nothing selected, formatting (bold, italic, headings, quote, lists, scene break, undo/redo), Paste and Find.
+
 ### 0.6.8 — 2026-10-12
 **Fixed**
 - **Sharing: a reviewer could pick both files and still fail with "Drive 403: This file cannot be downloaded by the user."** The shared copy of the manuscript was marked "copying requires writer permission", which also stops people who only have the link from downloading it. Read-only links are now left downloadable, and the shared copy of a project that was shared before (including ones shared with 0.6.7) is corrected the next time MDEdit exchanges notes for it.

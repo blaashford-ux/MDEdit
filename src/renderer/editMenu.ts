@@ -1,5 +1,3 @@
-import type { MenuItem } from './ContextMenu';
-
 /** The two kinds of text surface the app edits in: the Markdown source box and the formatted (ProseMirror) editor. */
 export const EDITABLE = 'textarea.source-editor, .ProseMirror';
 
@@ -43,48 +41,35 @@ function insert(host: HTMLElement, text: string) {
   }
 }
 
-function selectAll(host: HTMLElement) {
-  host.focus();
-  if (isTextarea(host)) {
-    host.select();
-    return;
-  }
-  const r = document.createRange();
-  r.selectNodeContents(host);
-  const s = window.getSelection();
-  s?.removeAllRanges();
-  s?.addRange(r);
+/** The editor that has the caret (the formatted editor or the source box), if any. */
+export function activeEditor(): HTMLElement | null {
+  const a = document.activeElement;
+  return a instanceof HTMLElement ? a.closest<HTMLElement>(EDITABLE) : null;
 }
 
-/** Cut / Copy / Paste / Select all (what the phone's own menu offers) plus Find, for the editor under the finger. */
-export function editMenuItems(target: HTMLElement, onFind: () => void): MenuItem[] {
-  const host = target.closest<HTMLElement>(EDITABLE);
-  if (!host) return [];
+/** Is any text selected in `host`? */
+export function hasSelection(host: HTMLElement): boolean {
+  return selectedText(host).length > 0;
+}
+
+export function copySelection(host: HTMLElement): void {
   const text = selectedText(host);
-  const has = text.length > 0;
-  return [
-    {
-      label: 'Cut',
-      disabled: !has,
-      onClick: () => {
-        host.focus();
-        if (!document.execCommand('cut')) {
-          void writeClipboard(text);
-          document.execCommand('delete');
-        }
-      }
-    },
-    { label: 'Copy', disabled: !has, onClick: () => void writeClipboard(text) },
-    {
-      label: 'Paste',
-      onClick: () => {
-        void navigator.clipboard
-          .readText()
-          .then((t) => t && insert(host, t))
-          .catch(() => host.focus()); // clipboard read refused: nothing to paste
-      }
-    },
-    { label: 'Select all', onClick: () => selectAll(host) },
-    { label: 'Find…', onClick: onFind }
-  ];
+  if (text) void writeClipboard(text);
+}
+
+export function cutSelection(host: HTMLElement): void {
+  const text = selectedText(host);
+  if (!text) return;
+  host.focus();
+  if (!document.execCommand('cut')) {
+    void writeClipboard(text);
+    document.execCommand('delete');
+  }
+}
+
+export function pasteInto(host: HTMLElement): void {
+  void navigator.clipboard
+    .readText()
+    .then((t) => t && insert(host, t))
+    .catch(() => host.focus()); // clipboard read refused: nothing to paste
 }

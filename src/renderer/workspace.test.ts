@@ -1201,3 +1201,42 @@ describe('refresh picks up changes to the project made elsewhere', () => {
     expect(tabOf(A).draft).toBe('# One\nunsaved');
   });
 });
+
+describe('text analysis', () => {
+  const PROSE = '# Ch 1\n\n"Hello," Mara said. She walked slowly home.\n\n# Ch 2\n\nThe door was opened by Tomas. He felt cold.\n';
+
+  it('writes the report beside the file and opens it in a tab without switching to it', async () => {
+    api.add('sub/novel.md', PROSE);
+    await ws.openChapter(A, 0);
+    const active = state().activeId;
+    const report = await ws.analyzeFile(`${ROOT}/sub/novel.md`);
+    expect(report).toBe(`${ROOT}/sub/novel - Analysis.md`);
+    expect(api.text(report!)).toContain('Text analysis: novel.md');
+    expect(api.text(report!)).toMatch(/<!-- mdedit-analysis v1 \{.*\} -->\s*$/);
+    expect(state().tabs.map((t) => t.file)).toContain(report);
+    expect(state().activeId).toBe(active);
+    expect(state().notice).toContain('is ready');
+    expect(ws.isAnalyzing(`${ROOT}/sub/novel.md`)).toBe(false);
+  });
+
+  it('numbers the report when one already exists', async () => {
+    api.add('sub/novel.md', PROSE);
+    const first = await ws.analyzeFile(`${ROOT}/sub/novel.md`);
+    const second = await ws.analyzeFile(`${ROOT}/sub/novel.md`);
+    expect(first).toBe(`${ROOT}/sub/novel - Analysis.md`);
+    expect(second).toBe(`${ROOT}/sub/novel - Analysis 2.md`);
+  });
+
+  it('analyses the unsaved edits of the open chapter', async () => {
+    await ws.openChapter(B, 0);
+    ws.setDraft(tabOf(B).id, '# Bee\n\nZorbaxian zorbaxian zorbaxian.\n');
+    const report = await ws.analyzeFile(B);
+    expect(api.text(report!)).toContain('zorbaxian');
+  });
+
+  it('refuses to start the same analysis twice at once', async () => {
+    api.add('sub/novel.md', PROSE);
+    const [one, two] = await Promise.all([ws.analyzeFile(`${ROOT}/sub/novel.md`), ws.analyzeFile(`${ROOT}/sub/novel.md`)]);
+    expect([one, two].filter(Boolean)).toHaveLength(1);
+  });
+});

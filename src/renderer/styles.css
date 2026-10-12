@@ -631,6 +631,22 @@ code.path { background: var(--raised); padding: 1px 6px; border-radius: 6px; }
 .defaults-fields.readonly { opacity: 0.6; }
 .defaults-fields.readonly input, .defaults-fields.readonly select, .defaults-fields.readonly textarea, .defaults-fields.readonly button { cursor: not-allowed; }
 
+/* text-analysis report */
+.pane.report { padding: 0; overflow: hidden; }
+.report-view { display: flex; flex-direction: column; height: 100%; }
+.report-bar { display: flex; align-items: center; gap: 10px; padding: 8px 14px; border-bottom: 1px solid var(--border, rgba(128, 128, 128, 0.25)); flex-wrap: wrap; }
+.report-bar .spacer { flex: 1; }
+.report-msg { color: var(--muted); font-size: 13px; }
+.report-frame { flex: 1; min-height: 0; width: 100%; border: 0; background: transparent; }
+
+/* phone: selection belongs to the system (handles + its own menu); formatting lives in a bar above the keyboard */
+.frame.mobile .editor .milkdown .ProseMirror { -webkit-tap-highlight-color: transparent; touch-action: manipulation; -webkit-user-select: text; user-select: text; padding-bottom: 88px; }
+.format-bar { position: fixed; left: 0; right: 0; z-index: 40; display: flex; gap: 2px; padding: 4px 6px; overflow-x: auto; background: var(--shell); border-top: 1px solid var(--faint); box-shadow: 0 -4px 14px rgba(8, 4, 26, 0.25); -webkit-overflow-scrolling: touch; }
+.fb-btn { flex: 1 0 auto; min-width: 44px; height: 42px; padding: 0 10px; background: transparent; color: var(--fg); border-radius: 10px; font-size: 17px; touch-action: manipulation; }
+.fb-btn:active { background: var(--raised); }
+.fb-btn.b { font-weight: 800; }
+.fb-btn.word { font-size: 14px; font-weight: 600; padding: 0 12px; }
+.fb-btn.i { font-style: italic; font-family: Georgia, serif; }
 .about-head { display: flex; align-items: center; gap: 14px; margin-bottom: 8px; }
 .about-head h3 { margin: 0; }
 .about-version { color: var(--muted); font-size: 13px; }
@@ -655,6 +671,11 @@ code.path { background: var(--raised); padding: 1px 6px; border-radius: 6px; }
 
 /* AI reviewers */
 .review-ai { display: inline-block; margin-right: 6px; padding: 0 5px; font-size: 10px; font-weight: 700; letter-spacing: 0.04em; color: var(--bg, #fff); background: var(--accent); border-radius: 4px; }
+.review-cat.editable { background: transparent; cursor: pointer; font: inherit; font-size: 10px; line-height: inherit; }
+.review-cat.editable:hover { color: var(--fg); border-color: var(--muted); }
+.review-cat.add { border-style: dashed; }
+.review-topic-edit { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0; }
+.review-topic-edit input { flex: 1 1 120px; min-width: 0; }
 .review-cat { margin-left: 6px; padding: 0 6px; font-size: 10px; color: var(--muted); border: 1px solid var(--faint); border-radius: 999px; }
 .review-filters { display: flex; gap: 6px; }
 .review-filters select { flex: 1; min-width: 0; padding: 4px 6px; font-size: 12px; background: var(--raised); color: var(--fg); border: 0; border-radius: 8px; }

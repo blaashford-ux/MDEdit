@@ -23,8 +23,23 @@ export interface FindApi {
   selectedText(): string;
 }
 
+/** Formatting the phone's docked bar applies to the selection (the formatted editor only). */
+export interface FormatApi {
+  bold(): void;
+  italic(): void;
+  heading(level: number): void;
+  quote(): void;
+  bullets(): void;
+  numbered(): void;
+  sceneBreak(): void;
+  undo(): void;
+  redo(): void;
+}
+
 /** What an editor hands its parent: scene-break jumps and find & replace. */
 export interface SceneNav {
+  /** Present in the formatted editor. */
+  format?: FormatApi;
   go(dir: 1 | -1): boolean;
   /** Puts the caret on file line `line` (which must be in this chapter) and scrolls it into view. */
   goToLine(line: number): boolean;

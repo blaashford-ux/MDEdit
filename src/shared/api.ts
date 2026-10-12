@@ -274,6 +274,11 @@ export interface ExportApi {
   /** Show / open a file the last export produced. */
   revealOutput(path: string): void;
   openOutput(path: string): Promise<string>;
+  /**
+   * Saves a text-analysis report page as a self-contained `.html` file or a PDF, after asking where (a native Save dialog,
+   * starting beside the manuscript). Resolves to the saved path, or null if the dialog was cancelled.
+   */
+  saveReport(kind: 'html' | 'pdf', suggestedName: string, html: string): Promise<string | null>;
 }
 
 /** Things that only make sense in the Windows app: its window and menu, the OS folder picker, Explorer, launch files. */

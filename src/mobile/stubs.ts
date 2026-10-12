@@ -22,6 +22,7 @@ export const desktopOnlyStubs: ExportApi & DesktopApi = {
   onExportProgress: never,
   revealOutput: noop,
   openOutput: unavailable('Export'),
+  saveReport: unavailable('Saving a report'),
 
   pickFolder: async () => null,
   reveal: noop,

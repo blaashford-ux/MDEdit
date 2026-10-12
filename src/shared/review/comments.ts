@@ -43,6 +43,18 @@ export interface ReviewItem {
   replies: Reply[]
 }
 
+/** Topics offered as suggestions in the Notes panel, besides any already used in the project. */
+export const STANDARD_TOPICS = ['pacing', 'continuity', 'dialogue', 'character', 'plot', 'style', 'rhythm', 'clarity', 'spelling', 'grammar', 'punctuation', 'research']
+
+export const CATEGORY_MAX = 40
+
+/** A topic as stored: trimmed, lower case, one line, at most CATEGORY_MAX characters. Undefined when there is nothing left. */
+export function normalizeCategory(raw: unknown): string | undefined {
+  if (typeof raw !== 'string') return undefined
+  const t = raw.replace(/\s+/g, ' ').trim().toLowerCase().slice(0, CATEGORY_MAX).trim()
+  return t || undefined
+}
+
 export interface ReviewFile {
   version: number
   reviewer: { id: string; name: string }

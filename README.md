@@ -16,7 +16,10 @@ A Markdown editor for writing books, on **Windows and Android**. Keep each book 
 - **Dark mode**, tabs, word counts, and your open tabs and window position are remembered.
 
 ## On your phone
-The Android app has the same editor, Projects home, goals and progress, with find and replace, and your files stay on the phone. Press and hold a file or project for its menu, or press and hold text for Cut, Copy, Paste and Select all. It has no KDP export.
+The Android app has the same editor, Projects home, goals and progress, with find and replace, and your files stay on the phone. Press and hold a file or project for its menu. In the text, press and hold selects with Android's own handles; a bar above the keyboard offers Cut, Copy, Paste, Comment, Suggest and Find for the selection, and formatting (bold, italic, headings, lists, scene break, undo) when nothing is selected. It has no KDP export.
+
+## Text analysis
+Right-click a manuscript → **Analyze Text**. It runs in the background and writes `<name> - Analysis.md` beside the file, opening in a new tab without taking focus. The tab shows a formatted report (charts, tables, light and dark) with **Save as HTML** and **Save as PDF** buttons and an **Edit as Markdown** switch. It covers dialogue share, sentence length and rhythm, reading level, repeated words, phrases and echoes, adverbs, passive voice, filler/filter/crutch words, point of view and tense consistency, character mentions and punctuation habits. Details in [docs/text-analysis.md](docs/text-analysis.md).
 
 ## Google Drive sync
 Sign in once on each device and MDEdit keeps your projects in an `MDEdit` folder in your Google Drive. It can only see files it created there. Edits sync a few seconds after you save and when you return to the app. If two devices change the same chapter, **both versions are kept**, and nothing is deleted in bulk without asking. Don't put your Root Folder inside OneDrive, Dropbox or Google Drive for Desktop.

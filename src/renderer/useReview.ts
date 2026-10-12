@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { MdeditApi } from '../shared/api';
 import {
   newReviewFile,
+  normalizeCategory,
   type Anchor,
   parseReviewFile,
   serializeReviewFile,
@@ -53,7 +54,9 @@ export interface ReviewState {
   /** Notes whose text can't be found in the open chapter. */
   detached: Set<string>;
   /** Saves a note on a selection captured earlier with `selection()`. */
-  add(sel: { anchor: Anchor; oneBlock: boolean }, kind: 'comment' | 'suggestion', body: string, replacement?: string): void;
+  add(sel: { anchor: Anchor; oneBlock: boolean }, kind: 'comment' | 'suggestion', body: string, replacement?: string, category?: string): void;
+  /** Sets or (with an empty topic) clears a note's topic. */
+  setCategory(id: string, category: string): Promise<void>;
   selection(): { anchor: Anchor; oneBlock: boolean } | null;
   setStatus(id: string, status: ReviewItem['status']): Promise<void>;
   reply(id: string, body: string): Promise<void>;
@@ -169,7 +172,7 @@ export function useReview(
     items,
     detached,
     selection: () => review?.selection() ?? null,
-    add(sel, kind, body, replacement) {
+    add(sel, kind, body, replacement, category) {
       if (!file || (kind === 'suggestion' && !sel.oneBlock)) return;
       const now = new Date().toISOString();
       const item: ReviewItem = {
@@ -180,6 +183,7 @@ export function useReview(
         body,
         ...(kind === 'suggestion' ? { replacement: replacement ?? '' } : {}),
         status: 'open',
+        ...(normalizeCategory(category) ? { category: normalizeCategory(category) } : {}),
         author: me.name,
         createdAt: now,
         updatedAt: now,
@@ -187,6 +191,12 @@ export function useReview(
       };
       void write(me.id, (f) => ({ ...f, reviewer: { id: me.id, name: me.name }, items: [...f.items, item] }));
     },
+    setCategory: (id, category) =>
+      edit(id, (i) => {
+        const { category: _old, ...rest } = i;
+        const next = normalizeCategory(category);
+        return touch(next ? { ...rest, category: next } : rest, {});
+      }),
     setStatus: (id, status) => edit(id, (i) => touch(i, { status })),
     reply: (id, body) =>
       edit(id, (i) => touch(i, { replies: [...i.replies, { id: uid(), author: me.name, createdAt: new Date().toISOString(), body }] })),

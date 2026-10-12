@@ -1,7 +1,17 @@
 import { Crepe, CrepeFeature } from '@milkdown/crepe';
 import { editorViewCtx, editorViewOptionsCtx } from '@milkdown/kit/core';
 import { Selection } from '@milkdown/kit/prose/state';
-import { $prose, replaceAll } from '@milkdown/kit/utils';
+import { $prose, callCommand, replaceAll } from '@milkdown/kit/utils';
+import {
+  insertHrCommand,
+  toggleEmphasisCommand,
+  toggleStrongCommand,
+  wrapInBlockquoteCommand,
+  wrapInBulletListCommand,
+  wrapInHeadingCommand,
+  wrapInOrderedListCommand
+} from '@milkdown/kit/preset/commonmark';
+import { redoCommand, undoCommand } from '@milkdown/kit/plugin/history';
 import { useEffect, useRef, useState } from 'react';
 import '@milkdown/crepe/theme/common/style.css';
 import '@milkdown/crepe/theme/classic.css';
@@ -41,6 +51,9 @@ interface Props {
   firstLine: number;
 }
 
+/** The phone: no window chrome, so no mouse hover to hang floating menus on. */
+const TOUCH = typeof window !== 'undefined' && window.mdedit?.capabilities?.windowChrome === false;
+
 export function Editor({ initial, restore, onChange, saved, onNav, firstLine, readOnly, onContextMenu }: Props) {
   const wrap = useRef<HTMLDivElement>(null);
   const host = useRef<HTMLDivElement>(null);
@@ -59,13 +72,17 @@ export function Editor({ initial, restore, onChange, saved, onNav, firstLine, re
   onNavRef.current = onNav;
 
   useEffect(() => {
+    // On a touch screen the system owns selection: its handles and its Cut / Copy / Paste menu. Crepe's floating
+    // toolbar, hover handles and virtual caret fight with that (a second menu over the text, handles that snap back,
+    // a long press that selects far too much), so they are off there; the phone gets a docked format bar instead.
     const crepe = new Crepe({
       root: host.current,
       defaultValue: mountProps.current.initial,
       features: {
         [CrepeFeature.AI]: false,
         [CrepeFeature.ImageBlock]: false,
-        [CrepeFeature.Latex]: false
+        [CrepeFeature.Latex]: false,
+        ...(TOUCH ? { [CrepeFeature.Toolbar]: false, [CrepeFeature.BlockEdit]: false, [CrepeFeature.Cursor]: false } : {})
       }
     });
     let disposed = false;
@@ -138,7 +155,24 @@ export function Editor({ initial, restore, onChange, saved, onNav, firstLine, re
       if (draft !== null) crepe.editor.action(replaceAll(draft));
       // Only now can the parent drive the editor (scene jumps, find & replace).
       scheduleMeasure();
+      const run = (cmd: Parameters<typeof callCommand>[0], payload?: unknown) => {
+        const view = getView();
+        if (!view) return;
+        crepe.editor.action(callCommand(cmd as never, payload as never));
+        view.focus(); // keep the keyboard and the selection
+      };
       onNavRef.current?.({
+        format: {
+          bold: () => run(toggleStrongCommand.key),
+          italic: () => run(toggleEmphasisCommand.key),
+          heading: (level) => run(wrapInHeadingCommand.key, level),
+          quote: () => run(wrapInBlockquoteCommand.key),
+          bullets: () => run(wrapInBulletListCommand.key),
+          numbered: () => run(wrapInOrderedListCommand.key),
+          sceneBreak: () => run(insertHrCommand.key),
+          undo: () => run(undoCommand.key),
+          redo: () => run(redoCommand.key)
+        },
         goToLine: (line) => {
           const view = getView();
           const spans = blockPos.current;
