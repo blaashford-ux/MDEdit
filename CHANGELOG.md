@@ -1,5 +1,11 @@
 # Changelog
 
+### 0.7.1 — 2026-10-12
+**New**
+- **Text alignment.** Align any part of your text left, centre, right or justified, and see it as you write and in the exported EPUB, print PDF and Word file. In the file it is a fenced block (`::: center` … `:::`, also `left`, `right`, `justify`) that can hold paragraphs, headings, quotes and lists. In the editor, four buttons set it for the selected paragraphs (on the phone they are in the bar above the keyboard), the same button again removes it, and Ctrl+Shift+L / E / R / J do the same from the keyboard. Details in [docs/alignment.md](docs/alignment.md).
+- **Body text alignment** is now an export setting for each output (EPUB, print PDF, Word): *Justified* (as before, still the default) or *Left (ragged right)*. It layers like the other settings (app → project → book).
+- Word counts, progress and text analysis ignore the fence lines, and the AI review tools see the same text the editor shows.
+
 ### 0.7.0 — 2026-10-11
 **New**
 - **Analyze Text** on a file's right-click menu. It reads the manuscript (including unsaved edits to the open chapter) in the background, then adds `<name> - Analysis.md` next to it and opens it in a new tab without switching to it. Running it again makes `… Analysis 2.md`, so earlier reports are kept for comparison.

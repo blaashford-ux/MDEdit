@@ -18,6 +18,8 @@ import '@milkdown/crepe/theme/classic.css';
 import { blockLines } from '../shared/lines';
 import { pickScene } from '../shared/sceneBreaks';
 import { LineGutter, lineMarksFromBlocks, type LineMark, type PlacedBlock } from './LineGutter';
+import { alignPlugins, setAlignCommand } from './alignPlugin';
+import type { Align } from '../shared/align';
 import { findApiFor, findPlugin } from './findPlugin';
 import { reviewApiFor, reviewPlugin } from './reviewPlugin';
 import type { SceneNav } from './sceneNav';
@@ -106,6 +108,7 @@ export function Editor({ initial, restore, onChange, saved, onNav, firstLine, re
     });
     if (mountProps.current.readOnly) crepe.editor.config((ctx) => ctx.update(editorViewOptionsCtx, (prev) => ({ ...prev, editable: () => false })));
     crepe.editor.use($prose(() => findPlugin)); // highlights for Find & Replace
+    crepe.editor.use(alignPlugins); // ::: center fences
     crepe.editor.use($prose(() => reviewPlugin)); // highlights for comments and suggestions
     const getView = () => (crepeRef.current ? crepeRef.current.editor.action((ctx) => ctx.get(editorViewCtx)) : null);
     /**
@@ -171,7 +174,8 @@ export function Editor({ initial, restore, onChange, saved, onNav, firstLine, re
           numbered: () => run(wrapInOrderedListCommand.key),
           sceneBreak: () => run(insertHrCommand.key),
           undo: () => run(undoCommand.key),
-          redo: () => run(redoCommand.key)
+          redo: () => run(redoCommand.key),
+          align: (a) => run(setAlignCommand.key, a)
         },
         goToLine: (line) => {
           const view = getView();

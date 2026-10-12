@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { activeEditor, copySelection, cutSelection, hasSelection, pasteInto } from './editMenu';
+import { Icon } from './Icon';
 import type { FormatApi } from './sceneNav';
 
 /** Distance between the bottom of the layout and the bottom of what is actually visible (the on-screen keyboard). */
@@ -67,6 +68,16 @@ export function EditBar({ format, onComment, onSuggest, onFind }: Props) {
       {label}
     </button>
   );
+  const aligns = format
+    ? (['left', 'center', 'right', 'justify'] as const).map((a) => {
+        const title = `Align ${a === 'center' ? 'centre' : a}`;
+        return (
+          <button key={title} type="button" className="fb-btn" aria-label={title} title={`${title}; tap again to remove`} onPointerDown={keep} onMouseDown={keep} onClick={() => format.align(a)}>
+            <Icon name={a === 'left' ? 'alignLeft' : a === 'center' ? 'alignCenter' : a === 'right' ? 'alignRight' : 'alignJustify'} size={18} />
+          </button>
+        );
+      })
+    : [];
   const clip = [
     btn('Copy', 'Copy', () => { const h = host(); if (h) copySelection(h); }, 'word'),
     btn('Cut', 'Cut', () => { const h = host(); if (h) cutSelection(h); }, 'word'),
@@ -82,13 +93,14 @@ export function EditBar({ format, onComment, onSuggest, onFind }: Props) {
         btn('•', 'Bulleted list', format.bullets),
         btn('1.', 'Numbered list', format.numbered),
         btn('⁂', 'Scene break', format.sceneBreak),
+        ...aligns,
         btn('↶', 'Undo', format.undo),
         btn('↷', 'Redo', format.redo)
       ]
     : [];
   return (
     <div className="format-bar" role="toolbar" aria-label="Editing" style={{ bottom: inset }}>
-      {selected ? [...clip, ...notes, ...inline, btn('Find', 'Find', onFind, 'word')] : [...inline, ...blocks, btn('Paste', 'Paste', () => { const h = host(); if (h) pasteInto(h); }, 'word'), btn('Find', 'Find', onFind, 'word')]}
+      {selected ? [...clip, ...notes, ...inline, ...aligns, btn('Find', 'Find', onFind, 'word')] : [...inline, ...blocks, btn('Paste', 'Paste', () => { const h = host(); if (h) pasteInto(h); }, 'word'), btn('Find', 'Find', onFind, 'word')]}
     </div>
   );
 }

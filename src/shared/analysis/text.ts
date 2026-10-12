@@ -1,3 +1,4 @@
+import { stripFences } from '../align';
 import { ABBREVIATIONS } from './lexicon';
 
 /** A word, the way the rest of the app counts them (see shared/words.ts). */
@@ -104,7 +105,7 @@ function usesSingleQuotes(text: string): boolean {
 
 /** Turns one chapter's Markdown into paragraphs of plain text (front matter, headings, code and scene breaks dropped). */
 export function parseChapter(raw: string, title: string, singleQuotes: boolean): ParsedChapter {
-  const lines = raw.replace(/^﻿/, '').split(/\r\n|\n|\r/);
+  const lines = stripFences(raw.replace(/^﻿/, '')).split(/\r\n|\n|\r/);
   const blocks: ({ text: string } | 'break')[] = [];
   let buf: string[] = [];
   const endBlock = () => {

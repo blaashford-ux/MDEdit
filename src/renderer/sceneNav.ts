@@ -1,3 +1,4 @@
+import type { Align } from '../shared/align';
 import type { FindOptions, FindStatus } from '../shared/find';
 import type { ReviewApi } from './reviewPlugin';
 
@@ -34,6 +35,8 @@ export interface FormatApi {
   sceneBreak(): void;
   undo(): void;
   redo(): void;
+  /** Aligns the selected blocks (`null`, or the alignment they already have, removes it). */
+  align(align: Align | null): void;
 }
 
 /** What an editor hands its parent: scene-break jumps and find & replace. */

@@ -1157,6 +1157,15 @@ export function App() {
                         Notes{openNotes > 0 ? ` (${openNotes})` : ''}
                       </button>
                     )}
+                    {!isReviewer && !zone && tab.mode === 'visual' && caps.windowChrome && navs.current.get(tab.id)?.format && (
+                      <span className="align-group" role="group" aria-label="Text alignment">
+                        {([['left', 'alignLeft', 'Left'], ['center', 'alignCenter', 'Centre'], ['right', 'alignRight', 'Right'], ['justify', 'alignJustify', 'Justify']] as const).map(([a, icon, label]) => (
+                          <button key={a} type="button" aria-label={`Align ${label.toLowerCase()}`} title={`Align ${label.toLowerCase()} (Ctrl+Shift+${a === 'left' ? 'L' : a === 'center' ? 'E' : a === 'right' ? 'R' : 'J'}); pick it again to remove`} onClick={() => navs.current.get(tab.id)?.format?.align(a)}>
+                            <Icon name={icon} />
+                          </button>
+                        ))}
+                      </span>
+                    )}
                     {!isReviewer && !zone && (
                     <button
                       onClick={() => ws.setMode(tab.id, tab.mode === 'visual' ? 'source' : 'visual')}

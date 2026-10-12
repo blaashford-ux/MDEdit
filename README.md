@@ -9,6 +9,7 @@ A Markdown editor for writing books, on **Windows and Android**. Keep each book 
 ## Writing
 - **Projects.** A project is a folder with the subfolders you choose, kept in your **Root Folder**. The Projects home shows each project as a card with its status, word count and goal progress. Start one with **New Project** (Ctrl+Alt+N) from a template (Novel, Series, Short story, Blank), switch with Ctrl+K, and search, sort, filter by status, archive or duplicate from the home page.
 - **Chapters.** Files open one chapter at a time (Heading 1 by default; choose the level in Settings). Edit in the formatted view or switch to raw Markdown (Ctrl+Shift+M), jump between scene breaks, and go to any line.
+- **Alignment.** Left, centre, right or justified for any part of the text, in the editor and in the EPUB, PDF and Word export: select paragraphs and press an alignment button (or Ctrl+Shift+L / E / R / J). It is stored as a `::: center` … `:::` fence; see [docs/alignment.md](docs/alignment.md). Whole-book body text can be justified or left in the export settings.
 - **Find and Replace.** Search a chapter or the whole file, with match case, whole word and regular expressions.
 - **Goals and progress.** Set a word-count goal and deadline for your active manuscript and follow a day-by-day chart, words per day needed, and an estimated finish date.
 - **Editing stage.** When a project's status is *Editing*, mark each chapter as edited and watch your progress through the book.
