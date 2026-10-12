@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Anchor } from '../shared/review/comments';
+import { CATEGORY_MAX, STANDARD_TOPICS, type Anchor } from '../shared/review/comments';
 import type { Identity, ReviewState, ShownItem } from './useReview';
 
 interface Props {
@@ -48,6 +48,10 @@ export function ReviewPanel({ state, me, role, onRename, onClose, onShare, onAi,
   const [replyText, setReplyText] = useState('');
   const [who, setWho] = useState('all');
   const [category, setCategory] = useState('all');
+  /** The topic for the note being written; kept between notes, since a pass tends to stay on one subject. */
+  const [topic, setTopic] = useState('');
+  /** The note whose topic is being edited, and what is typed. */
+  const [topicFor, setTopicFor] = useState<{ id: string; text: string } | null>(null);
   const [chapterOnly, setChapterOnly] = useState(readChapterOnly);
   const [confirmAll, setConfirmAll] = useState(false);
   const [focusedId, setFocusedId] = useState<string | null>(null);
@@ -100,7 +104,7 @@ export function ReviewPanel({ state, me, role, onRename, onClose, onShare, onAi,
     if (!draft) return;
     if (kind === 'comment' && !body.trim()) return;
     if (kind === 'suggestion' && replacement === draft.anchor.quote && !body.trim()) return;
-    state.add(draft, kind, body.trim(), kind === 'suggestion' ? replacement : undefined);
+    state.add(draft, kind, body.trim(), kind === 'suggestion' ? replacement : undefined, topic);
     setDraft(null);
     setBody('');
   };
@@ -109,6 +113,8 @@ export function ReviewPanel({ state, me, role, onRename, onClose, onShare, onAi,
   const reviewers = [...new Map(state.items.map((i) => [i.reviewerId, i.reviewerName])).entries()];
   const categories = [...new Set(state.items.map((i) => i.category).filter((c): c is string => !!c))].sort();
   const whoNow = reviewers.some(([id]) => id === who) ? who : 'all';
+  /** Topics to suggest: those already in the project first, then the standard ones. */
+  const topicChoices = [...categories, ...STANDARD_TOPICS.filter((t) => !categories.includes(t))];
   const categoryNow = categories.includes(category) ? category : 'all';
   const thisChapterOnly = chapterOnly && !!inChapter;
   const matching = state.items.filter(
@@ -129,6 +135,11 @@ export function ReviewPanel({ state, me, role, onRename, onClose, onShare, onAi,
 
   return (
     <aside className="review-panel" aria-label="Comments and suggestions">
+      <datalist id="review-topics">
+        {topicChoices.map((t) => (
+          <option key={t} value={t} />
+        ))}
+      </datalist>
       <div className="review-head">
         <h3>Notes</h3>
         {onAi && <button type="button" className="review-share" onClick={onAi} title="Let Claude, GPT or another AI app review your chapters">AI…</button>}
@@ -156,6 +167,16 @@ export function ReviewPanel({ state, me, role, onRename, onClose, onShare, onAi,
           <label>
             {kind === 'suggestion' ? 'Why (optional)' : 'Your comment'}
             <textarea autoFocus value={body} onChange={(e) => setBody(e.target.value)} rows={3} />
+          </label>
+          <label>
+            Topic (optional)
+            <input
+              list="review-topics"
+              value={topic}
+              maxLength={CATEGORY_MAX}
+              placeholder="e.g. pacing, continuity"
+              onChange={(e) => setTopic(e.target.value)}
+            />
           </label>
           <div className="modal-actions">
             <button type="button" onClick={() => setDraft(null)}>Cancel</button>
@@ -229,10 +250,58 @@ export function ReviewPanel({ state, me, role, onRename, onClose, onShare, onAi,
             <div className="review-meta">
               {i.origin === 'ai' && <span className="review-ai" title="Written by an AI reviewer">AI</span>}
               <strong>{i.author}</strong> · {i.kind === 'suggestion' ? 'suggestion' : 'comment'}
-              {i.category && <span className="review-cat">{i.category}</span>}
+              {topicFor?.id === i.id ? null : i.category ? (
+                mine(i) ? (
+                  <button type="button" className="review-cat editable" title="Change the topic" onClick={() => setTopicFor({ id: i.id, text: i.category ?? '' })}>
+                    {i.category}
+                  </button>
+                ) : (
+                  <span className="review-cat">{i.category}</span>
+                )
+              ) : (
+                mine(i) && (
+                  <button type="button" className="review-cat editable add" title="Give this note a topic" onClick={() => setTopicFor({ id: i.id, text: '' })}>
+                    + topic
+                  </button>
+                )
+              )}
               {i.status !== 'open' && <span className="review-status"> · {i.status}</span>}
               {state.detached.has(i.id) && <span className="review-lost"> · not in this chapter</span>}
             </div>
+            {topicFor?.id === i.id && (
+              <form
+                className="review-topic-edit"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void state.setCategory(i.id, topicFor.text);
+                  setTopicFor(null);
+                }}
+              >
+                <input
+                  autoFocus
+                  list="review-topics"
+                  aria-label="Topic"
+                  value={topicFor.text}
+                  maxLength={CATEGORY_MAX}
+                  placeholder="Topic"
+                  onChange={(e) => setTopicFor({ id: i.id, text: e.target.value })}
+                  onKeyDown={(e) => e.key === 'Escape' && setTopicFor(null)}
+                />
+                <button type="submit">Save</button>
+                {i.category && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void state.setCategory(i.id, '');
+                      setTopicFor(null);
+                    }}
+                  >
+                    Clear
+                  </button>
+                )}
+                <button type="button" onClick={() => setTopicFor(null)}>Cancel</button>
+              </form>
+            )}
             {i.kind === 'suggestion' && (
               <div className="review-diff">
                 <del>{excerpt(i.anchor.quote, 120)}</del> <ins>{excerpt(i.replacement ?? '', 120)}</ins>

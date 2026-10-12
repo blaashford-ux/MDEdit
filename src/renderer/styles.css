@@ -671,6 +671,11 @@ code.path { background: var(--raised); padding: 1px 6px; border-radius: 6px; }
 
 /* AI reviewers */
 .review-ai { display: inline-block; margin-right: 6px; padding: 0 5px; font-size: 10px; font-weight: 700; letter-spacing: 0.04em; color: var(--bg, #fff); background: var(--accent); border-radius: 4px; }
+.review-cat.editable { background: transparent; cursor: pointer; font: inherit; font-size: 10px; line-height: inherit; }
+.review-cat.editable:hover { color: var(--fg); border-color: var(--muted); }
+.review-cat.add { border-style: dashed; }
+.review-topic-edit { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0; }
+.review-topic-edit input { flex: 1 1 120px; min-width: 0; }
 .review-cat { margin-left: 6px; padding: 0 6px; font-size: 10px; color: var(--muted); border: 1px solid var(--faint); border-radius: 999px; }
 .review-filters { display: flex; gap: 6px; }
 .review-filters select { flex: 1; min-width: 0; padding: 4px 6px; font-size: 12px; background: var(--raised); color: var(--fg); border: 0; border-radius: 8px; }

@@ -13,7 +13,7 @@ const note = (id: string, o: Partial<ShownItem> = {}): ShownItem => ({
 });
 const state = (items: ShownItem[]): ReviewState => ({
   items, detached: new Set(), add: vi.fn(), selection: () => null, setStatus: vi.fn(async () => undefined), reply: vi.fn(async () => undefined), remove: vi.fn(async () => undefined),
-  accept: vi.fn(async () => null), focus: vi.fn(), reload: vi.fn(),
+  accept: vi.fn(async () => null), focus: vi.fn(), reload: vi.fn(), setCategory: vi.fn(async () => undefined),
 });
 
 let host: HTMLDivElement;
@@ -111,6 +111,69 @@ describe('the "This chapter only" switch', () => {
     localStorage.setItem('mdedit.notes.chapterOnly', '1');
     const root = await mount([note('a')], new Set());
     expect(host.querySelector('.review-empty')?.textContent).toBe('No open notes in this chapter.');
+    await act(async () => root.unmount());
+  });
+});
+
+describe('topics', () => {
+  const mount = async (items: ShownItem[], role: 'owner' | 'reviewer', me = { id: 'owner', name: 'Me' }, extra: Record<string, unknown> = {}) => {
+    const st = state(items);
+    Object.assign(st, extra);
+    const root = createRoot(host);
+    await act(async () => root.render(createElement(ReviewPanel, { state: st, me, role, onRename: () => undefined, onClose: () => undefined })));
+    return { st, root };
+  };
+  const type = async (el: HTMLInputElement, value: string) => {
+    await act(async () => {
+      const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+      set.call(el, value);
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+  };
+  const click = (el: Element | null) => act(async () => void (el as HTMLElement).dispatchEvent(new MouseEvent('click', { bubbles: true })));
+
+  it('lets the author give an AI note a topic, and change or clear one', async () => {
+    const { st, root } = await mount([note('a'), note('b', { category: 'pacing' })], 'owner');
+    await click(host.querySelector('[data-note-id="a"] .review-cat.add'));
+    const input = host.querySelector<HTMLInputElement>('[data-note-id="a"] .review-topic-edit input')!;
+    await type(input, '  Continuity ');
+    await act(async () => void host.querySelector('[data-note-id="a"] .review-topic-edit')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+    expect(st.setCategory).toHaveBeenCalledWith('a', '  Continuity ');
+    await click(host.querySelector('[data-note-id="b"] .review-cat.editable'));
+    const clear = [...host.querySelectorAll('[data-note-id="b"] .review-topic-edit button')].find((b) => b.textContent === 'Clear');
+    await click(clear ?? null);
+    expect(st.setCategory).toHaveBeenCalledWith('b', '');
+    await act(async () => root.unmount());
+  });
+
+  it('lets a reviewer retag only their own notes', async () => {
+    const mine = note('m', { reviewerId: 'sam', reviewerName: 'Sam', category: 'style' });
+    const theirs = note('t', { category: 'style' });
+    const { root } = await mount([mine, theirs], 'reviewer', { id: 'sam', name: 'Sam' });
+    expect(host.querySelector('[data-note-id="m"] .review-cat.editable')).not.toBeNull();
+    expect(host.querySelector('[data-note-id="t"] .review-cat.editable')).toBeNull();
+    expect(host.querySelector('[data-note-id="t"] .review-cat')?.textContent).toBe('style');
+    expect(host.querySelector('[data-note-id="t"] .review-cat.add')).toBeNull();
+    await act(async () => root.unmount());
+  });
+
+  it('suggests the topics in use and the standard ones, and sends the topic with a new note', async () => {
+    const sel = { anchor: { quote: 'some words', prefix: '', suffix: '', start: 0 }, oneBlock: true };
+    const { st, root } = await mount([note('a', { category: 'worldbuilding' })], 'owner', undefined, { selection: () => sel });
+    const options = [...host.querySelectorAll('#review-topics option')].map((o) => (o as HTMLOptionElement).value);
+    expect(options[0]).toBe('worldbuilding');
+    expect(options).toContain('pacing');
+    expect(options.filter((o) => o === 'worldbuilding')).toHaveLength(1);
+    await click([...host.querySelectorAll('button')].find((b) => b.textContent === 'Add note on selection') ?? null);
+    const area = host.querySelector<HTMLTextAreaElement>('.review-compose textarea[autofocus], .review-compose textarea:last-of-type')!;
+    await act(async () => {
+      const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!;
+      set.call(area, 'Too slow here');
+      area.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await type(host.querySelector<HTMLInputElement>('.review-compose input[list="review-topics"]')!, 'pacing');
+    await click([...host.querySelectorAll('.review-compose button')].find((b) => b.textContent === 'Add') ?? null);
+    expect(st.add).toHaveBeenCalledWith(sel, 'comment', 'Too slow here', undefined, 'pacing');
     await act(async () => root.unmount());
   });
 });
