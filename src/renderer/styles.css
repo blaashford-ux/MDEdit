@@ -749,3 +749,16 @@ code.path { background: var(--raised); padding: 1px 6px; border-radius: 6px; }
 .switch input:checked + .switch-track::after { transform: translateX(14px); background: var(--accent-ink); opacity: 1; }
 .switch input:focus-visible + .switch-track { outline: 2px solid var(--focus); outline-offset: 2px; }
 .review-chapter-switch { padding: 2px 4px 6px; font-size: 12.5px; }
+
+/* alignment fences (::: center) in the formatted editor */
+.editor .md-align { position: relative; margin: 0.4em 0 0.4em -12px; padding-left: 10px; border-left: 2px dotted var(--faint); }
+.editor .md-align > * { text-align: inherit; }
+.editor .md-align[data-md-align='left'] { text-align: left; }
+.editor .md-align[data-md-align='center'] { text-align: center; }
+.editor .md-align[data-md-align='right'] { text-align: right; }
+.editor .md-align[data-md-align='justify'] { text-align: justify; }
+.editor .md-align::before { content: attr(data-md-align); position: absolute; left: -2px; top: -1.15em; font-size: 10px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); opacity: 0; transition: opacity 0.12s; pointer-events: none; }
+.editor .md-align:hover::before, .editor .md-align:focus-within::before { opacity: 0.9; }
+.editor .md-align[data-md-align='center'] ul, .editor .md-align[data-md-align='center'] ol { list-style-position: inside; padding-left: 0; }
+.align-group { display: inline-flex; gap: 2px; margin-right: 4px; }
+.align-group button { padding: 4px 6px; }

@@ -64,8 +64,10 @@ export function printCss(book: BookBuild, layout: PrintLayout): string {
 
 html { font-family: ${stack}; font-size: ${s.fontSize}pt; }
 body { margin: 0; font-family: ${stack}; font-size: ${s.fontSize}pt; line-height: 1.25; color: #000; hyphens: none; -webkit-hyphens: none; }
-p { text-align: justify; orphans: 2; widows: 2; }
+p { text-align: ${s.bodyAlign === 'left' ? 'left' : 'justify'}; orphans: 2; widows: 2; }
 ${paragraphCss(s.paragraphStyle)}
+.al-left { text-align: left; } .al-center { text-align: center; } .al-right { text-align: right; } .al-justify { text-align: justify; }
+p.al-center, p.al-right { text-indent: 0; }
 em { font-style: italic; } strong { font-weight: 700; }
 blockquote { margin: 1em 1.5em; }
 pre { white-space: pre-wrap; font-size: 0.9em; }

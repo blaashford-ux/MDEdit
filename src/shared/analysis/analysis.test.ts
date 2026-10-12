@@ -203,3 +203,10 @@ describe('report page', () => {
     expect(renderReportHtml(a, { source: 'e.md', generated: '2026-10-11' })).toContain('no prose');
   });
 });
+
+describe('alignment fences', () => {
+  it('are not prose', async () => {
+    const a = await run([{ title: 'A', raw: '# A\n\n::: center\nOne two three.\n:::\n' }]);
+    expect(a.totals.words).toBe(3);
+  });
+});

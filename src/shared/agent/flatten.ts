@@ -1,6 +1,7 @@
 import { fromMarkdown } from 'mdast-util-from-markdown';
 import { gfmFromMarkdown } from 'mdast-util-gfm';
 import { gfm } from 'micromark-extension-gfm';
+import { stripFences } from '../align';
 
 type Node = { type: string; value?: string; children?: Node[] };
 
@@ -26,7 +27,7 @@ function inline(node: Node): string {
  * src/renderer/reviewPlugin.ts, or notes written here would not find their text in the app.
  */
 export function flattenMarkdown(markdown: string): string {
-  const tree = fromMarkdown(markdown.replace(/^﻿/, ''), { extensions: [gfm()], mdastExtensions: [gfmFromMarkdown()] }) as unknown as Node;
+  const tree = fromMarkdown(stripFences(markdown.replace(/^﻿/, '')), { extensions: [gfm()], mdastExtensions: [gfmFromMarkdown()] }) as unknown as Node;
   const blocks: string[] = [];
   const walk = (n: Node) => {
     if (TEXT_BLOCKS.has(n.type)) blocks.push(inline(n));

@@ -14,6 +14,7 @@ import {
   type ISectionOptions
 } from 'docx';
 import type { BookBuild, BuiltChapter } from './assemble';
+import type { Align } from '../align';
 import type { Block, Inline } from './manuscript';
 import type { MatterPage, PageBlock } from './matter';
 import { safeUrl } from './matter';
@@ -74,13 +75,16 @@ export async function buildDocx(book: BookBuild): Promise<Uint8Array> {
     });
   const textOf = (inl: Inline[]): string => inl.map((x) => (x.t === 'text' || x.t === 'code' ? x.text : x.t === 'br' ? ' ' : textOf(x.children))).join('');
 
-  const body = (children: (TextRun | ExternalHyperlink)[], opts: { first?: boolean; quote?: boolean } = {}) =>
+  const alignment = (a: Align | undefined, fallback: (typeof AlignmentType)[keyof typeof AlignmentType]) =>
+    a === 'center' ? AlignmentType.CENTER : a === 'right' ? AlignmentType.RIGHT : a === 'left' ? AlignmentType.LEFT : a === 'justify' ? AlignmentType.JUSTIFIED : fallback;
+  const bodyDefault = s.bodyAlign === 'left' ? AlignmentType.LEFT : AlignmentType.JUSTIFIED;
+  const body = (children: (TextRun | ExternalHyperlink)[], opts: { first?: boolean; quote?: boolean; align?: Align } = {}) =>
     new Paragraph({
       children,
-      alignment: AlignmentType.JUSTIFIED,
+      alignment: alignment(opts.align, bodyDefault),
       spacing: { before: 0, after: 0 },
       indent: {
-        firstLine: indent && !opts.first && !opts.quote ? Math.round(0.3 * 1440) : 0,
+        firstLine: indent && !opts.first && !opts.quote && opts.align !== 'center' && opts.align !== 'right' ? Math.round(0.3 * 1440) : 0,
         ...(opts.quote ? { left: convertInchesToTwip(0.4), right: convertInchesToTwip(0.4) } : {})
       }
     });
@@ -88,14 +92,14 @@ export async function buildDocx(book: BookBuild): Promise<Uint8Array> {
   const centered = (children: TextRun[], after = 0) => new Paragraph({ children, alignment: AlignmentType.CENTER, spacing: { before: 0, after } });
 
   /** Body blocks → paragraphs, with the blank (nbsp) paragraph between consecutive items when the style asks for it. */
-  const blocksToParagraphs = (blocks: Block[], quote = false): Paragraph[] => {
+  const blocksToParagraphs = (blocks: Block[], quote = false, inherit?: Align): Paragraph[] => {
     const items: { p: Paragraph[]; kind: Block['t'] }[] = [];
     let prev: Block['t'] | null = null;
     for (const b of blocks) {
       const first = prev === null || prev === 'scene' || prev === 'sub';
       switch (b.t) {
         case 'para':
-          items.push({ kind: 'para', p: [body(runsFor(b.inlines), { first, quote })] });
+          items.push({ kind: 'para', p: [body(runsFor(b.inlines), { first, quote, align: b.align ?? inherit })] });
           break;
         case 'scene':
           items.push({ kind: 'scene', p: [centered([run(sceneBreak)])] });
@@ -103,11 +107,11 @@ export async function buildDocx(book: BookBuild): Promise<Uint8Array> {
         case 'sub':
           items.push({
             kind: 'sub',
-            p: [new Paragraph({ children: runsFor(b.inlines, { bold: true }), alignment: AlignmentType.CENTER, spacing: { before: 0, after: 0 } })]
+            p: [new Paragraph({ children: runsFor(b.inlines, { bold: true }), alignment: alignment(b.align, AlignmentType.CENTER), spacing: { before: 0, after: 0 } })]
           });
           break;
         case 'quote':
-          items.push({ kind: 'quote', p: blocksToParagraphs(b.blocks, true) });
+          items.push({ kind: 'quote', p: blocksToParagraphs(b.blocks, true, b.align) });
           break;
         case 'list':
           items.push({
@@ -118,7 +122,7 @@ export async function buildDocx(book: BookBuild): Promise<Uint8Array> {
                   ? [
                       new Paragraph({
                         children: runsFor(blk.inlines),
-                        alignment: AlignmentType.LEFT,
+                        alignment: alignment(b.align, AlignmentType.LEFT),
                         spacing: { before: 0, after: 0 },
                         ...(b.ordered ? { numbering: { reference: 'ordered', level: 0, instance: idx } } : { bullet: { level: 0 } })
                       })

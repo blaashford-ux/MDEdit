@@ -119,3 +119,22 @@ describe('postLayoutConfig', () => {
     expect(postLayoutConfig(book((d) => (d.export.pdf.runningHead = 'author'))).heads).toEqual({ recto: 'Au', verso: 'Au' });
   });
 });
+
+describe('alignment in the print PDF', () => {
+  const aligned = (edit: (d: BookDetails) => void = () => undefined): BookBuild => {
+    const d = defaultBookDetails({ title: 'T', author: 'Au', year: 2031 });
+    edit(d);
+    return assembleBook('# One\n\nPlain.\n\n::: center\nMiddle.\n:::\n\n::: right\nEdge.\n:::\n', d, { uuid: () => 'u', now: new Date('2031-01-01T00:00:00Z') }).build!;
+  };
+  it('marks fenced paragraphs and defines the alignment classes', () => {
+    const html = printBody(aligned());
+    expect(html).toContain('class="al-center"');
+    expect(html).toContain('class="al-right"');
+    expect(html).not.toContain(':::');
+    expect(printCss(aligned(), layout())).toContain('.al-center { text-align: center; }');
+  });
+  it('justifies body text unless the book says left', () => {
+    expect(printCss(aligned(), layout())).toContain('p { text-align: justify;');
+    expect(printCss(aligned((d) => void (d.export.pdf.bodyAlign = 'left')), layout())).toContain('p { text-align: left;');
+  });
+});
