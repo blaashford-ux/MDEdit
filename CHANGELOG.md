@@ -1,5 +1,9 @@
 # Changelog
 
+### 0.6.8 — 2026-10-12
+**Fixed**
+- **Sharing: a reviewer could pick both files and still fail with "Drive 403: This file cannot be downloaded by the user."** The shared copy of the manuscript was marked "copying requires writer permission", which also stops people who only have the link from downloading it. Read-only links are now left downloadable, and the shared copy of a project that was shared before (including ones shared with 0.6.7) is corrected the next time MDEdit exchanges notes for it.
+
 ### 0.6.7 — 2026-10-11
 **Fixed**
 - **Sharing: a reviewer invited after you removed the previous reviewer could not open the project.** Removing a project's last reviewer closes the shared copy of the manuscript, and the next invitation re-used that copy without opening it again, so the reviewer's file picker offered only their comments file. Inviting now opens the shared copy again, and MDEdit repairs invitations already sent that way (when it next exchanges notes for that project).
