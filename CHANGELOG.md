@@ -1,6 +1,6 @@
 # Changelog
 
-### Unreleased
+### 0.6.8 — 2026-10-12
 **Fixed**
 - **Sharing: a reviewer could pick both files and still fail with "Drive 403: This file cannot be downloaded by the user."** The shared copy of the manuscript was marked "copying requires writer permission", which also stops people who only have the link from downloading it. Read-only links are now left downloadable, and the shared copy of a project that was shared before (including ones shared with 0.6.7) is corrected the next time MDEdit exchanges notes for it.
 
