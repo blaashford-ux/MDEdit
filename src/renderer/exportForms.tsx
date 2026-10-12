@@ -1,4 +1,4 @@
-import type { BookDetails, ParagraphStyle } from '../shared/export/model';
+import type { BodyAlign, BookDetails, ParagraphStyle } from '../shared/export/model';
 import { OUTPUT_LABELS, type OutputKind } from '../shared/export/outputs';
 import { TRIM_SIZES } from '../shared/export/trim';
 import { FontSelect } from './FontSelect';
@@ -8,6 +8,10 @@ export const PSTYLE: { value: ParagraphStyle; label: string }[] = [
   { value: 'blockGap', label: 'Blank line between paragraphs' },
   { value: 'blockNoGap', label: 'No gap between paragraphs' },
   { value: 'indent', label: 'First-line indent' }
+];
+export const BODY_ALIGN: { value: BodyAlign; label: string }[] = [
+  { value: 'justify', label: 'Justified (flush both sides)' },
+  { value: 'left', label: 'Left (ragged right)' }
 ];
 export const TRIM_OPTIONS = TRIM_SIZES.map((t) => ({ value: t.key, label: `${t.label}${t.key === '5.5x8.5' ? ' (default)' : ''}` }));
 export const KINDS: OutputKind[] = ['epub', 'pdf', 'docx'];
@@ -34,6 +38,7 @@ export function OutputsForm({ details, edit, template }: ExportFormProps) {
                       <div className="row2">
                         <Field label="Language code" value={e.epub.language} width={160} path="export.epub.language" onChange={(v) => edit((d) => void (d.export.epub.language = v))} hint="e.g. en, en-GB, fr" />
                         <Select label="Paragraphs" value={e.epub.paragraphStyle} options={PSTYLE} path="export.epub.paragraphStyle" onChange={(v) => edit((d) => void (d.export.epub.paragraphStyle = v))} />
+                        <Select label="Text alignment" value={e.epub.bodyAlign} options={BODY_ALIGN} path="export.epub.bodyAlign" onChange={(v) => edit((d) => void (d.export.epub.bodyAlign = v))} hint="Applies to body paragraphs. Use a ::: center fence in the text to align a part differently." />
                       </div>
                       <FontSelect
                         label="Font"
@@ -83,6 +88,7 @@ export function OutputsForm({ details, edit, template }: ExportFormProps) {
                       <div className="row2">
                         <Select label="Trim size" value={e.pdf.trim} options={TRIM_OPTIONS} path="export.pdf.trim" onChange={(v) => edit((d) => void (d.export.pdf.trim = v))} hint="KDP paperback sizes, from 5 × 8 in." />
                         <Select label="Paragraphs" value={e.pdf.paragraphStyle} options={PSTYLE} path="export.pdf.paragraphStyle" onChange={(v) => edit((d) => void (d.export.pdf.paragraphStyle = v))} />
+                        <Select label="Text alignment" value={e.pdf.bodyAlign} options={BODY_ALIGN} path="export.pdf.bodyAlign" onChange={(v) => edit((d) => void (d.export.pdf.bodyAlign = v))} hint="Applies to body paragraphs. Use a ::: center fence in the text to align a part differently." />
                       </div>
                       <FontSelect
                         label="Font"
@@ -134,6 +140,7 @@ export function OutputsForm({ details, edit, template }: ExportFormProps) {
                       <div className="row3">
                         <Select label="Page size" value={e.docx.trim} options={TRIM_OPTIONS} path="export.docx.trim" onChange={(v) => edit((d) => void (d.export.docx.trim = v))} />
                         <Select label="Paragraphs" value={e.docx.paragraphStyle} options={PSTYLE} path="export.docx.paragraphStyle" onChange={(v) => edit((d) => void (d.export.docx.paragraphStyle = v))} />
+                        <Select label="Text alignment" value={e.docx.bodyAlign} options={BODY_ALIGN} path="export.docx.bodyAlign" onChange={(v) => edit((d) => void (d.export.docx.bodyAlign = v))} hint="Applies to body paragraphs. Use a ::: center fence in the text to align a part differently." />
                         <NumberField label="Font size" unit="pt" min={8} max={20} step={0.5} value={e.docx.fontSize} path="export.docx.fontSize" onChange={(v) => edit((d) => void (d.export.docx.fontSize = v))} />
                       </div>
                       <p className="muted small">The contents list is linked but has no page numbers (pages can’t be measured without Word). Blank lines use non-breaking spaces so importers keep them.</p>
