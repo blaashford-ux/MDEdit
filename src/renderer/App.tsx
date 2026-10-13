@@ -384,6 +384,7 @@ export function App() {
     if (syncChanges === 0) return;
     void ws.refresh();
     void reloadListing();
+    reviewRef.current.reload(); // notes that arrived with the sync (a reviewer's, via the owner's other device)
   }, [syncChanges, ws, reloadListing]);
   // The switcher in the sidebar needs the list too.
   useEffect(() => {
@@ -1343,6 +1344,7 @@ export function App() {
       <ShareDialog
         project={projectPath}
         projectName={s.project?.meta.name ?? ''}
+        manuscript={s.project?.meta.activeManuscript ?? null}
         sync={syncStatus}
         onConnect={() => {
           setShowShare(false);

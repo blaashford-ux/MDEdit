@@ -1,5 +1,11 @@
 # Changelog
 
+### 0.7.2 — 2026-10-13
+**Fixed**
+- **Reviewers now see only the active manuscript.** A shared project used to give reviewers every Markdown file in it (other books, notes, drafts). The package is now the project's active manuscript and nothing else; a project with a single prose file needs no choice, otherwise Share asks you to set the Active Manuscript first (right-click the file). Changing the active manuscript later takes the old file off reviewers' copies the next time they sync, and the Share dialog says which file they see.
+- **The phone and the PC now show the same shares.** What an owner has shared was remembered per device, so the phone's Sharing page was empty and it never collected reviewers' notes. The owner's shares are now merged through a small file in the Drive reviews folder: the phone lists the PC's reviewers (and the other way round), invites made on either appear on both, and a reviewer removed on one stays removed on the other. The phone also collects notes from the reviewers' files directly.
+- **Notes that arrive with a sync appear straight away.** After a Drive sync brought in new review notes the Notes panel kept showing the old list until you reopened the project.
+
 ### 0.7.1 — 2026-10-12
 **New**
 - **Text alignment.** Align any part of your text left, centre, right or justified, and see it as you write and in the exported EPUB, print PDF and Word file. In the file it is a fenced block (`::: center` … `:::`, also `left`, `right`, `justify`) that can hold paragraphs, headings, quotes and lists. In the editor, four buttons set it for the selected paragraphs (on the phone they are in the bar above the keyboard), the same button again removes it, and Ctrl+Shift+L / E / R / J do the same from the keyboard. Details in [docs/alignment.md](docs/alignment.md).
