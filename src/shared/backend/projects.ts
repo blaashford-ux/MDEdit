@@ -222,7 +222,7 @@ export function makeProjects(fs: FsPort) {
   /**
    * Counts the words of the active manuscript and notes them in that manuscript's own history for today (each
    * manuscript keeps its history, so swapping back shows it again). With no active manuscript there is nothing to
-   * count: the total is null and nothing is recorded. If the active manuscript has been deleted or moved away, it is cleared.
+   * count: the total is null and nothing is recorded. If the active manuscript can't be read (deleted, moved, or not synced yet) nothing is counted, but the choice is kept.
    */
   async function recordProgress(dir: string, now: () => Date = () => new Date()): Promise<{ progress: Progress; total: number | null; manuscript: string | null }> {
     const meta = await readMeta(dir, now);
@@ -230,7 +230,8 @@ export function makeProjects(fs: FsPort) {
     const manuscript = meta.activeManuscript;
     const words = manuscript ? await countFile(dir, manuscript) : null;
     if (!manuscript || words === null) {
-      if (manuscript) await updateMeta(dir, { activeManuscript: null }, now);
+      // A manuscript that can't be read is not cleared: project.json syncs between devices, and on the phone the file may simply not
+      // have arrived yet, so clearing it here would send "no active manuscript" back and undo the choice made on the PC.
       return { progress: sanitizeProgress(null), total: null, manuscript: null };
     }
     const before = await readProgress(dir, manuscript);
