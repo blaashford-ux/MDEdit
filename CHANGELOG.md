@@ -1,5 +1,11 @@
 # Changelog
 
+### 0.7.3
+**Fixed**
+- **Notes keep their place when you edit the text they're on.** Deleting some of a highlighted passage no longer removes the note and its highlight; they stay on what's left. If all of the text is deleted, the note is marked Resolved ("text deleted") and stays at that spot.
+- **Accepting a suggestion that is in another chapter** now opens that chapter and applies it, instead of saying the text has changed.
+- **The phone's Sharing page showed "Nothing shared yet"** for projects shared from the PC. The phone looked for the shared-reviews folder in Drive by a test that real Drive doesn't satisfy, so it never found the PC's list of shares (and could have made a second folder).
+
 ### 0.7.2 — 2026-10-13
 **Fixed**
 - **Reviewers now see only the active manuscript.** A shared project used to give reviewers every Markdown file in it (other books, notes, drafts). The package is now the project's active manuscript and nothing else; a project with a single prose file needs no choice, otherwise Share asks you to set the Active Manuscript first (right-click the file). Changing the active manuscript later takes the old file off reviewers' copies the next time they sync, and the Share dialog says which file they see.

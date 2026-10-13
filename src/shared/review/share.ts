@@ -10,7 +10,7 @@ import { makeReviews } from '../backend/reviews';
 import type { FsPort } from '../fsPort';
 import { md5Hex } from '../md5';
 import { toCompliantName } from '../sync/names';
-import { DRIVE_REVIEWS_NAME, type DriveApi } from '../sync/drive';
+import { DRIVE_REVIEWS_NAME, type DriveApi, type DriveFile } from '../sync/drive';
 import { mergeReviewFiles, newReviewFile, parseReviewFile, serializeReviewFile, type ReviewFile } from './comments';
 import { buildInviteLink } from './link';
 import { buildPackage, parsePackage, readMarker, writeMarker, writePackage } from './package';
@@ -42,6 +42,17 @@ interface ShareState {
 
 /** The part of a project's share record that every device of the owner needs to know. */
 type SharedRecord = Pick<ShareRecord, 'packageId' | 'publishedAt' | 'reviewers' | 'revoked'>;
+
+/**
+ * The reviews folder among everything the app can see. Drive reports a top-level folder's parent as My Drive's own id, which this
+ * app can't see (and never lists), so "top level" means no parent or a parent that isn't in the list, as the sync engine does.
+ * The oldest wins, so two devices that each made one settle on the same folder.
+ */
+export function findReviewsFolder(all: DriveFile[]): string | null {
+  const ids = new Set(all.map((f) => f.id));
+  const found = all.filter((f) => f.isFolder && f.name === DRIVE_REVIEWS_NAME && (f.parentId === null || !ids.has(f.parentId)));
+  return found.sort((a, b) => a.modifiedMs - b.modifiedMs || a.id.localeCompare(b.id))[0]?.id ?? null;
+}
 
 /** Name of the file in the reviews folder that carries the owner's shares between their devices. */
 export const SHARES_FILE_NAME = 'mdedit-shares.json';
@@ -147,7 +158,7 @@ export class ReviewShare {
       if (!stateId && (force || t - this.lastDiscovery > 600_000)) {
         this.lastDiscovery = t;
         const all = await drive.listAll();
-        const folder = this.state.folderId && all.some((f) => f.id === this.state.folderId) ? this.state.folderId : (all.find((f) => f.isFolder && f.name === DRIVE_REVIEWS_NAME && f.parentId === null)?.id ?? null);
+        const folder = this.state.folderId && all.some((f) => f.id === this.state.folderId) ? this.state.folderId : findReviewsFolder(all);
         if (folder) {
           this.state.folderId = folder;
           stateId = all.find((f) => !f.isFolder && f.name === SHARES_FILE_NAME && f.parentId === folder)?.id ?? null;
@@ -208,8 +219,8 @@ export class ReviewShare {
   /** The Drive folder that holds shared files, beside (not inside) the sync folder. */
   private async folder(): Promise<string> {
     if (this.state.folderId && (await this.o.drive().getFile(this.state.folderId))) return this.state.folderId;
-    const existing = (await this.o.drive().listAll()).find((f) => f.isFolder && f.name === DRIVE_REVIEWS_NAME && f.parentId === null);
-    this.state.folderId = existing?.id ?? (await this.o.drive().createFolder(DRIVE_REVIEWS_NAME, null)).id;
+    const existing = findReviewsFolder(await this.o.drive().listAll());
+    this.state.folderId = existing ?? (await this.o.drive().createFolder(DRIVE_REVIEWS_NAME, null)).id;
     return this.state.folderId;
   }
 
