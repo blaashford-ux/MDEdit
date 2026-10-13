@@ -124,12 +124,30 @@ export function ReviewPanel({ state, me, role, onRename, onClose, onShare, onAi,
   const doneCount = matching.length - matching.filter((i) => i.status === 'open').length;
   const applicable = role === 'owner' && whoNow !== 'all' ? matching.filter((i) => i.kind === 'suggestion' && i.status === 'open') : [];
 
+  // Latest state, for the retries below (the chapter and its editor change while we wait).
+  const latest = useRef(state);
+  latest.current = state;
+  /** Accepts a suggestion, first opening its chapter when it is not the one being edited. Null on success, else why not. */
+  const acceptNote = async (id: string): Promise<string | null> => {
+    const first = await latest.current.accept(id);
+    if (first === null || !onGoTo) return first;
+    const moved = await onGoTo(id);
+    if (moved) return moved;
+    let last: string | null = first;
+    for (let tries = 0; tries < 25; tries += 1) {
+      await new Promise((r) => setTimeout(r, 100)); // wait for the chapter's editor to come up and draw its notes
+      last = await latest.current.accept(id);
+      if (last === null) return null;
+    }
+    return last;
+  };
+
   const applyAll = async () => {
     setConfirmAll(false);
     let done = 0;
-    for (const i of applicable) if ((await state.accept(i.id)) === null) done += 1;
+    for (const i of applicable) if ((await acceptNote(i.id)) === null) done += 1;
     const left = applicable.length - done;
-    setMessage(`Applied ${done} change${done === 1 ? '' : 's'}.${left ? ` ${left} could not be applied here (in another chapter, or the text has changed).` : ''}`);
+    setMessage(`Applied ${done} change${done === 1 ? '' : 's'}.${left ? ` ${left} could not be applied here (the text has changed).` : ''}`);
   };
   const mine = (i: ShownItem) => role === 'owner' || i.reviewerId === me.id;
 
@@ -314,7 +332,7 @@ export function ReviewPanel({ state, me, role, onRename, onClose, onShare, onAi,
             ))}
             <div className="review-actions">
               {i.kind === 'suggestion' && i.status === 'open' && role === 'owner' && (
-                <button type="button" onClick={() => void state.accept(i.id).then(setMessage)}>Accept</button>
+                <button type="button" onClick={() => void acceptNote(i.id).then(setMessage)}>Accept</button>
               )}
               {i.status === 'open' && mine(i) && (
                 <button type="button" onClick={() => void state.setStatus(i.id, i.kind === 'suggestion' ? 'rejected' : 'resolved')}>
