@@ -9,7 +9,7 @@ import {
   type ReviewFile,
   type ReviewItem
 } from '../shared/review/comments';
-import type { NoteMark, ReviewApi } from './reviewPlugin';
+import type { NoteChange, NoteMark, ReviewApi } from './reviewPlugin';
 
 export interface Identity {
   id: string;
@@ -88,6 +88,10 @@ export function useReview(
 
   // What was last read from disk, and how many saves this app has made: a read that began before a save of ours
   // finished would bring back the old text, so it is dropped.
+  // Edits to highlighted text not yet saved to the note; saved shortly after typing stops.
+  const pending = useRef(new Map<string, NoteChange>());
+  const flushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flushRef = useRef<() => void>(() => undefined);
   const seen = useRef('');
   const saves = useRef(0);
 
@@ -138,7 +142,7 @@ export function useReview(
   // Draw the open notes in the editor (resolved and rejected ones fade out of the text).
   useEffect(() => {
     if (!review) return;
-    const marks: NoteMark[] = items.filter((i) => i.status === 'open').map((i) => ({ id: i.id, anchor: i.anchor, kind: i.kind }));
+    const marks: NoteMark[] = items.filter((i) => i.status === 'open').map((i) => ({ id: i.id, anchor: pending.current.get(i.id)?.anchor ?? i.anchor, kind: i.kind }));
     const { detached: lost } = review.setNotes(marks);
     setDetached(new Set(lost));
   }, [review, items, chapterKey]);
@@ -167,6 +171,33 @@ export function useReview(
     if (!owner) return Promise.resolve();
     return write(owner, (f) => ({ ...f, items: f.items.map((i) => (i.id === id ? patch(i) : i)) }));
   };
+
+  // Editing a note's text keeps the note on the edited text; deleting all of it resolves the note, which stays at that spot.
+  flushRef.current = () => {
+    flushTimer.current = null;
+    const batch = [...pending.current.values()];
+    pending.current.clear();
+    for (const c of batch) {
+      void edit(c.id, (i) =>
+        touch(i, c.gone ? { anchor: { ...i.anchor, prefix: c.anchor.prefix, suffix: c.anchor.suffix, start: c.anchor.start, gone: true }, status: 'resolved' } : { anchor: c.anchor })
+      );
+    }
+  };
+  useEffect(() => {
+    if (!review) return;
+    review.onChanges((changes) => {
+      for (const c of changes) pending.current.set(c.id, c);
+      if (flushTimer.current) clearTimeout(flushTimer.current);
+      flushTimer.current = setTimeout(() => flushRef.current(), 400);
+    });
+    return () => {
+      review.onChanges(null);
+      if (flushTimer.current) {
+        clearTimeout(flushTimer.current);
+        flushRef.current();
+      }
+    };
+  }, [review]);
 
   return {
     items,

@@ -266,6 +266,7 @@ export function ReviewPanel({ state, me, role, onRename, onClose, onShare, onAi,
                 )
               )}
               {i.status !== 'open' && <span className="review-status"> · {i.status}</span>}
+              {i.anchor.gone && <span className="review-lost"> · text deleted</span>}
               {state.detached.has(i.id) && <span className="review-lost"> · not in this chapter</span>}
             </div>
             {topicFor?.id === i.id && (
