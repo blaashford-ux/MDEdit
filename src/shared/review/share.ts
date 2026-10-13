@@ -28,12 +28,50 @@ export interface ShareRecord {
   packageMd5: string | null;
   publishedAt: string | null;
   reviewers: ReviewerRecord[];
+  /** Reviewers who were removed. Kept so a device that hasn't heard yet doesn't bring them back when the lists are merged. */
+  revoked?: string[];
 }
 
 interface ShareState {
   version: 1;
   folderId: string | null;
+  /** The shared-with-all-devices copy of this state in Drive (see `refresh`). */
+  stateId?: string | null;
   projects: Record<string, ShareRecord>;
+}
+
+/** The part of a project's share record that every device of the owner needs to know. */
+type SharedRecord = Pick<ShareRecord, 'packageId' | 'publishedAt' | 'reviewers' | 'revoked'>;
+
+/** Name of the file in the reviews folder that carries the owner's shares between their devices. */
+export const SHARES_FILE_NAME = 'mdedit-shares.json';
+
+/**
+ * Two copies of the owner's shares (this device's and the one in Drive) combined: reviewers are united by id, and anyone
+ * removed on either side stays removed.
+ */
+export function mergeShareStates(local: Record<string, ShareRecord>, remote: Record<string, Partial<SharedRecord>>): Record<string, ShareRecord> {
+  const out: Record<string, ShareRecord> = {};
+  for (const name of new Set([...Object.keys(local), ...Object.keys(remote)])) {
+    const l = local[name];
+    const r = remote[name];
+    const revoked = [...new Set([...(l?.revoked ?? []), ...(r?.revoked ?? [])])].sort();
+    const gone = new Set(revoked);
+    const byId = new Map<string, ReviewerRecord>();
+    for (const x of [...(r?.reviewers ?? []), ...(l?.reviewers ?? [])]) if (!gone.has(x.id)) byId.set(x.id, x);
+    const ids = [l?.packageId, r?.packageId].filter((x): x is string => !!x).sort();
+    const packageId = ids[0] ?? '';
+    const dates = [l?.publishedAt, r?.publishedAt].filter((x): x is string => !!x).sort();
+    out[name] = {
+      packageId,
+      // the last upload's fingerprint only means something for the package it was made from
+      packageMd5: l && l.packageId === packageId ? l.packageMd5 : null,
+      publishedAt: dates[dates.length - 1] ?? null,
+      reviewers: [...byId.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id)),
+      ...(revoked.length ? { revoked } : {})
+    };
+  }
+  return out;
 }
 
 export interface ShareStatus {
@@ -89,8 +127,64 @@ export class ReviewShare {
     await this.o.fs.writeText(this.o.stateFile, JSON.stringify(this.state));
   }
 
+  private lastRefresh = 0;
+  private lastDiscovery = 0;
+
+  /**
+   * Brings in what the owner's other devices shared (and tells them what this one did): the owner's shares live in a small file
+   * in the Drive reviews folder, so the phone and the PC show the same reviewers and both exchange notes with them. Quietly does
+   * nothing when Drive can't be reached. Checked at most once a minute unless `force`.
+   */
+  private async refresh(force = false): Promise<void> {
+    const t = this.now().getTime();
+    if (!force && t - this.lastRefresh < 60_000) return;
+    this.lastRefresh = t;
+    try {
+      const drive = this.o.drive();
+      let remote: Record<string, Partial<SharedRecord>> = {};
+      let stateId = this.state.stateId ?? null;
+      if (stateId && !(await drive.getFile(stateId))) stateId = null;
+      if (!stateId && (force || t - this.lastDiscovery > 600_000)) {
+        this.lastDiscovery = t;
+        const all = await drive.listAll();
+        const folder = this.state.folderId && all.some((f) => f.id === this.state.folderId) ? this.state.folderId : (all.find((f) => f.isFolder && f.name === DRIVE_REVIEWS_NAME && f.parentId === null)?.id ?? null);
+        if (folder) {
+          this.state.folderId = folder;
+          stateId = all.find((f) => !f.isFolder && f.name === SHARES_FILE_NAME && f.parentId === folder)?.id ?? null;
+        }
+      }
+      if (stateId) {
+        try {
+          const raw = JSON.parse(await drive.download(stateId)) as { projects?: Record<string, Partial<SharedRecord>> };
+          if (raw && typeof raw.projects === 'object' && raw.projects) remote = raw.projects;
+        } catch {
+          /* unreadable: replaced below */
+        }
+      }
+      const merged = mergeShareStates(this.state.projects, remote);
+      const changed = JSON.stringify(merged) !== JSON.stringify(this.state.projects);
+      this.state.projects = merged;
+      this.state.stateId = stateId;
+      if (changed) await this.save();
+      const shared = Object.values(merged).some((r) => r.reviewers.length > 0 || (r.revoked?.length ?? 0) > 0);
+      const body = JSON.stringify({ version: 1, projects: Object.fromEntries(Object.entries(merged).map(([k, r]) => [k, { packageId: r.packageId, publishedAt: r.publishedAt, reviewers: r.reviewers, revoked: r.revoked ?? [] }])) });
+      const same = stateId && JSON.stringify(remote) === JSON.stringify((JSON.parse(body) as { projects: unknown }).projects);
+      if (shared && !same) {
+        if (stateId) await drive.updateFile(stateId, body);
+        else {
+          const file = await drive.createFile(SHARES_FILE_NAME, await this.folder(), body);
+          this.state.stateId = file.id;
+          await this.save();
+        }
+      }
+    } catch {
+      /* offline, or not signed in: this device's own record is still right */
+    }
+  }
+
   async status(project: string): Promise<ShareStatus> {
     await this.load();
+    await this.refresh();
     const r = this.state.projects[project];
     return { shared: !!r && r.reviewers.length > 0, publishedAt: r?.publishedAt ?? null, reviewers: r?.reviewers ?? [] };
   }
@@ -98,6 +192,7 @@ export class ReviewShare {
   /** Every project that has at least one reviewer. */
   async list(): Promise<ShareSummary[]> {
     await this.load();
+    await this.refresh();
     return Object.entries(this.state.projects)
       .filter(([, r]) => r.reviewers.length > 0)
       .map(([project, r]) => ({ project, reviewers: r.reviewers, publishedAt: r.publishedAt }))
@@ -118,10 +213,26 @@ export class ReviewShare {
     return this.state.folderId;
   }
 
+  /**
+   * What reviewers get: the project's active manuscript and nothing else (a project may hold other books, notes and drafts that
+   * were never meant for them). A project with a single prose file needs no choice; otherwise one has to be made.
+   */
+  private async packageFor(dir: string, project: string): Promise<ReturnType<typeof buildPackage> extends Promise<infer P> ? P : never> {
+    const active = (await makeProjects(this.o.fs).readMeta(dir))?.activeManuscript ?? null;
+    if (active) {
+      const pkg = await buildPackage(this.o.fs, dir, project, this.now, active);
+      if (pkg.files.length === 0) throw new Error(`The active manuscript “${active}” isn’t in this project any more. Choose it again (right-click the file → Active Manuscript) before sharing.`);
+      return pkg;
+    }
+    const all = await buildPackage(this.o.fs, dir, project, this.now);
+    if (all.files.length <= 1) return all;
+    throw new Error('Choose which file reviewers should see first: right-click it in the file list and pick “Active Manuscript”. Reviewers only ever see that one file.');
+  }
+
   /** Uploads the project's current text for reviewers (only when it has changed since the last upload). */
   async publish(dir: string, project: string): Promise<ShareRecord> {
     await this.load();
-    const pkg = await buildPackage(this.o.fs, dir, project, this.now);
+    const pkg = await this.packageFor(dir, project);
     // The timestamp would make every snapshot differ; compare the content only.
     const body = JSON.stringify({ ...pkg, publishedAt: '' });
     const md5 = md5Hex(body);
@@ -135,7 +246,7 @@ export class ReviewShare {
     } else {
       const file = await this.o.drive().createFile(`${toCompliantName(project)}.mdedit-review.json`, await this.folder(), text);
       await this.o.drive().shareByLink(file.id, 'reader');
-      rec = { packageId: file.id, packageMd5: null, publishedAt: null, reviewers: rec?.reviewers ?? [] };
+      rec = { packageId: file.id, packageMd5: null, publishedAt: null, reviewers: rec?.reviewers ?? [], ...(rec?.revoked ? { revoked: rec.revoked } : {}) };
     }
     rec = { ...rec!, packageMd5: md5, publishedAt: pkg.publishedAt };
     this.state.projects[project] = rec;
@@ -160,6 +271,7 @@ export class ReviewShare {
   /** Adds a reviewer: makes their comments file and returns the link to send them. */
   async invite(dir: string, project: string, reviewerName: string): Promise<ReviewerRecord> {
     await this.load();
+    await this.refresh(true);
     const rec = await this.publish(dir, project);
     await this.ensurePackageShared(project, rec.packageId, true);
     const id = this.newId();
@@ -179,12 +291,14 @@ export class ReviewShare {
     };
     this.state.projects[project] = { ...rec, reviewers: [...rec.reviewers, reviewer] };
     await this.save();
+    await this.refresh(true); // tell the owner's other devices
     return reviewer;
   }
 
   /** Stops a reviewer: takes their notes (one last time), then closes their file. Their notes stay in the project. */
   async revoke(dir: string, project: string, reviewerId: string): Promise<void> {
     await this.load();
+    await this.refresh(true);
     const rec = this.state.projects[project];
     const who = rec?.reviewers.find((r) => r.id === reviewerId);
     if (!rec || !who) return;
@@ -195,8 +309,9 @@ export class ReviewShare {
       await this.o.drive().unshare(rec.packageId).catch(() => undefined);
       this.packageChecked.delete(`${project}:${rec.packageId}`);
     }
-    this.state.projects[project] = { ...rec, reviewers: left };
+    this.state.projects[project] = { ...rec, reviewers: left, revoked: [...new Set([...(rec.revoked ?? []), reviewerId])] };
     await this.save();
+    await this.refresh(true);
   }
 
   /** Exchanges notes with every reviewer's file; returns whether anything on this device changed. */
@@ -229,6 +344,7 @@ export class ReviewShare {
   /** A full exchange: new text out, notes in and out. */
   async sync(dir: string, project: string): Promise<{ changed: boolean; errors: string[] }> {
     await this.load();
+    await this.refresh();
     if (!this.state.projects[project]?.reviewers.length) return { changed: false, errors: [] };
     await this.publish(dir, project);
     return this.pull(dir, project);

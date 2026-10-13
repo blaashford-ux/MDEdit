@@ -11,8 +11,8 @@ export interface ReviewPackage {
 
 const MAX_FILES = 600;
 
-/** Every prose file in the project folder (Markdown only; settings, exports and hidden folders are left out). */
-export async function buildPackage(fs: FsPort, dir: string, project: string, now: () => Date = () => new Date()): Promise<ReviewPackage> {
+/** Every prose file in the project folder (Markdown only; settings, exports and hidden folders are left out), or just `only`. */
+export async function buildPackage(fs: FsPort, dir: string, project: string, now: () => Date = () => new Date(), only?: string): Promise<ReviewPackage> {
   const files: { path: string; text: string }[] = [];
   const walk = async (rel: string): Promise<void> => {
     const entries = (await fs.readdir(rel ? `${dir}/${rel}` : dir)).sort((a, b) => a.name.localeCompare(b.name));
@@ -21,7 +21,7 @@ export async function buildPackage(fs: FsPort, dir: string, project: string, now
       const r = rel ? `${rel}/${e.name}` : e.name;
       if (e.isDirectory) {
         if (!e.name.startsWith('.')) await walk(r);
-      } else if (e.isFile && classify(r) === 'prose' && files.length < MAX_FILES) {
+      } else if (e.isFile && classify(r) === 'prose' && files.length < MAX_FILES && (only === undefined || r === only)) {
         files.push({ path: r, text: await fs.readText(`${dir}/${r}`) });
       }
     }

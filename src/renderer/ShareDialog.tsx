@@ -8,6 +8,8 @@ import { useEscape } from './useEscape';
 interface Props {
   project: string;
   projectName: string;
+  /** The project's active manuscript (relative path), the only file reviewers get. */
+  manuscript?: string | null;
   sync: SyncStatus | null;
   /** Opens the Google Drive dialog, for when this device isn't connected yet. */
   onConnect(): void;
@@ -29,8 +31,13 @@ const when = (iso: string): string => {
 };
 
 /** Manage a project's reviewers: one link per person. Copy the plain link or a short invitation message, or withdraw it. */
-export function ShareDialog({ project, projectName, sync, onConnect, onClose }: Props) {
+export function ShareDialog({ project, projectName, manuscript: given, sync, onConnect, onClose }: Props) {
   const api = window.mdedit;
+  const [loaded, setLoaded] = useState<string | null | undefined>(undefined);
+  useEffect(() => {
+    if (given === undefined) void api.getProjectMeta(project).then((m) => setLoaded(m?.activeManuscript ?? null)).catch(() => setLoaded(null));
+  }, [project, given]);
+  const manuscript = given !== undefined ? given : (loaded ?? null);
   const [status, setStatus] = useState<ShareStatus | null>(null);
   const [counts, setCounts] = useState<Map<string, { open: number; total: number }>>(new Map());
   const [name, setName] = useState('');
@@ -89,6 +96,13 @@ export function ShareDialog({ project, projectName, sync, onConnect, onClose }: 
         ) : (
           <>
             <p className="modal-hint">
+              {manuscript ? (
+                <>
+                  Reviewers see only the active manuscript, <strong>{manuscript}</strong>, and nothing else in the project. To share a different file, make it the active manuscript first (right-click it → Active Manuscript).{' '}
+                </>
+              ) : (
+                <>Reviewers see only one file, the project’s <strong>active manuscript</strong>. Choose it first: right-click the file → Active Manuscript. </>
+              )}
               Each reviewer gets their own link. They can read the manuscript and leave comments and suggestions; they can’t change your text, and they can’t see each other’s notes.
               <strong> Copy link</strong> gives just the link; <strong>Copy invitation</strong> adds a short note with where to download MDEdit.
             </p>

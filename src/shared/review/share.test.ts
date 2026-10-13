@@ -87,8 +87,9 @@ describe('sharing a project for review', () => {
     expect(back.items[0].status).toBe('resolved');
   });
 
-  it('gives the reviewer new text, and drops files the owner removed', async () => {
+  it('gives the reviewer new text, but never the project’s other files', async () => {
     const { drive, share, ownerFs, readerFs, join } = setup();
+    ownerFs.seed('/root/Novel/.mdedit/project.json', JSON.stringify({ version: 1, name: 'Novel', activeManuscript: 'Manuscript/Book.md' }));
     const inv = await share.invite('/root/Novel', 'Novel', 'Sam');
     const invite = parseInviteLink(inv.link)!;
     drive.granted = new Set([invite.packageId, invite.commentsId]);
@@ -100,7 +101,7 @@ describe('sharing a project for review', () => {
     drive.granted = new Set([invite.packageId, invite.commentsId]);
     await join.sync(joined.dir);
     expect(await readerFs.readText(`${joined.dir}/Manuscript/Book.md`)).toContain('Rewritten');
-    expect(await readerFs.readText(`${joined.dir}/Extra.md`)).toBe('more');
+    expect(await readerFs.stat(`${joined.dir}/Extra.md`)).toBeNull();
   });
 
   it('joins the same invitation into the same folder, and refuses when access was not granted', async () => {
@@ -173,3 +174,118 @@ describe('sharing a project for review', () => {
     expect(drive.links.has(a.commentsId) || drive.links.has(b.commentsId)).toBe(false);
   });
 });
+
+describe('what reviewers can see', () => {
+  const twoBooks = () => {
+    const t = setup();
+    t.ownerFs.seed('/root/Novel/Manuscript/Other Book.md', '# Secret\n\nNot for reviewers\n');
+    t.ownerFs.seed('/root/Novel/Notes/Plot.md', '# Plot\n\nSpoilers\n');
+    return t;
+  };
+  const withActive = (t: ReturnType<typeof setup>, active: string | null) =>
+    t.ownerFs.seed('/root/Novel/.mdedit/project.json', JSON.stringify({ version: 1, name: 'Novel', activeManuscript: active }));
+
+  it('only the active manuscript goes in the package', async () => {
+    const t = twoBooks();
+    withActive(t, 'Manuscript/Book.md');
+    const rec = await t.share.publish('/root/Novel', 'Novel');
+    const pkg = JSON.parse(await t.drive.download(rec.packageId));
+    expect(pkg.files.map((f: { path: string }) => f.path)).toEqual(['Manuscript/Book.md']);
+  });
+
+  it('refuses to share a project with several files until one is chosen, and says what to do', async () => {
+    const t = twoBooks();
+    await expect(t.share.invite('/root/Novel', 'Novel', 'Sam')).rejects.toThrow(/Active Manuscript/);
+    expect((await t.drive.listAll()).filter((f) => f.name.endsWith('.comments.json'))).toHaveLength(0);
+  });
+
+  it('says so when the chosen file is gone', async () => {
+    const t = twoBooks();
+    withActive(t, 'Manuscript/Missing.md');
+    await expect(t.share.publish('/root/Novel', 'Novel')).rejects.toThrow(/isn’t in this project/);
+  });
+
+  it('a reviewer who joined earlier loses the other files when the owner narrows it down', async () => {
+    const t = twoBooks();
+    withActive(t, 'Manuscript/Other Book.md');
+    const inv = await t.share.invite('/root/Novel', 'Novel', 'Sam');
+    const invite = parseInviteLink(inv.link)!;
+    t.drive.granted = new Set([invite.packageId, invite.commentsId]);
+    const joined = await t.join.join(invite, 'Sam');
+    expect(await t.readerFs.stat(`${joined.dir}/Manuscript/Other Book.md`)).not.toBeNull();
+    expect(await t.readerFs.stat(`${joined.dir}/Notes/Plot.md`)).toBeNull();
+
+    withActive(t, 'Manuscript/Book.md');
+    t.drive.granted = null;
+    await t.share.publish('/root/Novel', 'Novel');
+    t.drive.granted = new Set([invite.packageId, invite.commentsId]);
+    await t.join.sync(joined.dir);
+    expect(await t.readerFs.stat(`${joined.dir}/Manuscript/Book.md`)).not.toBeNull();
+    expect(await t.readerFs.stat(`${joined.dir}/Manuscript/Other Book.md`)).toBeNull();
+  });
+});
+
+describe('the owner on two devices', () => {
+  function devices() {
+    const drive = new FakeDrive();
+    const mk = (n: string) => {
+      const fs = new MemoryFs();
+      fs.seed('/root/Novel/Manuscript/Book.md', '# One\n\nHello there\n');
+      fs.seed('/root/Novel/.mdedit/project.json', '{}');
+      let clock = Date.parse('2026-10-12T10:00:00Z');
+      let c = 0;
+      const share = new ReviewShare({ fs, drive: () => drive, stateFile: `/state-${n}/shares.json`, newId: () => `${n}${++c}abcdefgh`, now: () => new Date((clock += 120_000)) });
+      return { fs, share };
+    };
+    return { drive, pc: mk('pc'), phone: mk('ph') };
+  }
+
+  it('the phone shows what the PC shared, and the other way round', async () => {
+    const { pc, phone } = devices();
+    const sam = await pc.share.invite('/root/Novel', 'Novel', 'Sam');
+    expect((await phone.share.status('Novel')).reviewers.map((r) => r.name)).toEqual(['Sam']);
+    expect((await phone.share.list()).map((s) => s.project)).toEqual(['Novel']);
+    const kim = await phone.share.invite('/root/Novel', 'Novel', 'Kim');
+    expect((await pc.share.status('Novel')).reviewers.map((r) => r.name).sort()).toEqual(['Kim', 'Sam']);
+    expect(kim.link).not.toBe(sam.link);
+  });
+
+  it('the phone can pull a reviewer’s notes on its own', async () => {
+    const { drive, pc, phone } = devices();
+    const inv = await pc.share.invite('/root/Novel', 'Novel', 'Sam');
+    // the reviewer writes a note straight into their comments file
+    const file = newReview('Novel', inv.id, 'Sam', [note('n1')]);
+    await drive.updateFile(inv.commentsId, file);
+    const r = await phone.share.sync('/root/Novel', 'Novel');
+    expect(r.errors).toEqual([]);
+    const saved = (await makeReviews(phone.fs).list('/root/Novel')).find((x) => x.id === inv.id)!;
+    expect(parseReviewFile(saved.text)!.items.map((i) => i.id)).toEqual(['n1']);
+  });
+
+  it('a reviewer removed on one device stays removed on the other', async () => {
+    const { pc, phone } = devices();
+    const sam = await pc.share.invite('/root/Novel', 'Novel', 'Sam');
+    await phone.share.status('Novel');
+    await phone.share.revoke('/root/Novel', 'Novel', sam.id);
+    expect((await pc.share.status('Novel')).shared).toBe(false);
+    // and a stale copy of the list can't bring them back
+    const again = await pc.share.invite('/root/Novel', 'Novel', 'Kim');
+    expect((await phone.share.status('Novel')).reviewers.map((r) => r.id)).toEqual([again.id]);
+  });
+
+  it('works offline: each device keeps its own record when Drive can’t be reached', async () => {
+    const { drive, pc } = devices();
+    const sam = await pc.share.invite('/root/Novel', 'Novel', 'Sam');
+    const orig = drive.listAll.bind(drive);
+    const origGet = drive.getFile.bind(drive);
+    drive.listAll = async () => { throw new Error('offline'); };
+    drive.getFile = async () => { throw new Error('offline'); };
+    expect((await pc.share.status('Novel')).reviewers.map((r) => r.id)).toEqual([sam.id]);
+    drive.listAll = orig;
+    drive.getFile = origGet;
+  });
+});
+
+function newReview(project: string, id: string, name: string, items: ReviewItem[]): string {
+  return serializeReviewFile({ version: 1, reviewer: { id, name }, project, items });
+}
