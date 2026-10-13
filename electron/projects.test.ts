@@ -262,12 +262,12 @@ describe('active manuscript', () => {
     expect(r.progress.days['2026-10-05']).toEqual({ start: 40, end: 40 });
     expect((await readProgress(a.path, 'Manuscripts/One.md')).days['2026-10-05'].end).toBe(100);
   });
-  it('a missing manuscript is not counted, and the choice is kept (the file may not have synced yet)', async () => {
+  it('a deleted manuscript is cleared and nothing is counted', async () => {
     const a = await createProject(root, 'Saga', series(), { now: at('2026-10-05T08:00:00') });
     await updateMeta(a.path, { activeManuscript: 'Manuscripts/Gone.md' });
     const r = await recordProgress(a.path, at('2026-10-05T12:00:00'));
     expect(r).toMatchObject({ manuscript: null, total: null });
-    expect((await readMeta(a.path))!.activeManuscript).toBe('Manuscripts/Gone.md');
+    expect((await readMeta(a.path))!.activeManuscript).toBeNull();
   });
   it('clearing the active manuscript shows no count, and its stats come back when it is chosen again', async () => {
     const a = await createProject(root, 'Saga', series(), { now: at('2026-10-05T08:00:00') });
