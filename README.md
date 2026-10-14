@@ -131,6 +131,10 @@ automatically. See [docs/RELEASING.md](docs/RELEASING.md).
 
 ## Changelog
 
+### 0.7.4 — 2026-10-14
+**New**
+- **Import Word documents.** Right-click a folder → **Import Word Document…**, or use the **Import** button at the top of the file tree (next to **File** and **Folder**). Pick one or more `.docx` files and each becomes a Markdown file of the same name in that folder (a taken name becomes `Name (2).md`). Headings (including Title) become `#` headings; bold, italic and strikethrough, links, bullet/numbered lists, block quotes and tables are kept. Windows app only.
+
 ### 0.4.2 — 2026-10-07
 **New**
 - **Export settings follow app → project → book, field by field.** Each level stores only the fields you change; every other field follows the level above, so editing a project's (or the app's) back matter, author, fonts or layout now reaches every book that hasn't set that field itself. Previously each book kept a full copy made when it was first set up, so later changes never reached it.

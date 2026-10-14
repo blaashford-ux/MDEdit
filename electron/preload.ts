@@ -24,6 +24,7 @@ const api: MdeditApi = {
   renameNode: (p, name) => ipcRenderer.invoke('fs:renameNode', p, name),
   trashNode: (p) => ipcRenderer.invoke('fs:trashNode', p),
   reveal: (p) => ipcRenderer.send('shell:reveal', p),
+  importDocx: (dir) => ipcRenderer.invoke('fs:importDocx', dir),
   getBookDetails: (file) => ipcRenderer.invoke('export:getDetails', file),
   saveBookDetails: (file, details, overrides) => ipcRenderer.invoke('export:saveDetails', file, details, overrides),
   setMarked: (file, marked) => ipcRenderer.invoke('export:setMarked', file, marked),

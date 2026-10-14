@@ -11,6 +11,7 @@ import { fileFromArgv } from './launch';
 import { runSmokeTest } from './smokeTest';
 import { loadDetails, renameSidecar, saveDetails, setMarked, existingSidecar } from './export/sidecar';
 import { createFile, createFolder, renameNode } from './fsops';
+import { importDocxFiles } from './importDocx';
 import { sidecarPathFor } from '../src/shared/export/sidecar';
 import { promises as fsp } from 'node:fs';
 import { installMenu } from './menu';
@@ -97,7 +98,7 @@ function ensureSync(): Promise<SyncService> {
 const touched = () => sync?.syncSoon();
 /** Channels that change the user's files: a pass follows them. */
 const SYNC_TRIGGERS = new Set([
-  'fs:writeFile', 'fs:createFile', 'fs:createFolder', 'fs:renameNode', 'fs:trashNode', 'export:saveDetails', 'export:setMarked', 'export:relink',
+  'fs:writeFile', 'fs:createFile', 'fs:importDocx', 'fs:createFolder', 'fs:renameNode', 'fs:trashNode', 'export:saveDetails', 'export:setMarked', 'export:relink',
   'projects:create', 'projects:update', 'projects:rename', 'projects:duplicate', 'projects:delete', 'projects:convert', 'projects:progress', 'projects:addMissing'
 ]);
 
@@ -188,6 +189,14 @@ function registerIpc(): void {
   handle('fs:createFile', (_e, dir: string, name: string, content?: string) =>
     createFile(inRoot(dir, { allowRoot: true }), name, content)
   );
+  handle('fs:importDocx', async (e, dir: string) => {
+    const target = inRoot(dir, { allowRoot: true });
+    const win = winOf(e);
+    const opts = { title: 'Import Word documents', properties: ['openFile' as const, 'multiSelections' as const], filters: [{ name: 'Word documents', extensions: ['docx'] }] };
+    const res = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
+    if (res.canceled || res.filePaths.length === 0) return null;
+    return importDocxFiles(target, res.filePaths);
+  });
   handle('fs:createFolder', (_e, dir: string, name: string) =>
     createFolder(inRoot(dir, { allowRoot: true }), name)
   );

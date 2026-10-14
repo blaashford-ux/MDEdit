@@ -245,6 +245,7 @@ export class FakeApi implements MdeditApi {
     this.trashed.push(p);
   };
   reveal = (p: string) => void this.revealed.push(p);
+  importDocx = async () => null;
 
   getPrefs = async () => this.prefs;
   setPrefs = (patch: Partial<Prefs>) => void Object.assign(this.prefs, patch);

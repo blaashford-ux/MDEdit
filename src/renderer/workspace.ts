@@ -917,6 +917,26 @@ export class Workspace {
     }
   }
 
+  /** Imports Word documents into `dir` as Markdown files and opens the first one. Returns false if nothing was imported. */
+  async importDocx(dir: string): Promise<boolean> {
+    if (!this.api.importDocx) return false;
+    try {
+      const res = await this.api.importDocx(dir);
+      if (!res) return false;
+      if (res.created.length) {
+        await this.refresh();
+        for (const f of res.created) this.expandPath(f);
+        await this.openChapter(res.created[0], 0);
+      }
+      if (res.failed.length) this.set({ error: `Could not import:\n${res.failed.join('\n')}` });
+      else this.set({ notice: `Imported ${res.created.length === 1 ? basename(res.created[0]) : res.created.length + ' documents'}.` });
+      return res.created.length > 0;
+    } catch (e) {
+      this.set({ error: String(e instanceof Error ? e.message : e) });
+      return false;
+    }
+  }
+
   /** Creates a folder and reveals it in the tree. Returns its path, or null on failure. */
   async createFolder(dir: string, name: string): Promise<string | null> {
     try {

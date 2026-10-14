@@ -6,6 +6,7 @@ const PATHS = {
   chevron: 'm9 6 6 6-6 6',
   refresh: 'M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7',
   download: 'M12 4v11m0 0-4-4m4 4 4-4M5 20h14',
+  upload: 'M12 15V4m0 0-4 4m4-4 4 4M5 20h14',
   plus: 'M12 5v14M5 12h14',
   folderPlus: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Zm9 3v6m-3-3h6',
   filePlus: 'M7 3h7l5 5v11a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm7 0v5h5m-5 4v5m-2.5-2.5h5',

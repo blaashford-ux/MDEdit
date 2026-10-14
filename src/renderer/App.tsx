@@ -317,6 +317,7 @@ export function App() {
       return [
         { label: 'New File Here…', onClick: () => promptNewFile(row.path) },
         { label: 'New Folder Here…', onClick: () => promptNewFolder(row.path) },
+        ...(caps.importDocx ? [{ label: 'Import Word Document…', onClick: () => void ws.importDocx(row.path) }] : []),
         { label: 'Rename…', hint: 'F2', onClick: () => promptRename(row) },
         ...reveal,
         { label: 'Delete Folder…', danger: true, hint: 'Del', onClick: () => deleteRow(row) }
@@ -751,6 +752,16 @@ export function App() {
           <button onClick={() => promptNewFile(dirFor(null))} disabled={!s.root} title="New file (Ctrl+N)" aria-label="New file">
             <Icon name="filePlus" /> File
           </button>
+          {caps.importDocx && (
+            <button
+              onClick={() => void ws.importDocx(dirFor(null))}
+              disabled={!s.root}
+              title="Import Word documents (.docx) as Markdown files"
+              aria-label="Import Word document"
+            >
+              <Icon name="upload" /> Import
+            </button>
+          )}
           <button
             onClick={() => promptNewFolder(dirFor(null))}
             disabled={!s.root}

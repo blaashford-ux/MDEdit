@@ -262,11 +262,23 @@ export interface ExportApi {
 }
 
 /** Things that only make sense in the Windows app: its window and menu, the OS folder picker, Explorer, launch files. */
+export interface ImportDocxResult {
+  /** Paths of the Markdown files that were written. */
+  created: string[];
+  /** One message per document that could not be imported. */
+  failed: string[];
+}
+
 export interface DesktopApi {
   /** Shows the OS folder picker. Resolves to the chosen folder or null if cancelled. */
   pickFolder(): Promise<string | null>;
   /** Shows the item in File Explorer. */
   reveal(path: string): void;
+  /**
+   * Asks for one or more Word (.docx) files and writes each into `dir` as a Markdown file of the same name
+   * (headings, bold / italic and so on kept). Null when the picker is cancelled.
+   */
+  importDocx(dir: string): Promise<ImportDocxResult | null>;
 
   /** Markdown files given on the command line (double-click / "Open with"); each is returned once. */
   takeLaunchFiles(): Promise<string[]>;
@@ -346,20 +358,22 @@ export interface Capabilities {
   launchFiles: boolean;
   /** Installed-font listing for exports. */
   fonts: boolean;
+  /** Importing Word documents. */
+  importDocx: boolean;
   /** Google Drive sync (`SyncApi`). */
   sync: boolean;
 }
 
-export const DESKTOP_CAPABILITIES: Capabilities = { export: true, windowChrome: true, folderPicker: true, launchFiles: true, fonts: true, sync: true };
+export const DESKTOP_CAPABILITIES: Capabilities = { export: true, windowChrome: true, folderPicker: true, launchFiles: true, fonts: true, importDocx: true, sync: true };
 /** The phone: the editor and projects, nothing desktop-specific. */
-export const MOBILE_CAPABILITIES: Capabilities = { export: false, windowChrome: false, folderPicker: false, launchFiles: false, fonts: false, sync: true };
+export const MOBILE_CAPABILITIES: Capabilities = { export: false, windowChrome: false, folderPicker: false, launchFiles: false, fonts: false, importDocx: false, sync: true };
 
 /**
  * What `Workspace` (the editor's state and logic) needs: the core, plus a few desktop extras it uses when present
  * (the close guard, launch files, the folder picker, Explorer, export markers). On the phone they are simply absent.
  */
 export type WorkspaceApi = CoreApi &
-  Partial<Pick<DesktopApi, 'setDirtyFiles' | 'takeLaunchFiles' | 'pickFolder' | 'reveal'>> &
+  Partial<Pick<DesktopApi, 'setDirtyFiles' | 'takeLaunchFiles' | 'pickFolder' | 'reveal' | 'importDocx'>> &
   Partial<Pick<ExportApi, 'setMarked' | 'relinkSidecar'>>;
 
 /**
