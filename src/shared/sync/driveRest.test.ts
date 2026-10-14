@@ -108,4 +108,14 @@ describe('Drive REST client', () => {
     await drive.trash('f');
     expect(JSON.parse(String(seen[3].init.body))).toEqual({ trashed: true });
   });
+
+  it('shares a read-only file so viewers can download it, and a writable file without letting writers re-share it', async () => {
+    const patchBody = (seen: Seen[]) => JSON.parse(String(seen.find((x) => x.init.method === 'PATCH')!.init.body));
+    const reader = script([ok({ id: 'f' }), ok({ permissions: [] }), ok({ id: 'p' })]);
+    await createDriveRest({ getToken: tokens().getToken, fetch: reader.fetchFn, sleep: noSleep }).shareByLink('f', 'reader');
+    expect(patchBody(reader.seen)).toEqual({ writersCanShare: false, copyRequiresWriterPermission: false }); // downloading must stay possible
+    const writer = script([ok({ id: 'f' }), ok({ permissions: [] }), ok({ id: 'p' })]);
+    await createDriveRest({ getToken: tokens().getToken, fetch: writer.fetchFn, sleep: noSleep }).shareByLink('f', 'writer');
+    expect(patchBody(writer.seen)).toEqual({ writersCanShare: false, copyRequiresWriterPermission: true });
+  });
 });

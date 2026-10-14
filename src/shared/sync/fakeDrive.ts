@@ -54,6 +54,29 @@ export class FakeDrive implements DriveApi {
     return this.plain(f);
   }
 
+  /** Link sharing per file id, for tests. */
+  links = new Map<string, 'reader' | 'writer'>();
+  /** Test hook: ids this fake "app" has been given access to (when set, other files look missing to getFile/download). */
+  granted: Set<string> | null = null;
+
+  async getFile(id: string): Promise<DriveFile | null> {
+    this.calls.push(`getFile:${id}`);
+    const f = this.nodes.get(id);
+    if (!f || f.trashed || (this.granted && !this.granted.has(id))) return null;
+    return this.plain(f);
+  }
+
+  async shareByLink(id: string, role: 'reader' | 'writer'): Promise<void> {
+    this.calls.push(`share:${id}:${role}`);
+    this.live(id);
+    this.links.set(id, role);
+  }
+
+  async unshare(id: string): Promise<void> {
+    this.calls.push(`unshare:${id}`);
+    this.links.delete(id);
+  }
+
   async trash(id: string): Promise<void> {
     this.calls.push(`trash:${id}`);
     const kill = (x: string) => {
@@ -68,7 +91,7 @@ export class FakeDrive implements DriveApi {
 
   private live(id: string) {
     const f = this.nodes.get(id);
-    if (!f || f.trashed) throw Object.assign(new Error(`Drive: file ${id} not found`), { status: 404 });
+    if (!f || f.trashed || (this.granted && !this.granted.has(id))) throw Object.assign(new Error(`Drive: file ${id} not found`), { status: 404 });
     return f;
   }
 

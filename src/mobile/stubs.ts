@@ -22,10 +22,24 @@ export const desktopOnlyStubs: ExportApi & DesktopApi = {
   onExportProgress: never,
   revealOutput: noop,
   openOutput: unavailable('Export'),
+  saveReport: unavailable('Saving a report'),
 
   pickFolder: async () => null,
   reveal: noop,
   importDocx: async () => null,
+  getAiServer: async () => null,
+  exportAiKit: async () => {
+    throw new Error('Not available on the phone.');
+  },
+  getAiRemote: async () => {
+    throw new Error('Not available on the phone.');
+  },
+  setAiRemote: async () => {
+    throw new Error('Not available on the phone.');
+  },
+  resetAiRemoteToken: async () => {
+    throw new Error('Not available on the phone.');
+  },
   takeLaunchFiles: async () => [],
   onLaunchFiles: never,
   setDirtyFiles: noop,

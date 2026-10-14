@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react';
 import { goalFor, STATUS_LABELS, STATUSES, type ProjectStatus, type ProjectSummary, type ProjectsConfig, type RootListing } from '../shared/projects';
 import { ContextMenu, type MenuItem } from './ContextMenu';
 import { Icon } from './Icon';
+import type { SharedProject } from '../shared/review/share';
+import { justLongPressed, longPressProps } from './longPress';
 
 interface Props {
   config: ProjectsConfig | null;
@@ -20,6 +22,12 @@ interface Props {
   onStatus(p: ProjectSummary, status: ProjectStatus): void;
   onProperties(p: ProjectSummary): void;
   onReveal?(path: string): void;
+  /** Projects other people shared with this person (only where sharing is available). */
+  shared?: SharedProject[];
+  onOpenShared?(dir: string): void;
+  onJoin?(): void;
+  /** Opens the Sharing page (where sharing is available). */
+  onSharing?(): void;
 }
 
 export function timeAgo(ms: number | null, now = Date.now()): string {
@@ -43,17 +51,18 @@ export function ProjectsHome(p: Props) {
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<Sort>('recent');
   const [showArchived, setShowArchived] = useState(false);
+  const [status, setStatus] = useState<ProjectStatus | 'all'>('all');
   const [menu, setMenu] = useState<{ x: number; y: number; project: ProjectSummary } | null>(null);
 
   const all = p.listing?.projects ?? [];
   const archivedCount = all.filter((x) => x.meta.archived).length;
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const list = all.filter((x) => x.meta.archived === showArchived && (q === '' || x.name.toLowerCase().includes(q) || x.meta.templateName.toLowerCase().includes(q)));
+    const list = all.filter((x) => x.meta.archived === showArchived && (status === 'all' || x.meta.status === status) && (q === '' || x.name.toLowerCase().includes(q) || x.meta.templateName.toLowerCase().includes(q)));
     return list.sort((a, b) =>
       sort === 'name' ? a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }) : sort === 'words' ? (b.words ?? -1) - (a.words ?? -1) : (b.lastEdited ?? 0) - (a.lastEdited ?? 0)
     );
-  }, [all, query, sort, showArchived]);
+  }, [all, query, sort, showArchived, status]);
 
   const items = (x: ProjectSummary): MenuItem[] => [
     { label: 'Open', onClick: () => p.onOpen(x.path) },
@@ -97,6 +106,11 @@ export function ProjectsHome(p: Props) {
                 Open Folder…
               </button>
             )}
+            {p.onSharing && (
+              <button type="button" onClick={p.onSharing} title="Projects you've shared for review, and their links">
+                Sharing
+              </button>
+            )}
             <button type="button" className="primary big" onClick={p.onNew}>
               <Icon name="plus" /> New Project
             </button>
@@ -117,6 +131,14 @@ export function ProjectsHome(p: Props) {
               <option value="recent">Recently edited</option>
               <option value="name">Name</option>
               <option value="words">Most words</option>
+            </select>
+            <select value={status} onChange={(e) => setStatus(e.target.value as ProjectStatus | 'all')} aria-label="Filter by status">
+              <option value="all">All statuses</option>
+              {STATUSES.map((st) => (
+                <option key={st} value={st}>
+                  {STATUS_LABELS[st]}
+                </option>
+              ))}
             </select>
             {archivedCount > 0 && (
               <button type="button" className={showArchived ? 'on' : ''} onClick={() => setShowArchived(!showArchived)} aria-pressed={showArchived}>
@@ -154,16 +176,13 @@ export function ProjectsHome(p: Props) {
                 role="button"
                 tabIndex={0}
                 aria-label={`Open ${x.name}`}
-                onClick={() => p.onOpen(x.path)}
+                onClick={() => !justLongPressed() && p.onOpen(x.path)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') p.onOpen(x.path);
                   else if (e.key === 'F2') p.onRename(x);
                   else if (e.key === 'ContextMenu') setMenu({ x: 200, y: 200, project: x });
                 }}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  setMenu({ x: e.clientX, y: e.clientY, project: x });
-                }}
+                {...longPressProps((mx, my) => setMenu({ x: mx, y: my, project: x }))}
               >
                 <div className="card-top">
                   <span className="card-name">{x.name}</span>
@@ -202,7 +221,7 @@ export function ProjectsHome(p: Props) {
             );
           })}
         </div>
-        {all.length > 0 && shown.length === 0 && <p className="muted">{query ? `No projects match “${query}”.` : showArchived ? 'No archived projects.' : 'No active projects.'}</p>}
+        {all.length > 0 && shown.length === 0 && <p className="muted">{query ? `No projects match “${query}”.` : status !== 'all' ? `No ${STATUS_LABELS[status].toLowerCase()} projects.` : showArchived ? 'No archived projects.' : 'No active projects.'}</p>}
 
         {(p.listing?.folders.length ?? 0) > 0 && (
           <section className="other-folders">
@@ -219,6 +238,19 @@ export function ProjectsHome(p: Props) {
                 </button>
               </div>
             ))}
+          </section>
+        )}
+        {p.onJoin && (
+          <section className="other-folders shared-with-me">
+            <h3>Shared with me</h3>
+            {(p.shared ?? []).length === 0 && <p className="muted small">Projects other people ask you to review appear here.</p>}
+            {(p.shared ?? []).map((sp) => (
+              <div className="other-folder" key={sp.dir}>
+                <Icon name="folder" size={15} className="kind-dir" /> <span className="grow-text">{sp.project}</span>
+                <button type="button" onClick={() => p.onOpenShared?.(sp.dir)}>Open</button>
+              </div>
+            ))}
+            <button type="button" onClick={p.onJoin}>Open invitation…</button>
           </section>
         )}
       </div>

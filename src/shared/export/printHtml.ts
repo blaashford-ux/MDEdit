@@ -64,8 +64,10 @@ export function printCss(book: BookBuild, layout: PrintLayout): string {
 
 html { font-family: ${stack}; font-size: ${s.fontSize}pt; }
 body { margin: 0; font-family: ${stack}; font-size: ${s.fontSize}pt; line-height: 1.25; color: #000; hyphens: none; -webkit-hyphens: none; }
-p { text-align: justify; orphans: 2; widows: 2; }
+p { text-align: ${s.bodyAlign === 'left' ? 'left' : 'justify'}; orphans: 2; widows: 2; }
 ${paragraphCss(s.paragraphStyle)}
+.al-left { text-align: left; } .al-center { text-align: center; } .al-right { text-align: right; } .al-justify { text-align: justify; }
+p.al-center, p.al-right { text-indent: 0; }
 em { font-style: italic; } strong { font-weight: 700; }
 blockquote { margin: 1em 1.5em; }
 pre { white-space: pre-wrap; font-size: 0.9em; }
@@ -87,6 +89,9 @@ p.bookauthor { text-align: center; font-weight: 700; font-size: 1.3em; margin: 2
 .copyright p.crpara { margin: 0 0 0.9em; font-size: 0.9em; }
 p.center { text-align: center; } p.right { text-align: right; }
 p.linkline { text-align: left; text-indent: 0; margin: 0 0 0.6em; overflow-wrap: anywhere; }
+/* Back matter: always a blank line between paragraphs, lines and links, whatever the body paragraph style */
+.backpage p { text-align: left; text-indent: 0; margin: 0 0 1.25em; }
+.backpage p.linkline, .backpage p.crline { margin: 0 0 1.25em; }
 p.scenebreak { text-align: center; margin: 1.2em 0; text-indent: 0; }
 
 h1 { text-align: center; font-weight: 700; }

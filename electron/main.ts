@@ -1,4 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, nativeTheme, safeStorage, screen, shell } from 'electron';
+import { spawn } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import type { DraftRecord, Prefs, Session, ThemeSource } from '../src/shared/api';
@@ -13,25 +14,41 @@ import { loadDetails, renameSidecar, saveDetails, setMarked, existingSidecar } f
 import { createFile, createFolder, renameNode } from './fsops';
 import { importDocxFiles } from './importDocx';
 import { sidecarPathFor } from '../src/shared/export/sidecar';
-import { promises as fsp } from 'node:fs';
+import { appendFileSync, promises as fsp } from 'node:fs';
 import { installMenu } from './menu';
-import { chromeOptions, registerWindowChrome, shellColor, watchWindow } from './windowChrome';
+import { chromeOptions, registerWindowChrome, setChromeTheme, shellColor, watchWindow } from './windowChrome';
 import { confirmDelete, confirmMarkEdited, confirmOverwrite, confirmRecover, confirmUnsaved } from './prompts';
 import { scanFolder } from './scan';
+import type { AiServerInfo } from '../src/shared/agent/config';
+import { buildKit, KIT_FOLDER } from '../src/shared/agent/kit';
+import { AiRemote } from './aiRemote';
+import { SKILLS } from '../mcp/skills.generated';
+import { makeReviews } from '../src/shared/backend/reviews';
+import { nodeFs } from './nodeFs';
 import { bundledFont } from '../src/shared/export/fonts';
 import { listInstalledFonts } from './fonts';
 import { sanitizeAppDefaults, type AppDefaults } from '../src/shared/appDefaults';
-import { defaultRootFolder, effectiveDefaults, sanitizeProjectsSettings, type ProjectsConfig } from '../src/shared/projects';
+import { defaultRootFolder, effectiveDefaults, sanitizeProjectsSettings, withOpened, type ProjectsConfig } from '../src/shared/projects';
 import * as projects from './projects';
 import { existingFolder, SettingsStore, type WindowState } from './settings';
+import { sanitizeThemeCustom } from '../src/shared/theme';
+import { pickInBrowser } from './pickerBrowser';
+import { checkBeforeLaunch, downloadInstaller } from './update';
+import { fetchLatestRelease, type UpdateInfo } from '../src/shared/update';
 import type { SyncService } from '../src/shared/sync/service';
 import { createDesktopSync } from './syncHost';
+import { createReviewHost } from '../src/shared/review/host';
+import type { ReviewSharingApi } from '../src/shared/api';
 
 const settings = new SettingsStore(path.join(app.getPath('userData'), 'settings.json'));
+/** The optional online door for AI apps (off until the user turns it on). */
+const aiRemote = new AiRemote({ file: path.join(app.getPath('userData'), 'ai-remote.json'), fs: nodeFs, root: () => projectsRoot(), version: app.getVersion() });
 let drafts: DraftStore;
 let mainWindow: BrowserWindow | null = null;
 let smokeMode = false;
 const pendingFiles: string[] = [];
+/** A downloaded installer to start once the app has exited (see `update:install`). */
+let installerToRun: string | null = null;
 
 function queueFile(file: string): void {
   if (!pendingFiles.includes(file)) pendingFiles.push(file);
@@ -92,6 +109,60 @@ function ensureSync(): Promise<SyncService> {
     });
   }
   return syncReady;
+}
+
+/**
+ * How an AI app launches the MCP server. The installed app runs it with itself in Node mode, so users need no Node.js;
+ * the file sits outside app.asar (see `asarUnpack`) because an outside program can't read inside the archive.
+ */
+async function aiServer(): Promise<AiServerInfo | null> {
+  const file = path.join(app.getAppPath(), 'dist-electron', 'mcp', 'mdedit-mcp.js').replace(/app\.asar(?=[\\/])/, 'app.asar.unpacked');
+  if (!(await fsp.stat(file).catch(() => null))) return null;
+  const root = path.resolve(projectsRoot());
+  const args = [file, '--root', root];
+  return app.isPackaged ? { root, command: process.execPath, args, env: { ELECTRON_RUN_AS_NODE: '1' } } : { root, command: 'node', args };
+}
+
+/** Saves the AI Kit into the user's Downloads folder (replacing an earlier copy of the same files) and shows it. */
+async function exportAiKit(): Promise<string> {
+  const info = await aiServer();
+  if (!info) throw new Error('This build of MDEdit doesn’t include the AI connection.');
+  const dest = path.join(app.getPath('downloads'), KIT_FOLDER);
+  const files = buildKit({
+    skills: SKILLS,
+    server: await fsp.readFile(info.args[0]),
+    version: app.getVersion(),
+    root: info.root,
+    serverPath: path.join(dest, 'mdedit-mcp.js'),
+  });
+  for (const f of files) {
+    const target = path.join(dest, ...f.path.split('/'));
+    await fsp.mkdir(path.dirname(target), { recursive: true });
+    await fsp.writeFile(target, f.data);
+  }
+  shell.showItemInFolder(path.join(dest, 'README.txt'));
+  return dest;
+}
+
+/** A project in the Root Folder (so the Sharing page can reach it with no folder open) or anything inside the open folder. */
+function reviewPath(p: string): string {
+  const full = path.resolve(p);
+  const rel = path.relative(path.resolve(projectsRoot()), full);
+  if (rel && !rel.startsWith('..') && !path.isAbsolute(rel) && !rel.includes(path.sep)) return full;
+  return inRoot(p, { allowRoot: true });
+}
+
+/** Sharing for review, built on the sync service's Google sign-in. */
+async function reviewHost(): Promise<ReviewSharingApi> {
+  const svc = await ensureSync();
+  return createReviewHost({
+    fs: nodeFs,
+    root: projectsRoot(),
+    stateFile: path.join(app.getPath('userData'), 'shares.json'),
+    drive: () => svc.driveApi(),
+    connected: () => svc.isConnected(),
+    accessToken: () => svc.accessToken()
+  });
 }
 
 /** Something on disk changed because of the user: sync soon (does nothing unless Google Drive is connected). */
@@ -180,6 +251,15 @@ function registerIpc(): void {
     return tree;
   });
   handle('fs:readFile', (_e, p: string) => readWithStamp(inRoot(p)));
+  const reviews = makeReviews(nodeFs);
+  handle('review:list', (_e, project: string) => reviews.list(reviewPath(project)));
+  handle('review:delete', (_e, project: string, id: string) => reviews.remove(reviewPath(project), id));
+  handle('ai:server', aiServer);
+  handle('ai:exportKit', exportAiKit);
+  handle('ai:remote:get', () => aiRemote.status());
+  handle('ai:remote:set', (_e, enabled: boolean) => aiRemote.setEnabled(enabled === true));
+  handle('ai:remote:reset', () => aiRemote.resetToken());
+  handle('review:save', (_e, project: string, id: string, text: string) => reviews.save(reviewPath(project), id, text));
   handle('fs:statFile', (_e, p: string) => statStamp(inRoot(p)));
   handle('fs:writeFile', (_e, p: string, content: string) => {
     const full = inRoot(p);
@@ -271,6 +351,35 @@ function registerIpc(): void {
     if (exportedFiles.has(path.resolve(p))) shell.showItemInFolder(path.resolve(p));
   });
   handle('export:open', (_e, p: string) => (exportedFiles.has(path.resolve(p)) ? shell.openPath(path.resolve(p)) : Promise.resolve('Not an exported file')));
+  handle('report:save', async (e, kind: string, suggested: string, html: string) => {
+    if ((kind !== 'html' && kind !== 'pdf') || typeof html !== 'string' || typeof suggested !== 'string') throw new Error('Bad report request');
+    const win = winOf(e);
+    const base = path.basename(suggested).replace(/[<>:"/\\|?*\x00-\x1f]/g, '_') || 'Analysis';
+    const name = base.replace(/\.(html?|pdf)$/i, '') + (kind === 'pdf' ? '.pdf' : '.html');
+    const opts = {
+      defaultPath: path.join(openRoot ?? app.getPath('documents'), name),
+      filters: kind === 'pdf' ? [{ name: 'PDF', extensions: ['pdf'] }] : [{ name: 'Web page', extensions: ['html'] }]
+    };
+    const res = win ? await dialog.showSaveDialog(win, opts) : await dialog.showSaveDialog(opts);
+    if (res.canceled || !res.filePath) return null;
+    if (kind === 'html') {
+      await fsp.writeFile(res.filePath, html, 'utf8');
+      return res.filePath;
+    }
+    const tmp = await fsp.mkdtemp(path.join(os.tmpdir(), 'mdedit-report-'));
+    const printer = new BrowserWindow({ show: false, width: 1000, height: 1400, webPreferences: { sandbox: true, contextIsolation: true, javascript: false, spellcheck: false } });
+    try {
+      const page = path.join(tmp, 'report.html');
+      await fsp.writeFile(page, html, 'utf8');
+      await printer.loadFile(page);
+      const pdf = await printer.webContents.printToPDF({ printBackground: true, pageSize: 'Letter', margins: { marginType: 'default' } });
+      await fsp.writeFile(res.filePath, pdf);
+      return res.filePath;
+    } finally {
+      if (!printer.isDestroyed()) printer.destroy();
+      await fsp.rm(tmp, { recursive: true, force: true }).catch(() => undefined);
+    }
+  });
   handle('fonts:installed', () => listInstalledFonts());
   handle('fonts:preview', async (_e, family: string) => {
     const b = bundledFont(String(family));
@@ -335,7 +444,8 @@ function registerIpc(): void {
   });
   ipcMain.on('projects:setLast', (_e, p: string | null) => {
     settings.update((s) => {
-      s.projects = { ...settings.projects(), lastProject: typeof p === 'string' ? p : null };
+      const cur = settings.projects();
+      s.projects = { ...cur, lastProject: typeof p === 'string' ? p : null, recentProjects: withOpened(cur.recentProjects, typeof p === 'string' ? p : null) };
     });
   });
 
@@ -353,6 +463,14 @@ function registerIpc(): void {
       settings.update((s) => {
         s.prefs = { ...s.prefs, sidebarWidth: patch.sidebarWidth };
       });
+    }
+    if (patch && 'themeCustom' in patch) {
+      const themeCustom = sanitizeThemeCustom(patch.themeCustom);
+      settings.update((s) => {
+        const { themeCustom: _old, ...rest } = s.prefs ?? {};
+        s.prefs = themeCustom ? { ...rest, themeCustom } : rest;
+      });
+      setChromeTheme(themeCustom); // the title-bar buttons and the window background follow the custom colours
     }
   });
   handle('session:get', (_e, folder: string) => settings.get().sessions?.[folder] ?? null);
@@ -381,6 +499,39 @@ function registerIpc(): void {
   handle('dialog:confirmRecover', (e, name: string) => confirmRecover(winOf(e), name));
   handle('dialog:confirmMarkEdited', (e, title: string) => confirmMarkEdited(winOf(e), title));
   // --- Google Drive sync ---
+  handle('review:shareStatus', async (_e, project: string) => (await reviewHost()).getShareStatus(reviewPath(project)));
+  handle('review:invite', async (_e, project: string, name: string) => (await reviewHost()).inviteReviewer(reviewPath(project), name));
+  handle('review:revoke', async (_e, project: string, id: string) => (await reviewHost()).revokeReviewer(reviewPath(project), id));
+  handle('review:exchange', async (_e, project: string) => (await reviewHost()).exchangeReviews(reviewPath(project)));
+  handle('review:listShares', async () => (await reviewHost()).listShares());
+  handle('review:stop', async (_e, project: string) => (await reviewHost()).stopSharing(reviewPath(project)));
+  handle('review:listShared', async () => (await reviewHost()).listShared());
+  handle('review:pickerToken', async () => (await reviewHost()).pickerToken());
+  handle('review:pickInBrowser', (_e, url: unknown) => pickInBrowser(String(url), (u) => shell.openExternal(u)));
+  handle('review:join', async (_e, link: string, name: string) => (await reviewHost()).joinReview(link, name));
+  // ---- Updating from the latest GitHub release ----
+  handle('update:version', () => app.getVersion());
+  handle('update:check', () => fetchLatestRelease(fetch, 'windows', app.getVersion()));
+  handle('update:install', async (e, info: UpdateInfo) => {
+    const file = await downloadInstaller(info, {
+      fetchFn: fetch,
+      dir: path.join(os.tmpdir(), 'mdedit-update'),
+      onProgress: (p) => {
+        if (!e.sender.isDestroyed()) e.sender.send('update:progress', p);
+      }
+    });
+    // Read it back once more right before running it: waits out any antivirus scan, and refuses a file that has changed.
+    try {
+      updateLog(`downloaded ${path.basename(file)}: ${await checkBeforeLaunch(file)}`);
+    } catch (err) {
+      updateLog(`not run: ${err instanceof Error ? err.message : String(err)}`);
+      throw err;
+    }
+    // Start the installer only after we have exited (so no file is in use). Quitting goes through the usual
+    // unsaved-changes prompt; if the user cancels that, `guardClose` clears this again.
+    installerToRun = file;
+    app.quit();
+  });
   handle('sync:status', async () => (await ensureSync()).getSyncStatus());
   handle('sync:connect', async () => (await ensureSync()).connectSync());
   handle('sync:now', async () => (await ensureSync()).syncNow());
@@ -404,6 +555,7 @@ function guardClose(win: BrowserWindow): void {
     waiting = true;
     ipcMain.once('app:closeDecision', (_e, ok: boolean) => {
       waiting = false;
+      if (ok !== true) installerToRun = null; // the user backed out of closing, so an update in progress is off
       if (ok === true) {
         confirmed = true;
         win.close();
@@ -513,8 +665,11 @@ if (!firstInstance) {
     await settings.load();
     drafts = new DraftStore(path.join(app.getPath('userData'), 'drafts'));
     nativeTheme.themeSource = settings.get().theme ?? 'system';
+    setChromeTheme(settings.get().prefs?.themeCustom);
 
     registerIpc();
+    void aiRemote.load(); // comes back up only if the user left it on
+    app.on('before-quit', () => void aiRemote.stop());
     registerWindowChrome(() => mainWindow);
     installMenu({ get: () => settings.get().theme ?? 'system', set: setTheme });
     createWindow();
@@ -528,6 +683,24 @@ if (!firstInstance) {
     app.exit(1);
   });
 }
+
+/** One line per update step in %APPDATA%\MDEdit\update.log, so a failed update can be diagnosed afterwards. */
+function updateLog(line: string): void {
+  try {
+    appendFileSync(path.join(app.getPath('userData'), 'update.log'), `${new Date().toISOString()} v${app.getVersion()} ${line}\n`);
+  } catch {
+    /* logging must never get in the way of updating */
+  }
+}
+
+app.on('quit', () => {
+  if (!installerToRun) return;
+  updateLog(`starting ${installerToRun}`);
+  // Started the way a double-click starts it (through the shell). Started directly from here it failed its own
+  // integrity check now and then, while the same file run by hand was fine.
+  const [cmd, args] = process.platform === 'win32' ? ['explorer.exe', [installerToRun]] : [installerToRun, []];
+  spawn(cmd, args, { detached: true, stdio: 'ignore' }).on('error', (e) => updateLog(`start failed: ${e.message}`)).unref();
+});
 
 let finalSyncStarted = false;
 app.on('before-quit', (e) => {

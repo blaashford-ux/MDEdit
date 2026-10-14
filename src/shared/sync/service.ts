@@ -126,6 +126,20 @@ export class SyncService implements SyncApi {
     return value;
   };
 
+  isConnected(): boolean {
+    return this.saved.connected;
+  }
+
+  /** An access token (the sign-in may show Google's screens the first time). */
+  accessToken(): Promise<string> {
+    return this.getToken();
+  }
+
+  /** A Drive client using this device's sign-in. */
+  driveApi(): DriveApi {
+    return this.o.makeDrive ? this.o.makeDrive(this.getToken) : createDriveRest({ getToken: this.getToken });
+  }
+
   async connectSync(): Promise<SyncStatus> {
     try {
       await this.getToken(true); // shows Google's sign-in and consent the first time

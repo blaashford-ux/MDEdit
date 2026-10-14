@@ -139,6 +139,30 @@ describe('state on the phone’s API', () => {
     expect(await again.api.getPrefs()).toEqual({ sidebarWidth: 321 });
     expect((await again.api.getProjectsConfig()).lastProject).toBe(`${ROOT}/The Lost King`);
   });
+
+  it('keeps custom theme colours between launches, and clears them again', async () => {
+    await backend.api.setPrefs({ sidebarWidth: 300, themeCustom: { light: { bg: '#FFFFFF' }, dark: { accent: 'nonsense' } as never } });
+    await backend.flush();
+    const again = make();
+    await again.load();
+    expect(await again.api.getPrefs()).toEqual({ sidebarWidth: 300, themeCustom: { light: { bg: '#ffffff' } } });
+    again.api.setPrefs({ themeCustom: undefined });
+    await again.flush();
+    const third = make();
+    await third.load();
+    expect(await third.api.getPrefs()).toEqual({ sidebarWidth: 300 });
+  });
+
+  it('remembers which projects were opened, most recent first, across launches', async () => {
+    backend.api.setLastProject(`${ROOT}/The Lost King`);
+    backend.api.setLastProject(`${ROOT}/Short Stories`);
+    backend.api.setLastProject(`${ROOT}/The Lost King`); // opened again: back to the front, not repeated
+    backend.api.setLastProject(null); // closing a project records nothing new
+    await backend.flush();
+    const again = make();
+    await again.load();
+    expect((await again.api.getProjectsConfig()).recentProjects).toEqual([`${ROOT}/The Lost King`, `${ROOT}/Short Stories`]);
+  });
 });
 
 describe('word counts', () => {

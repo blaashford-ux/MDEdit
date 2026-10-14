@@ -3,11 +3,13 @@
  * behaviour as the Windows main process (electron/main.ts). The Android app uses this directly; the UI shell supplies
  * the dialogs. Paths are plain strings in the platform's style ("/" on the phone).
  */
+import { sanitizeThemeCustom } from '../theme';
 import type { CoreApi, UnsavedChoice } from '../api';
 import { defaultAppDefaults, sanitizeAppDefaults } from '../appDefaults';
 import type { FsPort } from '../fsPort';
+import { makeReviews } from './reviews';
 import { basename, isInside, joinPath, isMarkdownName } from '../paths';
-import { sanitizeProjectsSettings } from '../projects';
+import { sanitizeProjectsSettings, withOpened } from '../projects';
 import { DraftStore } from './drafts';
 import { makeFiles } from './files';
 import { makeFsops } from './fsops';
@@ -55,6 +57,7 @@ export function createCoreApi(o: CoreApiOptions): CoreBackend {
   const sidecars = makeSidecars(fs);
   const settings = new SettingsStore(o.settingsFile, fs);
   const drafts = new DraftStore(o.draftsDir, fs);
+  const reviews = makeReviews(fs);
   const root = o.rootFolder.replace(/[\\/]+$/, '');
   let openRoot: string | null = null;
 
@@ -93,6 +96,9 @@ export function createCoreApi(o: CoreApiOptions): CoreBackend {
       });
       return tree;
     },
+    listReviews: async (project) => reviews.list(inRoot(project, { allowRoot: true })),
+    saveReview: async (project, id, text) => reviews.save(inRoot(project, { allowRoot: true }), id, text),
+    deleteReview: async (project, id) => reviews.remove(inRoot(project, { allowRoot: true }), id),
     readFile: async (p) => files.readWithStamp(inRoot(p)),
     statFile: async (p) => files.statStamp(inRoot(p)),
     async writeFile(p, content) {
@@ -164,7 +170,8 @@ export function createCoreApi(o: CoreApiOptions): CoreBackend {
     },
     setLastProject(p) {
       settings.update((s) => {
-        s.projects = { ...settings.projects(), lastProject: typeof p === 'string' ? p : null };
+        const cur = settings.projects();
+        s.projects = { ...cur, lastProject: typeof p === 'string' ? p : null, recentProjects: withOpened(cur.recentProjects, typeof p === 'string' ? p : null) };
       });
     },
 
@@ -175,6 +182,13 @@ export function createCoreApi(o: CoreApiOptions): CoreBackend {
       if (typeof patch?.sidebarWidth === 'number' && Number.isFinite(patch.sidebarWidth)) {
         settings.update((s) => {
           s.prefs = { ...s.prefs, sidebarWidth: patch.sidebarWidth };
+        });
+      }
+      if (patch && 'themeCustom' in patch) {
+        const themeCustom = sanitizeThemeCustom(patch.themeCustom);
+        settings.update((s) => {
+          const { themeCustom: _old, ...rest } = s.prefs ?? {};
+          s.prefs = themeCustom ? { ...rest, themeCustom } : rest;
         });
       }
     },

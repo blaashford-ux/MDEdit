@@ -1,14 +1,27 @@
 import { Crepe, CrepeFeature } from '@milkdown/crepe';
-import { editorViewCtx } from '@milkdown/kit/core';
+import { editorViewCtx, editorViewOptionsCtx } from '@milkdown/kit/core';
 import { Selection } from '@milkdown/kit/prose/state';
-import { $prose, replaceAll } from '@milkdown/kit/utils';
+import { $prose, callCommand, replaceAll } from '@milkdown/kit/utils';
+import {
+  insertHrCommand,
+  toggleEmphasisCommand,
+  toggleStrongCommand,
+  wrapInBlockquoteCommand,
+  wrapInBulletListCommand,
+  wrapInHeadingCommand,
+  wrapInOrderedListCommand
+} from '@milkdown/kit/preset/commonmark';
+import { redoCommand, undoCommand } from '@milkdown/kit/plugin/history';
 import { useEffect, useRef, useState } from 'react';
 import '@milkdown/crepe/theme/common/style.css';
 import '@milkdown/crepe/theme/classic.css';
 import { blockLines } from '../shared/lines';
 import { pickScene } from '../shared/sceneBreaks';
 import { LineGutter, lineMarksFromBlocks, type LineMark, type PlacedBlock } from './LineGutter';
+import { alignPlugins, setAlignCommand } from './alignPlugin';
+import type { Align } from '../shared/align';
 import { findApiFor, findPlugin } from './findPlugin';
+import { reviewApiFor, reviewPlugin } from './reviewPlugin';
 import type { SceneNav } from './sceneNav';
 
 interface Props {
@@ -30,13 +43,20 @@ interface Props {
    * Anything typed while the save was in flight stays dirty.
    */
   saved: { version: number; markdown: string } | null;
+  /** Right-click in the text (the browser's own menu is suppressed when this is given). */
+  onContextMenu?(at: { x: number; y: number }): void;
+  /** Reviewers read the chapter and annotate it, but can't change it. */
+  readOnly?: boolean;
   /** Hands the parent a way to jump between scene breaks (null on unmount). */
   onNav?(nav: SceneNav | null): void;
   /** The file line this chapter starts on, so the gutter shows file-wide line numbers. */
   firstLine: number;
 }
 
-export function Editor({ initial, restore, onChange, saved, onNav, firstLine }: Props) {
+/** The phone: no window chrome, so no mouse hover to hang floating menus on. */
+const TOUCH = typeof window !== 'undefined' && window.mdedit?.capabilities?.windowChrome === false;
+
+export function Editor({ initial, restore, onChange, saved, onNav, firstLine, readOnly, onContextMenu }: Props) {
   const wrap = useRef<HTMLDivElement>(null);
   const host = useRef<HTMLDivElement>(null);
   const [marks, setMarks] = useState<LineMark[]>([]);
@@ -49,18 +69,22 @@ export function Editor({ initial, restore, onChange, saved, onNav, firstLine }: 
   const baseline = useRef<string | null>(null);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
-  const mountProps = useRef({ initial, restore });
+  const mountProps = useRef({ initial, restore, readOnly: readOnly === true });
   const onNavRef = useRef(onNav);
   onNavRef.current = onNav;
 
   useEffect(() => {
+    // On a touch screen the system owns selection: its handles and its Cut / Copy / Paste menu. Crepe's floating
+    // toolbar, hover handles and virtual caret fight with that (a second menu over the text, handles that snap back,
+    // a long press that selects far too much), so they are off there; the phone gets a docked format bar instead.
     const crepe = new Crepe({
       root: host.current,
       defaultValue: mountProps.current.initial,
       features: {
         [CrepeFeature.AI]: false,
         [CrepeFeature.ImageBlock]: false,
-        [CrepeFeature.Latex]: false
+        [CrepeFeature.Latex]: false,
+        ...(TOUCH ? { [CrepeFeature.Toolbar]: false, [CrepeFeature.BlockEdit]: false, [CrepeFeature.Cursor]: false } : {})
       }
     });
     let disposed = false;
@@ -82,7 +106,10 @@ export function Editor({ initial, restore, onChange, saved, onNav, firstLine }: 
         scheduleMeasure();
       });
     });
+    if (mountProps.current.readOnly) crepe.editor.config((ctx) => ctx.update(editorViewOptionsCtx, (prev) => ({ ...prev, editable: () => false })));
     crepe.editor.use($prose(() => findPlugin)); // highlights for Find & Replace
+    crepe.editor.use(alignPlugins); // ::: center fences
+    crepe.editor.use($prose(() => reviewPlugin)); // highlights for comments and suggestions
     const getView = () => (crepeRef.current ? crepeRef.current.editor.action((ctx) => ctx.get(editorViewCtx)) : null);
     /**
      * Gives each top-level block its source line. While the chapter is unedited that is the file's own
@@ -131,7 +158,25 @@ export function Editor({ initial, restore, onChange, saved, onNav, firstLine }: 
       if (draft !== null) crepe.editor.action(replaceAll(draft));
       // Only now can the parent drive the editor (scene jumps, find & replace).
       scheduleMeasure();
+      const run = (cmd: Parameters<typeof callCommand>[0], payload?: unknown) => {
+        const view = getView();
+        if (!view) return;
+        crepe.editor.action(callCommand(cmd as never, payload as never));
+        view.focus(); // keep the keyboard and the selection
+      };
       onNavRef.current?.({
+        format: {
+          bold: () => run(toggleStrongCommand.key),
+          italic: () => run(toggleEmphasisCommand.key),
+          heading: (level) => run(wrapInHeadingCommand.key, level),
+          quote: () => run(wrapInBlockquoteCommand.key),
+          bullets: () => run(wrapInBulletListCommand.key),
+          numbered: () => run(wrapInOrderedListCommand.key),
+          sceneBreak: () => run(insertHrCommand.key),
+          undo: () => run(undoCommand.key),
+          redo: () => run(redoCommand.key),
+          align: (a) => run(setAlignCommand.key, a)
+        },
         goToLine: (line) => {
           const view = getView();
           const spans = blockPos.current;
@@ -146,6 +191,7 @@ export function Editor({ initial, restore, onChange, saved, onNav, firstLine }: 
           return true;
         },
         find: findApiFor(getView),
+        review: reviewApiFor(getView),
         go: (dir) => {
           const view = getView();
           if (!view) return false;
@@ -190,7 +236,18 @@ export function Editor({ initial, restore, onChange, saved, onNav, firstLine }: 
 
   return (
     <div className="editor-wrap" ref={wrap}>
-      <div className="editor" ref={host} />
+      <div
+        className="editor"
+        ref={host}
+        onContextMenu={
+          onContextMenu
+            ? (e) => {
+                e.preventDefault();
+                onContextMenu({ x: e.clientX, y: e.clientY });
+              }
+            : undefined
+        }
+      />
       <LineGutter marks={marks} scroll={0} host={wrap} />
     </div>
   );

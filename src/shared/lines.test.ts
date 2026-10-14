@@ -44,3 +44,23 @@ describe('line numbers', () => {
     expect(lineStarts('ab\ncd\r\nef')).toEqual([0, 3, 7]);
   });
 });
+
+describe('blockLines with alignment fences', () => {
+  it('treats a fence and everything in it as one block, blank lines included', () => {
+    const md = 'before\n\n::: center\nA\n\nB\n:::\n\nafter\n';
+    expect(blockLines(md)).toEqual([
+      { start: 1, end: 1 },
+      { start: 3, end: 7 },
+      { start: 9, end: 9 }
+    ]);
+  });
+  it('an opener ends the fence before it, and an unclosed fence runs to the end', () => {
+    expect(blockLines('::: left\na\n::: right\nb\n\nc\n')).toEqual([
+      { start: 1, end: 2 },
+      { start: 3, end: 6 }
+    ]);
+  });
+  it('leaves fences inside a code block alone', () => {
+    expect(blockLines('```\n::: center\n```\n')).toEqual([{ start: 1, end: 3 }]);
+  });
+});

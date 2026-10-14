@@ -2,6 +2,7 @@
  * Line numbers. They count the lines of the whole Markdown file (1-based), so a number means the same
  * thing in any chapter and Go To can cross chapter boundaries.
  */
+import { isCloser, openerAlign } from './align';
 import type { MarkdownDoc } from './chapters';
 
 const TERMINATOR = /\r\n|\n|\r/g;
@@ -60,8 +61,25 @@ export function blockLines(text: string): BlockLines[] {
   const blocks: BlockLines[] = [];
   let open: BlockLines | null = null;
   let fence: { char: string; len: number } | null = null;
+  /** Inside a `::: align` fence the editor shows one block, whatever blank lines it holds. */
+  let aligned = false;
   lines.forEach((l, i) => {
     const n = i + 1;
+    if (!fence) {
+      if (openerAlign(l)) {
+        // an opener ends a fence that is still open and starts the next block
+        open = { start: n, end: n };
+        blocks.push(open);
+        aligned = true;
+        return;
+      }
+      if (aligned && isCloser(l)) {
+        open!.end = n;
+        open = null;
+        aligned = false;
+        return;
+      }
+    }
     if (fence) {
       const close = new RegExp(`^ {0,3}${fence.char === '`' ? '`' : '~'}{${fence.len},}[ \\t]*$`);
       if (close.test(l)) fence = null;
@@ -69,7 +87,8 @@ export function blockLines(text: string): BlockLines[] {
       return;
     }
     if (l.trim() === '') {
-      open = null;
+      if (aligned) open!.end = n;
+      else open = null;
       return;
     }
     if (!open) {

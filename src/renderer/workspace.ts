@@ -1,4 +1,5 @@
 import type { DirNode, DraftRecord, EditorMode, FileStamp, Session, WorkspaceApi } from '../shared/api';
+import { applyThemeCustom } from './applyTheme';
 import {
   chapterBody,
   clampLevel,
@@ -17,7 +18,10 @@ import type { Progress } from '../shared/progress';
 import { chapterIds, isChapterEdited, relativeTo, withChapterEdited, type ProjectMeta } from '../shared/projects';
 import { chapterLabel } from './treeRows';
 import { basename, dirname, isInside, remapPath } from '../shared/paths';
-import { collectFiles, collectOrphans, flattenPaths } from '../shared/tree';
+import { collectFiles, collectOrphans, findNode, flattenPaths } from '../shared/tree';
+import { analyzeManuscript, type ChapterInput } from '../shared/analysis/analyze';
+import { renderReport } from '../shared/analysis/report';
+import { embedAnalysis } from '../shared/analysis/embed';
 
 export type Conflict = { kind: 'changed'; text: string; stamp: FileStamp } | { kind: 'missing' };
 
@@ -35,8 +39,10 @@ export interface Tab {
   conflict: Conflict | null;
   /** When the current draft was last autosaved for crash recovery. */
   autosavedAt: number | null;
-  /** The open chapter has been saved since it was opened (so leaving it can offer "Mark Edited"). */
+  /** The open chapter has been saved since it was opened. */
   savedHere: boolean;
+  /** "Not Yet" was answered for this chapter, so it is not asked about again until it is left. */
+  markDeclined: boolean;
 }
 
 export interface WorkspaceState {
@@ -87,6 +93,7 @@ export const SIDEBAR_DEFAULT = 300;
 
 const sameStamp = (a: FileStamp, b: FileStamp) => a.mtimeMs === b.mtimeMs && a.size === b.size;
 const stripExt = (name: string) => name.replace(/\.(md|markdown)$/i, '');
+const localDay = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
 /**
  * All document state and logic: the folder tree, open tabs (one per file), unsaved drafts,
@@ -124,6 +131,7 @@ export class Workspace {
   private sessionTimer: ReturnType<typeof setTimeout> | undefined;
   private lastSession = '';
   private lastDirty = '';
+  private analyzing = new Set<string>();
   private readonly draftDelay: number;
   private readonly sessionDelay: number;
 
@@ -350,6 +358,7 @@ export class Workspace {
       if (this.appLevel !== this.state.chapterLevel) this.set({ chapterLevel: this.appLevel });
       const prefs = await this.api.getPrefs();
       if (typeof prefs.sidebarWidth === 'number') this.setSidebarWidth(prefs.sidebarWidth, false);
+      applyThemeCustom(prefs.themeCustom);
       if (opts.restoreFolder !== false) {
         const folder = await this.api.getLastFolder();
         if (folder) await this.openPath(folder, true);
@@ -459,7 +468,8 @@ export class Workspace {
       reloadKey: 0,
       conflict: null,
       autosavedAt: null,
-      savedHere: false
+      savedHere: false,
+      markDeclined: false
     };
   }
 
@@ -523,7 +533,7 @@ export class Workspace {
       if (!tab) return;
       const doc = this.state.docs.get(file);
       const target = Math.max(0, Math.min(chapter, (doc?.chapters.length ?? 1) - 1));
-      this.patchTab(tab.id, (t) => ({ chapter: target, draft: null, conflict: null, savedHere: false, reloadKey: t.reloadKey + 1 }));
+      this.patchTab(tab.id, (t) => ({ chapter: target, draft: null, conflict: null, savedHere: false, markDeclined: false, reloadKey: t.reloadKey + 1 }));
     }
     this.set({ activeId: tab.id, notice: null });
   }
@@ -594,14 +604,15 @@ export class Workspace {
     }
   }
 
-  /** In the Editing stage, leaving a chapter you saved offers to mark it edited (once; nothing is asked for a chapter already marked). */
-  private async offerMarkEdited(tabId: string): Promise<void> {
+  /** In the Editing stage, leaving a chapter offers to mark it edited, whether or not you changed or saved anything (once; nothing is asked for a chapter already marked). */
+  async offerMarkEdited(tabId: string): Promise<void> {
     const tab = this.tab(tabId);
     const project = this.state.project;
-    if (!tab || !project || project.meta.status !== 'editing' || !tab.savedHere || tab.draft !== null) return;
+    if (!tab || !project || project.meta.status !== 'editing' || tab.draft !== null || tab.markDeclined) return;
     const ref = this.chapterRef(tab.file, tab.chapter);
     if (!ref || isChapterEdited(project.meta, ref.rel, ref.id)) return;
     if (await this.api.confirmMarkEdited(ref.title)) await this.setChapterEdited(tab.file, tab.chapter, true);
+    else this.patchTab(tabId, { markDeclined: true });
   }
 
   private removeTabs(ids: string[]): void {
@@ -765,6 +776,7 @@ export class Workspace {
         autosavedAt: null,
         saved: { version: (t.saved?.version ?? 0) + 1, markdown: text },
         savedHere: true,
+        markDeclined: false,
         ...(restructured ? { chapter: idx, reloadKey: t.reloadKey + 1 } : {})
       }));
       this.dropDraft(tab.file);
@@ -935,6 +947,68 @@ export class Workspace {
       this.set({ error: String(e instanceof Error ? e.message : e) });
       return false;
     }
+  }
+
+  // ---- text analysis --------------------------------------------------------------------
+
+  isAnalyzing(file: string): boolean {
+    return this.analyzing.has(file);
+  }
+
+  /**
+   * Analyses a manuscript's prose in the background and writes the report beside it as a new Markdown file,
+   * which opens in a tab without taking focus. Returns the report's path, or null if it could not be made.
+   */
+  async analyzeFile(file: string): Promise<string | null> {
+    if (this.analyzing.has(file)) {
+      this.set({ notice: `${basename(file)} is already being analysed.` });
+      return null;
+    }
+    this.analyzing.add(file);
+    this.set({ notice: `Analysing ${basename(file)} in the background. The report will open in a new tab when it is ready.` });
+    try {
+      const { text } = await this.api.readFile(file);
+      const doc = this.split(text);
+      const open = this.tabForFile(file);
+      const chapters: ChapterInput[] = doc.chapters.map((c, i) => ({
+        title: c.title,
+        isPreamble: c.isPreamble,
+        raw: open && open.draft !== null && open.chapter === i ? open.draft : c.raw
+      }));
+      // a preamble with no prose (just a title page or nothing) would only add an empty row
+      const inputs = chapters.filter((c) => !c.isPreamble || /\p{L}/u.test(c.raw.replace(/^\s*#.*$/gm, '')));
+      const analysis = await analyzeManuscript(inputs);
+      const meta = { source: basename(file), generated: localDay(new Date()) };
+      const report = renderReport(analysis, { ...meta, level: this.state.chapterLevel }) + embedAnalysis(analysis, meta);
+      const dir = dirname(file);
+      const folder = this.state.root ? findNode(this.state.root, dir) : undefined;
+      const taken = folder && folder.kind === 'dir' ? folder.children.map((c) => c.name.toLowerCase()) : [];
+      const stem = stripExt(basename(file));
+      let name = `${stem} - Analysis.md`;
+      for (let n = 2; taken.includes(name.toLowerCase()) && n < 1000; n++) name = `${stem} - Analysis ${n}.md`;
+      const created = await this.api.createFile(dir, name, report);
+      await this.refresh();
+      this.expandPath(created);
+      await this.openInBackground(created, file);
+      this.set({ notice: `Analysis of ${basename(file)} is ready: ${basename(created)}` });
+      return created;
+    } catch (e) {
+      this.set({ notice: null, error: `Could not analyse ${basename(file)}: ${e instanceof Error ? e.message : e}` });
+      return null;
+    } finally {
+      this.analyzing.delete(file);
+    }
+  }
+
+  /** Opens `file` as a new tab (next to `after`'s tab, if it has one) without switching to it. */
+  async openInBackground(file: string, after?: string): Promise<void> {
+    if (this.tabForFile(file)) return;
+    await this.loadDoc(file);
+    const created = this.newTab(file, 0);
+    const tabs = this.state.tabs.slice();
+    const at = after ? tabs.findIndex((t) => t.file === after) : -1;
+    tabs.splice(at >= 0 ? at + 1 : tabs.length, 0, created);
+    this.set({ tabs });
   }
 
   /** Creates a folder and reveals it in the tree. Returns its path, or null on failure. */
