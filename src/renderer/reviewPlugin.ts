@@ -1,5 +1,5 @@
 import type { Node as PmNode } from '@milkdown/kit/prose/model';
-import { Plugin, PluginKey, TextSelection } from '@milkdown/kit/prose/state';
+import { Plugin, PluginKey, TextSelection, type Transaction } from '@milkdown/kit/prose/state';
 import { Decoration, DecorationSet, type EditorView } from '@milkdown/kit/prose/view';
 import { locateAnchor, makeAnchor, type Anchor } from '../shared/review/comments';
 
@@ -15,7 +15,16 @@ export interface NoteStatus {
   detached: string[];
 }
 
+/** A note whose text the user edited: its new anchor, or `gone` when all of its text was deleted (it stays at that spot). */
+export interface NoteChange {
+  id: string;
+  anchor: Anchor;
+  gone: boolean;
+}
+
 export interface ReviewApi {
+  /** Called (after each edit) with the notes whose highlighted text changed. */
+  onChanges(cb: ((changes: NoteChange[]) => void) | null): void;
   /** Draws these notes and reports which ones can no longer be found in the text. */
   setNotes(notes: NoteMark[]): NoteStatus;
   /** The current selection as an anchor, or null when nothing is selected. `oneBlock` is false if it crosses paragraphs. */
@@ -79,6 +88,8 @@ interface State {
   found: Map<string, { from: number; to: number }>;
   active: string | null;
   decos: DecorationSet;
+  /** Notes the last edit changed; reported to the app by the plugin view. */
+  changes: NoteChange[];
 }
 
 interface Meta {
@@ -106,21 +117,69 @@ function compute(doc: PmNode, notes: NoteMark[], active: string | null): State {
       })
     );
   }
-  return { notes, found, active, decos: DecorationSet.create(doc, decos) };
+  return { notes, found, active, decos: DecorationSet.create(doc, decos), changes: [] };
+}
+
+function decorate(doc: PmNode, notes: NoteMark[], found: Map<string, { from: number; to: number }>, active: string | null): DecorationSet {
+  const decos: Decoration[] = [];
+  for (const n of notes) {
+    const r = found.get(n.id);
+    if (r) decos.push(Decoration.inline(r.from, r.to, { class: `review-mark review-${n.kind}${n.id === active ? ' review-active' : ''}`, 'data-note': n.id }));
+  }
+  return DecorationSet.create(doc, decos);
+}
+
+/** True when a transaction swaps out the whole document (a chapter loaded), rather than editing inside it. */
+function replacesAll(tr: Transaction): boolean {
+  return tr.steps.some((s) => {
+    const m = s.toJSON() as { stepType?: string; from?: number; to?: number };
+    return m.stepType === 'replace' && m.from === 0 && m.to === tr.before.content.size;
+  });
+}
+
+/** Follows the notes through an edit, so changing a note's text changes the note rather than losing it. */
+function track(tr: Transaction, prev: State, doc: PmNode): State {
+  const flat = flatten(doc);
+  const found = new Map<string, { from: number; to: number }>();
+  const changes: NoteChange[] = [];
+  for (const n of prev.notes) {
+    const r = prev.found.get(n.id);
+    if (!r) continue;
+    const from = tr.mapping.map(r.from, 1);
+    const to = tr.mapping.map(r.to, -1);
+    if (to > from) {
+      found.set(n.id, { from, to });
+      const a = posToOffset(flat, from);
+      const b = posToOffset(flat, to);
+      if (a !== null && b !== null && flat.text.slice(a, b) !== n.anchor.quote) changes.push({ id: n.id, anchor: makeAnchor(flat.text, a, b), gone: false });
+    } else {
+      const at = posToOffset(flat, Math.min(from, doc.content.size));
+      if (at !== null) changes.push({ id: n.id, anchor: makeAnchor(flat.text, at, at), gone: true });
+    }
+  }
+  return { ...prev, found, decos: decorate(doc, prev.notes, found, prev.active), changes };
 }
 
 let clickHandler: ((id: string) => void) | null = null;
+let changeHandler: ((changes: NoteChange[]) => void) | null = null;
 
 export const reviewPlugin = new Plugin<State>({
   key: reviewKey,
   state: {
-    init: () => ({ notes: [], found: new Map(), active: null, decos: DecorationSet.empty }),
+    init: () => ({ notes: [], found: new Map(), active: null, decos: DecorationSet.empty, changes: [] }),
     apply(tr, prev, _old, next) {
       const meta = tr.getMeta(reviewKey) as Meta | undefined;
-      if (!meta && !tr.docChanged) return prev;
+      if (!meta && !tr.docChanged) return prev.changes.length ? { ...prev, changes: [] } : prev;
+      if (!meta && !replacesAll(tr)) return track(tr, prev, next.doc);
       return compute(next.doc, meta?.notes ?? prev.notes, meta && 'active' in meta ? (meta.active ?? null) : prev.active);
     }
   },
+  view: () => ({
+    update(view, before) {
+      const s = reviewKey.getState(view.state);
+      if (s && s.changes.length && s !== reviewKey.getState(before) && changeHandler) changeHandler(s.changes);
+    }
+  }),
   props: {
     decorations: (state) => reviewKey.getState(state)?.decos,
     handleClick(_view, _pos, event) {
@@ -202,6 +261,10 @@ export function reviewApiFor(getView: () => EditorView | null): ReviewApi {
       tr.setSelection(TextSelection.create(tr.doc, hit.from + text.length));
       view.dispatch(tr);
       return true;
+    },
+
+    onChanges(cb) {
+      changeHandler = cb;
     },
 
     onClick(cb) {

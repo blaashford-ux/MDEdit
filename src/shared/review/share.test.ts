@@ -262,6 +262,17 @@ describe('the owner on two devices', () => {
     expect(parseReviewFile(saved.text)!.items.map((i) => i.id)).toEqual(['n1']);
   });
 
+  it('finds the PC’s shares when Drive names My Drive itself as the top-level parent (as the real Drive does)', async () => {
+    const { drive, pc, phone } = devices();
+    // The real Drive lists a top-level folder with parents: [<id of My Drive>], an id the app never sees listed.
+    const real = Object.create(drive) as FakeDrive;
+    real.listAll = async () => (await drive.listAll()).map((f) => (f.parentId === null ? { ...f, parentId: 'MY-DRIVE-ROOT' } : f));
+    const phoneShare = new ReviewShare({ fs: phone.fs, drive: () => real, stateFile: '/state-ph/shares.json', newId: () => 'phabcdefgh' });
+    await pc.share.invite('/root/Novel', 'Novel', 'Sam');
+    expect((await phoneShare.list()).map((x) => x.project)).toEqual(['Novel']);
+    expect((await drive.listAll()).filter((f) => f.isFolder && f.name === 'MDEdit Reviews')).toHaveLength(1);
+  });
+
   it('a reviewer removed on one device stays removed on the other', async () => {
     const { pc, phone } = devices();
     const sam = await pc.share.invite('/root/Novel', 'Novel', 'Sam');

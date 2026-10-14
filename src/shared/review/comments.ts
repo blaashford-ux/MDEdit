@@ -11,6 +11,8 @@ export interface Anchor {
   suffix: string
   /** Where it was when written; a hint, not the truth (the text may have moved). */
   start: number
+  /** The quoted text was edited away entirely; the note stays at this spot (between `prefix` and `suffix`) and is resolved. */
+  gone?: boolean
 }
 
 export interface Reply {
@@ -75,6 +77,10 @@ export function makeAnchor(text: string, start: number, end: number): Anchor {
 
 /** All places the quote occurs, best match first. Null when the text no longer contains it. */
 export function locateAnchor(text: string, a: Anchor): { start: number; end: number } | null {
+  if (a.gone) {
+    const i = text.indexOf(a.prefix + a.suffix)
+    return i === -1 ? null : { start: i + a.prefix.length, end: i + a.prefix.length }
+  }
   if (!a.quote) return null
   if (text.startsWith(a.quote, a.start)) {
     const here = score(text, a, a.start)
