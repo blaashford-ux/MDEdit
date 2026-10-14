@@ -981,9 +981,6 @@ export function App() {
               <Icon name="download" /> Export…
             </button>
           )}
-          <button onClick={() => promptNewFile(dirFor(null))} disabled={!s.root} title="New file (Ctrl+N)" aria-label="New file">
-            <Icon name="filePlus" /> File
-          </button>
           {caps.importDocx && (
             <button
               onClick={() => void ws.importDocx(dirFor(null))}
@@ -994,6 +991,9 @@ export function App() {
               <Icon name="upload" /> Import
             </button>
           )}
+          <button onClick={() => promptNewFile(dirFor(null))} disabled={!s.root} title="New file (Ctrl+N)" aria-label="New file">
+            <Icon name="filePlus" /> File
+          </button>
           <button
             onClick={() => promptNewFolder(dirFor(null))}
             disabled={!s.root}
