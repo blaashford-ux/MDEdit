@@ -1106,16 +1106,17 @@ describe('edited chapters (Editing stage)', () => {
     await ws.setChapterEdited(A, 0, true);
     await ws.openChapter(A, 0);
     await saveChapter(A, '# One\ny');
-    await ws.openChapter(A, 2);
-    expect(api.markEditedAsked).toEqual(['One']);
+    await ws.openChapter(A, 2); // passes through chapter two, which is offered now (read, not changed)
+    expect(api.markEditedAsked).toEqual(['One', 'Two']);
   });
 
-  it('only chapters you saved are offered, and only in the Editing stage', async () => {
+  it('leaving a chapter you only read through (no changes, no save) is offered too, and only in the Editing stage', async () => {
     await openEditing();
     await ws.openChapter(A, 0);
-    await ws.openChapter(A, 1); // just browsing
-    expect(api.markEditedAsked).toEqual([]);
+    await ws.openChapter(A, 1); // read it, changed nothing
+    expect(api.markEditedAsked).toEqual(['One']);
     await ws.closeProject();
+    api.markEditedAsked.length = 0;
     await openEditing({ status: 'drafting' });
     await ws.openChapter(A, 0);
     await saveChapter(A, '# One\nz');
@@ -1147,11 +1148,11 @@ describe('edited chapters (Editing stage)', () => {
     expect(api.markEditedAsked).toEqual(['Three']);
     expect(await ws.newChapter(A, 2, 'Four')).toBe(true); // leaving for the new chapter does not ask a second time
     expect(api.markEditedAsked).toEqual(['Three']);
-    await ws.openChapter(A, 2);
+    await ws.openChapter(A, 2); // leaving the new, empty chapter asks about it
     await saveChapter(A, '# Three\nfinal, again'); // saving again makes it ask again
     api.markEditedAnswers = [true];
     await ws.offerMarkEdited(tabOf(A).id);
-    expect(api.markEditedAsked).toEqual(['Three', 'Three']);
+    expect(api.markEditedAsked).toEqual(['Three', 'Four', 'Three']);
     expect(ws.isChapterEdited(A, 2)).toBe(true);
   });
 

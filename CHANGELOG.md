@@ -4,6 +4,7 @@
 **Fixed**
 - **Notes keep their place when you edit the text they're on.** Deleting some of a highlighted passage no longer removes the note and its highlight; they stay on what's left. If all of the text is deleted, the note is marked Resolved ("text deleted") and stays at that spot.
 - **Accepting a suggestion that is in another chapter** now opens that chapter and applies it, instead of saying the text has changed.
+- **"Mark Edited?" is asked when you leave any chapter in the Editing stage**, not only ones you changed and saved. Reading a chapter through and moving on now offers it too (not for chapters already marked, and not again after "Not Yet" until you save it).
 - **The phone's Sharing page showed "Nothing shared yet"** for projects shared from the PC. The phone looked for the shared-reviews folder in Drive by a test that real Drive doesn't satisfy, so it never found the PC's list of shares (and could have made a second folder).
 
 ### 0.7.2 — 2026-10-13

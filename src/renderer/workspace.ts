@@ -39,9 +39,9 @@ export interface Tab {
   conflict: Conflict | null;
   /** When the current draft was last autosaved for crash recovery. */
   autosavedAt: number | null;
-  /** The open chapter has been saved since it was opened (so leaving it can offer "Mark Edited"). */
+  /** The open chapter has been saved since it was opened. */
   savedHere: boolean;
-  /** "Not Yet" was answered for this saved chapter, so it is not asked about again until it is saved again or left. */
+  /** "Not Yet" was answered for this chapter, so it is not asked about again until it is left. */
   markDeclined: boolean;
 }
 
@@ -604,11 +604,11 @@ export class Workspace {
     }
   }
 
-  /** In the Editing stage, leaving a chapter you saved offers to mark it edited (once; nothing is asked for a chapter already marked). */
+  /** In the Editing stage, leaving a chapter offers to mark it edited, whether or not you changed or saved anything (once; nothing is asked for a chapter already marked). */
   async offerMarkEdited(tabId: string): Promise<void> {
     const tab = this.tab(tabId);
     const project = this.state.project;
-    if (!tab || !project || project.meta.status !== 'editing' || !tab.savedHere || tab.draft !== null || tab.markDeclined) return;
+    if (!tab || !project || project.meta.status !== 'editing' || tab.draft !== null || tab.markDeclined) return;
     const ref = this.chapterRef(tab.file, tab.chapter);
     if (!ref || isChapterEdited(project.meta, ref.rel, ref.id)) return;
     if (await this.api.confirmMarkEdited(ref.title)) await this.setChapterEdited(tab.file, tab.chapter, true);
