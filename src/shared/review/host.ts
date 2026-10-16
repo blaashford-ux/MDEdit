@@ -38,10 +38,12 @@ export function createReviewHost(o: ReviewHostOptions): ReviewSharingApi {
       await share.revokeAll(norm(project), basename(project));
     },
 
-    async inviteReviewer(project, name) {
+    async inviteReviewer(project, name, chapters) {
       need();
-      return share.invite(norm(project), basename(project), name);
+      return share.invite(norm(project), basename(project), name, chapters);
     },
+
+    getShareChapters: (project, level) => share.chapters(norm(project), basename(project), level),
 
     async revokeReviewer(project, id) {
       need();

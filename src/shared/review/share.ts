@@ -13,7 +13,8 @@ import { toCompliantName } from '../sync/names';
 import { DRIVE_REVIEWS_NAME, type DriveApi, type DriveFile } from '../sync/drive';
 import { mergeReviewFiles, newReviewFile, parseReviewFile, serializeReviewFile, type ReviewFile } from './comments';
 import { buildInviteLink } from './link';
-import { buildPackage, parsePackage, readMarker, writeMarker, writePackage } from './package';
+import { splitChapters } from '../chapters';
+import { buildPackage, chapterKeys, parsePackage, readMarker, selectChapters, writeMarker, writePackage, type ChapterSelection } from './package';
 
 export interface ReviewerRecord {
   id: string;
@@ -21,6 +22,22 @@ export interface ReviewerRecord {
   commentsId: string;
   createdAt: string;
   link: string;
+  /**
+   * Set when this reviewer was given only some chapters: the keys of those chapters, and their own package file in Drive
+   * (everyone else shares the project's package). Absent means the whole manuscript.
+   */
+  chapters?: string[];
+  chapterLevel?: number;
+  packageId?: string;
+  packageMd5?: string | null;
+}
+
+/** The chapters of a project's manuscript as the share dialog lists them. */
+export interface ShareChapters {
+  manuscript: string | null;
+  chapters: { key: string; title: string }[];
+  /** Keys ticked by default: what was ticked for this manuscript last time (everything the first time). */
+  selected: string[];
 }
 
 export interface ShareRecord {
@@ -38,6 +55,8 @@ interface ShareState {
   /** The shared-with-all-devices copy of this state in Drive (see `refresh`). */
   stateId?: string | null;
   projects: Record<string, ShareRecord>;
+  /** The chapters last ticked in the share dialog, per manuscript (`project/path`), so the next invitation starts from them. */
+  selections?: Record<string, string[]>;
 }
 
 /** The part of a project's share record that every device of the owner needs to know. */
@@ -127,7 +146,7 @@ export class ReviewShare {
     this.loaded = true;
     try {
       const raw = JSON.parse(await this.o.fs.readText(this.o.stateFile)) as Partial<ShareState>;
-      if (raw.version === 1 && raw.projects) this.state = { version: 1, folderId: raw.folderId ?? null, projects: raw.projects };
+      if (raw.version === 1 && raw.projects) this.state = { version: 1, folderId: raw.folderId ?? null, projects: raw.projects, selections: raw.selections ?? {} };
     } catch {
       /* first run */
     }
@@ -279,14 +298,82 @@ export class ReviewShare {
     this.packageChecked.add(`${project}:${packageId}`);
   }
 
-  /** Adds a reviewer: makes their comments file and returns the link to send them. */
-  async invite(dir: string, project: string, reviewerName: string): Promise<ReviewerRecord> {
+  /** The manuscript reviewers see: the active one, or the project's only prose file. */
+  private async manuscriptOf(dir: string, project: string): Promise<string | null> {
+    const active = (await makeProjects(this.o.fs).readMeta(dir))?.activeManuscript ?? null;
+    if (active) return active;
+    const all = await buildPackage(this.o.fs, dir, project, this.now);
+    return all.files.length === 1 ? all.files[0].path : null;
+  }
+
+  /** The manuscript's chapters for the share dialog, with the ticks remembered from last time. */
+  async chapters(dir: string, project: string, level: number): Promise<ShareChapters> {
+    await this.load();
+    const manuscript = await this.manuscriptOf(dir, project);
+    if (!manuscript) return { manuscript: null, chapters: [], selected: [] };
+    const pkg = await buildPackage(this.o.fs, dir, project, this.now, manuscript);
+    const chapters = pkg.files[0] ? chapterKeys(splitChapters(pkg.files[0].text, level)) : [];
+    const saved = this.state.selections?.[`${project}/${manuscript}`];
+    const selected = saved ? chapters.filter((c) => saved.includes(c.key)).map((c) => c.key) : chapters.map((c) => c.key);
+    return { manuscript, chapters, selected };
+  }
+
+  /** Uploads each chapter-limited reviewer's own copy (only the chapters they were given), when it has changed. */
+  private async publishSubsets(dir: string, project: string): Promise<void> {
+    const rec = this.state.projects[project];
+    if (!rec?.reviewers.some((r) => r.chapters && r.packageId)) return;
+    const manuscript = await this.manuscriptOf(dir, project);
+    if (!manuscript) return;
+    let changed = false;
+    const reviewers: ReviewerRecord[] = [];
+    for (const r of rec.reviewers) {
+      if (!r.chapters || !r.packageId) {
+        reviewers.push(r);
+        continue;
+      }
+      const pkg = await buildPackage(this.o.fs, dir, project, this.now, manuscript, { keys: r.chapters, level: r.chapterLevel ?? 1 });
+      const md5 = md5Hex(JSON.stringify({ ...pkg, publishedAt: '' }));
+      if (md5 !== r.packageMd5 || !(await this.o.drive().getFile(r.packageId))) {
+        await this.o.drive().updateFile(r.packageId, JSON.stringify(pkg));
+        changed = true;
+        reviewers.push({ ...r, packageMd5: md5 });
+      } else reviewers.push(r);
+    }
+    if (changed) {
+      this.state.projects[project] = { ...rec, reviewers };
+      await this.save();
+    }
+  }
+
+  /**
+   * Adds a reviewer: makes their comments file and returns the link to send them. With `chapters` (fewer than all of them) the
+   * reviewer gets a copy of the manuscript holding just those chapters, in a file of their own; the choice is remembered for the
+   * manuscript so the next invitation starts from the same ticks.
+   */
+  async invite(dir: string, project: string, reviewerName: string, chapters?: ChapterSelection | null): Promise<ReviewerRecord> {
     await this.load();
     await this.refresh(true);
     const rec = await this.publish(dir, project);
     await this.ensurePackageShared(project, rec.packageId, true);
     const id = this.newId();
     const name = reviewerName.trim() || 'Reviewer';
+    let subset: Pick<ReviewerRecord, 'chapters' | 'chapterLevel' | 'packageId' | 'packageMd5'> = {};
+    if (chapters) {
+      const manuscript = await this.manuscriptOf(dir, project);
+      if (manuscript) {
+        const pkg0 = await buildPackage(this.o.fs, dir, project, this.now, manuscript);
+        const all = pkg0.files[0] ? chapterKeys(splitChapters(pkg0.files[0].text, chapters.level)).map((c) => c.key) : [];
+        const keys = all.filter((k) => chapters.keys.includes(k));
+        if (keys.length === 0) throw new Error('Tick at least one chapter for this reviewer to see.');
+        this.state.selections = { ...this.state.selections, [`${project}/${manuscript}`]: keys };
+        if (keys.length < all.length) {
+          const pkg = await buildPackage(this.o.fs, dir, project, this.now, manuscript, { keys, level: chapters.level });
+          const file = await this.o.drive().createFile(`${toCompliantName(project)} - ${toCompliantName(name)}.mdedit-review.json`, await this.folder(), JSON.stringify(pkg));
+          await this.o.drive().shareByLink(file.id, 'reader');
+          subset = { chapters: keys, chapterLevel: chapters.level, packageId: file.id, packageMd5: md5Hex(JSON.stringify({ ...pkg, publishedAt: '' })) };
+        }
+      }
+    }
     const file = await this.o.drive().createFile(
       `${toCompliantName(project)} - ${toCompliantName(name)}.comments.json`,
       await this.folder(),
@@ -298,7 +385,8 @@ export class ReviewShare {
       name,
       commentsId: file.id,
       createdAt: this.now().toISOString(),
-      link: buildInviteLink({ packageId: rec.packageId, commentsId: file.id, reviewerId: id, project }),
+      link: buildInviteLink({ packageId: subset.packageId ?? rec.packageId, commentsId: file.id, reviewerId: id, project }),
+      ...subset
     };
     this.state.projects[project] = { ...rec, reviewers: [...rec.reviewers, reviewer] };
     await this.save();
@@ -315,6 +403,7 @@ export class ReviewShare {
     if (!rec || !who) return;
     await this.pull(dir, project).catch(() => undefined);
     await this.o.drive().unshare(who.commentsId).catch(() => undefined);
+    if (who.packageId) await this.o.drive().unshare(who.packageId).catch(() => undefined);
     const left = rec.reviewers.filter((r) => r.id !== reviewerId);
     if (left.length === 0) {
       await this.o.drive().unshare(rec.packageId).catch(() => undefined);
@@ -333,6 +422,9 @@ export class ReviewShare {
     if (!rec) return out;
     // An invitation that was sent while the package was private is repaired here, once per session.
     if (rec.reviewers.length > 0) await this.ensurePackageShared(project, rec.packageId).catch((e) => out.errors.push(e instanceof Error ? e.message : String(e)));
+    for (const who of rec.reviewers) {
+      if (who.packageId) await this.ensurePackageShared(`${project}/${who.id}`, who.packageId).catch((e) => out.errors.push(e instanceof Error ? e.message : String(e)));
+    }
     const reviews = makeReviews(this.o.fs);
     const local = new Map((await reviews.list(dir)).map((r) => [r.id, r.text]));
     for (const who of rec.reviewers) {
@@ -358,6 +450,7 @@ export class ReviewShare {
     await this.refresh();
     if (!this.state.projects[project]?.reviewers.length) return { changed: false, errors: [] };
     await this.publish(dir, project);
+    await this.publishSubsets(dir, project);
     return this.pull(dir, project);
   }
 }

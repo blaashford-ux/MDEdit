@@ -607,6 +607,14 @@ code.path { background: var(--raised); padding: 1px 6px; border-radius: 6px; }
 .share-list li { display: flex; align-items: center; gap: 6px; padding: 6px 8px; background: var(--raised); border-radius: 10px; }
 .share-list .grow-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .share-add { display: flex; gap: 6px; margin-top: 8px; }
+.share-chapters { margin: 8px 0 0; padding: 6px 8px; border: 1px solid var(--border, rgba(128,128,128,.3)); border-radius: 10px; min-width: 0; }
+.share-chapters legend { padding: 0 4px; font-size: 13px; }
+.share-chapters-tools { display: flex; gap: 10px; align-items: center; margin-bottom: 4px; }
+.share-chapters-tools .link { background: none; border: 0; padding: 0; color: var(--accent, inherit); text-decoration: underline; cursor: pointer; }
+.share-chapter-list { max-height: 160px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+.share-chapter-list label { display: flex; align-items: center; gap: 8px; padding: 2px 4px; cursor: pointer; }
+.share-chapter-list input { margin: 0; flex: none; }
+.share-chapter-list span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .share-add input { margin-top: 0; }
 .share-note { margin: 6px 0; font-size: 12px; color: var(--accent); word-break: break-all; }
 .shared-with-me > button { margin-top: 8px; }

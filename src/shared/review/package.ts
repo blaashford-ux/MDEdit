@@ -1,3 +1,4 @@
+import { joinChapters, splitChapters, type MarkdownDoc } from '../chapters';
 import type { FsPort } from '../fsPort';
 import { classify } from '../sync/rules';
 
@@ -11,8 +12,39 @@ export interface ReviewPackage {
 
 const MAX_FILES = 600;
 
+/** The chapters of a manuscript a reviewer may see, by key (see `chapterKeys`), and the heading level that splits it. */
+export interface ChapterSelection {
+  keys: string[];
+  level: number;
+}
+
+/** Key of the text before the first chapter heading. */
+export const PREAMBLE_KEY = '\u0000front';
+
+/**
+ * A stable key for each chapter: its title, with " (2)", " (3)" … for a title that repeats. Moving a chapter keeps its key;
+ * renaming it makes it a new chapter.
+ */
+export function chapterKeys(doc: MarkdownDoc): { key: string; title: string }[] {
+  const seen = new Map<string, number>();
+  return doc.chapters.map((c) => {
+    if (c.isPreamble) return { key: PREAMBLE_KEY, title: '' };
+    const n = (seen.get(c.title) ?? 0) + 1;
+    seen.set(c.title, n);
+    return { key: n === 1 ? c.title : `${c.title} (${n})`, title: c.title };
+  });
+}
+
+/** The manuscript text reduced to the selected chapters (in their original order). */
+export function selectChapters(text: string, sel: ChapterSelection): string {
+  const doc = splitChapters(text, sel.level);
+  const want = new Set(sel.keys);
+  const keys = chapterKeys(doc);
+  return joinChapters({ ...doc, chapters: doc.chapters.filter((_, i) => want.has(keys[i].key)) });
+}
+
 /** Every prose file in the project folder (Markdown only; settings, exports and hidden folders are left out), or just `only`. */
-export async function buildPackage(fs: FsPort, dir: string, project: string, now: () => Date = () => new Date(), only?: string): Promise<ReviewPackage> {
+export async function buildPackage(fs: FsPort, dir: string, project: string, now: () => Date = () => new Date(), only?: string, chapters?: ChapterSelection): Promise<ReviewPackage> {
   const files: { path: string; text: string }[] = [];
   const walk = async (rel: string): Promise<void> => {
     const entries = (await fs.readdir(rel ? `${dir}/${rel}` : dir)).sort((a, b) => a.name.localeCompare(b.name));
@@ -22,7 +54,8 @@ export async function buildPackage(fs: FsPort, dir: string, project: string, now
       if (e.isDirectory) {
         if (!e.name.startsWith('.')) await walk(r);
       } else if (e.isFile && classify(r) === 'prose' && files.length < MAX_FILES && (only === undefined || r === only)) {
-        files.push({ path: r, text: await fs.readText(`${dir}/${r}`) });
+        const text = await fs.readText(`${dir}/${r}`);
+        files.push({ path: r, text: chapters && only !== undefined ? selectChapters(text, chapters) : text });
       }
     }
   };

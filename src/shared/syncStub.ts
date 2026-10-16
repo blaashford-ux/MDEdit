@@ -22,6 +22,7 @@ export const reviewOff: ReviewSharingApi = {
   listShares: async () => [],
   stopSharing: off,
   inviteReviewer: off,
+  getShareChapters: async () => ({ manuscript: null, chapters: [], selected: [] }),
   revokeReviewer: off,
   exchangeReviews: async () => ({ changed: false, revoked: false, errors: [] }),
   listShared: async () => [],

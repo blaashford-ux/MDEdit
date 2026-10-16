@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { SyncStatus } from '../shared/api';
 import { parseReviewFile } from '../shared/review/comments';
 import { inviteMessage } from '../shared/review/link';
-import type { ShareStatus } from '../shared/review/share';
+import type { ShareChapters, ShareStatus } from '../shared/review/share';
 import { useEscape } from './useEscape';
 
 interface Props {
@@ -39,6 +39,9 @@ export function ShareDialog({ project, projectName, manuscript: given, sync, onC
   }, [project, given]);
   const manuscript = given !== undefined ? given : (loaded ?? null);
   const [status, setStatus] = useState<ShareStatus | null>(null);
+  const [list, setList] = useState<ShareChapters | null>(null);
+  const [ticked, setTicked] = useState<Set<string>>(new Set());
+  const [level, setLevel] = useState(1);
   const [counts, setCounts] = useState<Map<string, { open: number; total: number }>>(new Map());
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
@@ -46,6 +49,35 @@ export function ShareDialog({ project, projectName, manuscript: given, sync, onC
   const [note, setNote] = useState<string | null>(null);
   const [confirmStop, setConfirmStop] = useState(false);
   useEscape(onClose);
+
+  // The manuscript's chapters, with the ticks from the last invitation (every chapter the first time).
+  useEffect(() => {
+    let live = true;
+    void (async () => {
+      try {
+        const [meta, defaults] = await Promise.all([api.getProjectMeta(project).catch(() => null), api.getAppDefaults().catch(() => null)]);
+        const lv = meta?.overrides?.chapterLevel ?? defaults?.chapterLevel ?? 1;
+        const res = await api.getShareChapters(project, lv);
+        if (!live) return;
+        setLevel(lv);
+        setList(res);
+        setTicked(new Set(res.selected));
+      } catch {
+        /* no chapter list: the invitation covers the whole manuscript */
+      }
+    })();
+    return () => {
+      live = false;
+    };
+  }, [project, manuscript]);
+  const chapters = list?.chapters ?? [];
+  const limited = chapters.length > 1;
+  const toggle = (key: string) =>
+    setTicked((t) => {
+      const n = new Set(t);
+      if (!n.delete(key)) n.add(key);
+      return n;
+    });
 
   const load = () => {
     void api.getShareStatus(project).then(setStatus).catch(() => undefined);
@@ -116,6 +148,7 @@ export function ShareDialog({ project, projectName, manuscript: given, sync, onC
                       {r.name}
                       <span className="muted small share-sub">
                         {' '}
+                        {r.chapters ? `${r.chapters.length} chapter${r.chapters.length === 1 ? '' : 's'} · ` : ''}
                         {c ? `${c.open} open of ${c.total} note${c.total === 1 ? '' : 's'}` : 'no notes yet'}
                         {when(r.createdAt) ? ` · invited ${when(r.createdAt)}` : ''}
                       </span>
@@ -127,20 +160,40 @@ export function ShareDialog({ project, projectName, manuscript: given, sync, onC
                 );
               })}
             </ul>
+            {limited && (
+              <fieldset className="share-chapters">
+                <legend>
+                  Chapters this reviewer can see <span className="muted small">({ticked.size} of {chapters.length})</span>
+                </legend>
+                <div className="share-chapters-tools small">
+                  <button type="button" className="link" onClick={() => setTicked(new Set(chapters.map((c) => c.key)))}>All</button>
+                  <button type="button" className="link" onClick={() => setTicked(new Set())}>None</button>
+                  <span className="muted">Remembered for this manuscript.</span>
+                </div>
+                <div className="share-chapter-list" role="group" aria-label="Chapters">
+                  {chapters.map((c) => (
+                    <label key={c.key}>
+                      <input type="checkbox" checked={ticked.has(c.key)} onChange={() => toggle(c.key)} />
+                      <span>{c.title || 'Front matter'}</span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            )}
             <form
               className="share-add"
               onSubmit={(e) => {
                 e.preventDefault();
-                if (!name.trim()) return;
+                if (!name.trim() || (limited && ticked.size === 0)) return;
                 void run(async () => {
-                  const r = await api.inviteReviewer(project, name.trim());
+                  const r = await api.inviteReviewer(project, name.trim(), limited ? { keys: [...ticked], level } : null);
                   setName('');
                   setNote((await copy(inviteMessage(projectName, r.link, r.name))) ? `Invitation for ${r.name} copied. Send it to them (use Copy link above for the link alone).` : r.link);
                 });
               }}
             >
               <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Reviewer’s name" aria-label="Reviewer’s name" maxLength={40} />
-              <button type="submit" className="primary" disabled={busy || !name.trim()}>{busy ? 'Working…' : 'Create link'}</button>
+              <button type="submit" className="primary" disabled={busy || !name.trim() || (limited && ticked.size === 0)}>{busy ? 'Working…' : 'Create link'}</button>
             </form>
             {note && <div className="share-note" role="status">{note}</div>}
             {error && <div className="modal-error" role="alert">{error}</div>}

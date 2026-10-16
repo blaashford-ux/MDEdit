@@ -1,5 +1,9 @@
 # Changelog
 
+### 0.7.5 — 2026-10-16
+**New**
+- **Share only some chapters.** The Share dialog now has a scrolling list of the manuscript's chapters with a tick box for each (**All** / **None** above it). A reviewer's link gives them only the ticked chapters: they get their own copy of the manuscript containing just those chapters, which stays up to date as you edit, and their notes come back as usual. Your ticks are remembered for that manuscript, so sending several links doesn't mean re-ticking the same boxes; a chapter added later starts unticked. Ticking every chapter shares the whole manuscript, as before. Removing a reviewer also closes their copy.
+
 ### 0.7.4 — 2026-10-14
 **New**
 - **Import Word documents.** Right-click a folder → **Import Word Document…**, or use the **Import** button at the top of the file tree (next to **File** and **Folder**). Pick one or more `.docx` files and each becomes a Markdown file of the same name in that folder (a taken name becomes `Name (2).md`). Headings (including Title) become `#` headings; bold, italic and strikethrough, links, bullet and numbered lists, block quotes and tables are kept. Windows app only.

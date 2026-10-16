@@ -300,3 +300,65 @@ describe('the owner on two devices', () => {
 function newReview(project: string, id: string, name: string, items: ReviewItem[]): string {
   return serializeReviewFile({ version: 1, reviewer: { id, name }, project, items });
 }
+
+describe('chapter-limited links', () => {
+  const MS = '/root/Novel/Manuscript/Book.md';
+  const book = '# One\n\nHello there\n\n# Two\n\nSecond\n\n# Three\n\nThird\n';
+
+  it('lists chapters, ticked by default, and remembers the ticks per manuscript', async () => {
+    const { ownerFs, share } = setup();
+    ownerFs.seed(MS, book);
+    const first = await share.chapters('/root/Novel', 'Novel', 1);
+    expect(first.manuscript).toBe('Manuscript/Book.md');
+    expect(first.chapters.map((c) => c.title)).toEqual(['One', 'Two', 'Three']);
+    expect(first.selected).toEqual(['One', 'Two', 'Three']);
+    await share.invite('/root/Novel', 'Novel', 'Sam', { keys: ['One', 'Three'], level: 1 });
+    expect((await share.chapters('/root/Novel', 'Novel', 1)).selected).toEqual(['One', 'Three']);
+    ownerFs.seed(MS, book + '\n# Four\n\nFourth\n'); // a later chapter starts unticked
+    expect((await share.chapters('/root/Novel', 'Novel', 1)).selected).toEqual(['One', 'Three']);
+  });
+
+  it('gives a limited reviewer their own package with only those chapters, and keeps it up to date', async () => {
+    const { drive, ownerFs, readerFs, share, join } = setup();
+    ownerFs.seed(MS, book);
+    const full = await share.invite('/root/Novel', 'Novel', 'Ann');
+    const sam = await share.invite('/root/Novel', 'Novel', 'Sam', { keys: ['Two'], level: 1 });
+    const inviteSam = parseInviteLink(sam.link)!;
+    expect(inviteSam.packageId).not.toBe(parseInviteLink(full.link)!.packageId);
+    expect(drive.links.get(inviteSam.packageId)).toBe('reader');
+
+    drive.granted = new Set([inviteSam.packageId, inviteSam.commentsId]);
+    const joined = await join.join(inviteSam, 'Sam');
+    const text = await readerFs.readText(`${joined.dir}/Manuscript/Book.md`);
+    expect(text).toContain('Second');
+    expect(text).not.toContain('Hello there');
+    expect(text).not.toContain('Third');
+
+    ownerFs.seed(MS, book.replace('Second', 'Second, edited').replace('Third', 'Secret'));
+    drive.granted = null;
+    await share.sync('/root/Novel', 'Novel');
+    drive.granted = new Set([inviteSam.packageId, inviteSam.commentsId]);
+    await join.sync(joined.dir);
+    const after = await readerFs.readText(`${joined.dir}/Manuscript/Book.md`);
+    expect(after).toContain('Second, edited');
+    expect(after).not.toContain('Secret');
+  });
+
+  it('closes the reviewer’s own package when they are removed, and needs at least one chapter', async () => {
+    const { drive, ownerFs, share } = setup();
+    ownerFs.seed(MS, book);
+    await expect(share.invite('/root/Novel', 'Novel', 'Sam', { keys: [], level: 1 })).rejects.toThrow(/at least one/);
+    const sam = await share.invite('/root/Novel', 'Novel', 'Sam', { keys: ['Two'], level: 1 });
+    await share.invite('/root/Novel', 'Novel', 'Ann');
+    await share.revoke('/root/Novel', 'Novel', sam.id);
+    expect(drive.links.get(sam.packageId!)).toBeUndefined();
+  });
+
+  it('ticking every chapter is the same as sharing the whole manuscript', async () => {
+    const { ownerFs, share } = setup();
+    ownerFs.seed(MS, book);
+    const r = await share.invite('/root/Novel', 'Novel', 'Sam', { keys: ['One', 'Two', 'Three'], level: 1 });
+    expect(r.chapters).toBeUndefined();
+    expect(r.packageId).toBeUndefined();
+  });
+});

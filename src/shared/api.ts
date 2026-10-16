@@ -3,7 +3,8 @@ import type { Origin } from './export/layers';
 import type { BookDetails } from './export/model';
 import type { Progress } from './progress';
 import type { AiRemoteStatus, AiServerInfo } from './agent/config';
-import type { ReviewerRecord, ShareStatus, ShareSummary, SharedProject } from './review/share';
+import type { ChapterSelection } from './review/package';
+import type { ReviewerRecord, ShareChapters, ShareStatus, ShareSummary, SharedProject } from './review/share';
 import type { UpdateInfo, UpdateProgress } from './update';
 import type { ProjectMeta, ProjectsConfig, ProjectsSettings, ProjectSummary, RootListing } from './projects';
 
@@ -397,8 +398,13 @@ export interface ReviewSharingApi {
   listShares(): Promise<ShareSummary[]>;
   /** Removes every reviewer of a project (their notes stay in it). */
   stopSharing(project: string): Promise<void>;
-  /** Makes a private comments file for a new reviewer and returns their invitation link (also publishes the text). */
-  inviteReviewer(project: string, name: string): Promise<ReviewerRecord>;
+  /**
+   * Makes a private comments file for a new reviewer and returns their invitation link (also publishes the text).
+   * With `chapters`, the reviewer is given only those chapters of the manuscript.
+   */
+  inviteReviewer(project: string, name: string, chapters?: ChapterSelection | null): Promise<ReviewerRecord>;
+  /** The share manuscript's chapters (split at heading `level`) and which ones were ticked last time. */
+  getShareChapters(project: string, level: number): Promise<ShareChapters>;
   /** Closes a reviewer's file; their notes stay in the project. */
   revokeReviewer(project: string, reviewerId: string): Promise<void>;
   /** Exchanges notes (and, for the owner, the latest text) with Drive for one open project. A no-op when nothing is shared. */

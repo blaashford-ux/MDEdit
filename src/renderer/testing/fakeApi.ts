@@ -33,6 +33,7 @@ export class FakeApi implements MdeditApi {
   listShares = reviewOff.listShares;
   stopSharing = reviewOff.stopSharing;
   inviteReviewer = reviewOff.inviteReviewer;
+  getShareChapters = reviewOff.getShareChapters;
   revokeReviewer = reviewOff.revokeReviewer;
   exchangeReviews = reviewOff.exchangeReviews;
   listShared = reviewOff.listShared;
