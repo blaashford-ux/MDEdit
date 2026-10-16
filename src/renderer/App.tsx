@@ -567,7 +567,8 @@ export function App() {
         ? [
             ws.isChapterEdited(row.path, i)
               ? { label: 'Unmark Edited', onClick: () => void ws.setChapterEdited(row.path, i, false) }
-              : { label: 'Mark Edited', onClick: () => void ws.setChapterEdited(row.path, i, true) }
+              : { label: 'Mark Edited', onClick: () => void ws.setChapterEdited(row.path, i, true) },
+            { label: 'Mark Edited to Here', onClick: () => void ws.markEditedThrough(row.path, i) }
           ]
         : []),
       { label: 'Move Up', hint: 'Alt+↑', disabled: !real || i <= first, onClick: () => void moveRow(row, -1) },

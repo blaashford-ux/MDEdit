@@ -1180,6 +1180,19 @@ describe('edited chapters (Editing stage)', () => {
     expect(edited()).toEqual({ 'renamed.md': ['Second'] });
   });
 
+  it('Mark Edited to Here marks every chapter up to and including the one chosen, and keeps later marks', async () => {
+    await openEditing();
+    await ws.openChapter(A, 0); // loads the file's chapters
+    await ws.setChapterEdited(A, 2, true);
+    await ws.markEditedThrough(A, 1);
+    expect(ws.isChapterEdited(A, 0)).toBe(true);
+    expect(ws.isChapterEdited(A, 1)).toBe(true);
+    expect(ws.isChapterEdited(A, 2)).toBe(true); // already marked, still marked
+    await ws.setChapterEdited(A, 2, false);
+    await ws.markEditedThrough(A, 0);
+    expect(ws.isChapterEdited(A, 2)).toBe(false);
+  });
+
   it('Unmark Edited removes the mark', async () => {
     await openEditing();
     await ws.setChapterEdited(A, 2, true);

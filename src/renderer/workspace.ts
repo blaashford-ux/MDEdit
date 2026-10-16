@@ -589,6 +589,16 @@ export class Workspace {
     return this.patchEdited((edited) => withChapterEdited(edited, ref.rel, ref.id, on));
   }
 
+  /** Marks every chapter of the file from the first up to and including `chapter` as edited (marks already set are kept). */
+  async markEditedThrough(file: string, chapter: number): Promise<boolean> {
+    const project = this.state.project;
+    const doc = this.state.docs.get(file);
+    if (!project || !doc || !doc.chapters[chapter]) return false;
+    const rel = relativeTo(project.path, file);
+    const ids = chapterIds(doc.chapters).slice(0, chapter + 1);
+    return this.patchEdited((edited) => ids.reduce((acc, id) => withChapterEdited(acc, rel, id, true), edited));
+  }
+
   /** Changes the edited marks, starting from what is stored now (a sync may have brought marks from another device). */
   private async patchEdited(change: (current: Record<string, string[]>) => Record<string, string[]>): Promise<boolean> {
     const project = this.state.project;
