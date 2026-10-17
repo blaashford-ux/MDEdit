@@ -1,6 +1,6 @@
 # Changelog
 
-### Unreleased
+### 0.7.6 — 2026-10-17
 **New**
 - **Help window.** **Help → MDEdit Help** (F1) opens a help guide in its own window, so you can keep it beside the editor. It covers every feature in short topics with examples, links between related topics, a contents list, search, and back/forward navigation.
 
