@@ -1,5 +1,9 @@
 # Changelog
 
+### Unreleased
+**New**
+- **Help window.** **Help → MDEdit Help** (F1) opens a help guide in its own window, so you can keep it beside the editor. It covers every feature in short topics with examples, links between related topics, a contents list, search, and back/forward navigation.
+
 ### 0.7.5 — 2026-10-16
 **New**
 - **Share only some chapters.** The Share dialog now has a scrolling list of the manuscript's chapters with a tick box for each (**All** / **None** above it). A reviewer's link gives them only the ticked chapters: they get their own copy of the manuscript containing just those chapters, which stays up to date as you edit, and their notes come back as usual. Your ticks are remembered for that manuscript, so sending several links doesn't mean re-ticking the same boxes; a chapter added later starts unticked. Ticking every chapter shares the whole manuscript, as before. Removing a reviewer also closes their copy.

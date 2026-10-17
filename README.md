@@ -85,6 +85,6 @@ Not included: the paperback cover PDF, ISBN barcodes and uploading to KDP.
 | F2 / Del / Alt+Up / Alt+Down | Rename / delete / move chapter (in the file list) |
 
 ## Help
-Questions, bugs or ideas: open an [issue](https://github.com/blaashford-ux/MDEdit/issues).
+In the app, **Help → MDEdit Help** (F1) opens the user guide in its own window (source: `assets/help/index.html`). Questions, bugs or ideas: open an [issue](https://github.com/blaashford-ux/MDEdit/issues).
 
 Developers: see [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
