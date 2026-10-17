@@ -500,8 +500,8 @@ function registerIpc(): void {
   handle('dialog:confirmMarkEdited', (e, title: string) => confirmMarkEdited(winOf(e), title));
   // --- Google Drive sync ---
   handle('review:shareStatus', async (_e, project: string) => (await reviewHost()).getShareStatus(reviewPath(project)));
-  handle('review:invite', async (_e, project: string, name: string, chapters?: { keys: string[]; level: number } | null) =>
-    (await reviewHost()).inviteReviewer(reviewPath(project), name, chapters)
+  handle('review:invite', async (_e, project: string, name: string, chapters?: { keys: string[]; level: number } | null, role?: 'edit') =>
+    (await reviewHost()).inviteReviewer(reviewPath(project), name, chapters, role === 'edit' ? 'edit' : undefined)
   );
   handle('review:shareChapters', async (_e, project: string, level: number) => (await reviewHost()).getShareChapters(reviewPath(project), level));
   handle('review:revoke', async (_e, project: string, id: string) => (await reviewHost()).revokeReviewer(reviewPath(project), id));

@@ -362,3 +362,96 @@ describe('chapter-limited links', () => {
     expect(r.packageId).toBeUndefined();
   });
 });
+
+describe('collaboration: editable links', () => {
+  const book = '# One\n\nAlpha\n\n# Two\n\nBeta\n\n# Three\n\nGamma\n';
+  const path = '/root/Novel/Manuscript/Book.md';
+
+  async function invited(chapters?: { keys: string[]; level: number }) {
+    const s = setup();
+    s.ownerFs.seed(path, book);
+    const inv = await s.share.invite('/root/Novel', 'Novel', 'Sam', chapters ?? null, 'edit');
+    const invite = parseInviteLink(inv.link)!;
+    s.drive.granted = new Set([invite.packageId, invite.commentsId]);
+    const joined = await s.join.join(invite, 'Sam');
+    s.drive.granted = null;
+    return { ...s, inv, invite, joined, copy: `${joined.dir}/Manuscript/Book.md` };
+  }
+
+  it('makes a link whose working copy is writable by anyone with it', async () => {
+    const { drive, inv, invite, joined } = await invited();
+    expect(inv.role).toBe('edit');
+    expect(invite.role).toBe('edit');
+    expect(invite.packageId).not.toBe((await drive.listAll()).find((f) => f.name === 'Novel.mdedit-review.json')?.id);
+    expect(drive.links.get(invite.packageId)).toBe('writer');
+    expect(joined.role).toBe('edit');
+  });
+
+  it('merges edits both ways without overwriting either author', async () => {
+    const { share, join, ownerFs, readerFs, joined, copy } = await invited();
+    await readerFs.writeText(copy, book.replace('Alpha', 'Alpha by Sam'));
+    ownerFs.seed(path, book.replace('Gamma', 'Gamma by owner'));
+
+    // Sam syncs (sends their chapter), then the owner takes it and publishes theirs
+    await join.sync(joined.dir);
+    const a = await share.sync('/root/Novel', 'Novel');
+    expect(a.changed).toBe(true);
+    expect(a.errors).toEqual([]);
+    const merged = book.replace('Alpha', 'Alpha by Sam').replace('Gamma', 'Gamma by owner');
+    expect(await ownerFs.readText(path)).toBe(merged);
+
+    // then Sam again: keeps their copy and receives the owner's chapter
+    const b = await join.sync(joined.dir);
+    expect(b.changed).toBe(true);
+    expect(await readerFs.readText(copy)).toBe(merged);
+
+    // nothing left to exchange
+    expect((await share.sync('/root/Novel', 'Novel')).changed).toBe(false);
+    expect((await join.sync(joined.dir)).changed).toBe(false);
+  });
+
+  it('keeps the collaborator\'s edits when the owner has not changed anything', async () => {
+    const { share, join, ownerFs, readerFs, joined, copy } = await invited();
+    await readerFs.writeText(copy, book.replace('Beta', 'Beta, rewritten'));
+    await join.sync(joined.dir);
+    await share.sync('/root/Novel', 'Novel');
+    expect(await ownerFs.readText(path)).toBe(book.replace('Beta', 'Beta, rewritten'));
+  });
+
+  it('keeps both versions when both edit the same lines, and says so', async () => {
+    const { share, join, ownerFs, readerFs, joined, copy } = await invited();
+    await readerFs.writeText(copy, book.replace('Alpha', 'Sam says'));
+    ownerFs.seed(path, book.replace('Alpha', 'Owner says'));
+    await join.sync(joined.dir);
+    const r = await share.sync('/root/Novel', 'Novel');
+    expect(r.errors[0]).toMatch(/Sam: 1 place/);
+    const text = await ownerFs.readText(path);
+    expect(text).toContain('Sam says');
+    expect(text).toContain('Owner says');
+  });
+
+  it('gives a collaborator only the ticked chapters and merges only those', async () => {
+    const { share, join, ownerFs, readerFs, joined, copy, inv } = await invited({ keys: ['Two'], level: 1 });
+    expect(inv.chapters).toEqual(['Two']);
+    expect(await readerFs.readText(copy)).toBe('# Two\n\nBeta\n\n');
+    await readerFs.writeText(copy, '# Two\n\nBeta by Sam\n\n# Extra\n\nNew\n');
+    ownerFs.seed(path, book.replace('Alpha', 'Alpha by owner'));
+    await join.sync(joined.dir);
+    await share.sync('/root/Novel', 'Novel');
+    const text = await ownerFs.readText(path);
+    expect(text).toContain('Alpha by owner');
+    expect(text).toContain('Beta by Sam');
+    expect(text).toContain('# Extra');
+    await join.sync(joined.dir);
+    expect(await readerFs.readText(copy)).not.toContain('Alpha');
+  });
+
+  it('does not let a reviewer\'s read-only package be made writable, and removing a collaborator keeps their work', async () => {
+    const { share, join, ownerFs, readerFs, joined, copy, inv, drive } = await invited();
+    await readerFs.writeText(copy, book.replace('Beta', 'Beta by Sam'));
+    await join.sync(joined.dir);
+    await share.revoke('/root/Novel', 'Novel', inv.id);
+    expect(await ownerFs.readText(path)).toContain('Beta by Sam');
+    expect(drive.links.has(parseInviteLink(inv.link)!.packageId)).toBe(false);
+  });
+});

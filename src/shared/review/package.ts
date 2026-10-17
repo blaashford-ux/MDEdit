@@ -8,6 +8,8 @@ export interface ReviewPackage {
   project: string;
   publishedAt: string;
   files: { path: string; text: string }[];
+  /** Collaboration copies only: the heading level that splits the manuscript into chapters, so both sides merge by the same chapters. */
+  chapterLevel?: number;
 }
 
 const MAX_FILES = 600;
@@ -71,7 +73,7 @@ export function parsePackage(raw: string): ReviewPackage | null {
       (f): f is { path: string; text: string } =>
         !!f && typeof f.path === 'string' && typeof f.text === 'string' && !f.path.split('/').some((s) => s === '..' || s === '') && !/^[A-Za-z]:|^[\\/]/.test(f.path) && !f.path.includes('\\')
     );
-    return { version: 1, project: d.project, publishedAt: String(d.publishedAt ?? ''), files };
+    return { version: 1, project: d.project, publishedAt: String(d.publishedAt ?? ''), files, ...(typeof d.chapterLevel === 'number' ? { chapterLevel: d.chapterLevel } : {}) };
   } catch {
     return null;
   }
@@ -88,13 +90,34 @@ export interface SharedMarker {
   packageMd5: string | null;
   /** Files the last download wrote, so a later download can remove the ones the owner deleted. */
   files: string[];
+  /** 'edit' when this person was invited to work on the text, not just to comment on it. */
+  role?: 'edit';
+}
+
+/** Where a collaborator's copy remembers the text both sides last agreed on, by file path (the starting point of the next merge). */
+export const COLLAB_BASE = '.mdedit/collab-base.json';
+
+export async function readCollabBase(fs: FsPort, dir: string): Promise<Record<string, string> | null> {
+  try {
+    const b = JSON.parse(await fs.readText(`${dir}/${COLLAB_BASE}`)) as Record<string, unknown>;
+    const out: Record<string, string> = {};
+    for (const [k, v] of Object.entries(b)) if (typeof v === 'string') out[k] = v;
+    return out;
+  } catch {
+    return null;
+  }
+}
+
+export async function writeCollabBase(fs: FsPort, dir: string, base: Record<string, string>): Promise<void> {
+  await fs.mkdir(`${dir}/.mdedit`, { recursive: true });
+  await fs.writeText(`${dir}/${COLLAB_BASE}`, JSON.stringify(base));
 }
 
 export async function readMarker(fs: FsPort, dir: string): Promise<SharedMarker | null> {
   try {
     const m = JSON.parse(await fs.readText(`${dir}/${SHARED_MARKER}`)) as Partial<SharedMarker>;
     if (typeof m.packageId !== 'string' || typeof m.commentsId !== 'string' || typeof m.reviewerId !== 'string') return null;
-    return { packageId: m.packageId, commentsId: m.commentsId, reviewerId: m.reviewerId, project: String(m.project ?? ''), packageMd5: m.packageMd5 ?? null, files: Array.isArray(m.files) ? m.files.map(String) : [] };
+    return { packageId: m.packageId, commentsId: m.commentsId, reviewerId: m.reviewerId, project: String(m.project ?? ''), packageMd5: m.packageMd5 ?? null, files: Array.isArray(m.files) ? m.files.map(String) : [], ...(m.role === 'edit' ? { role: 'edit' as const } : {}) };
   } catch {
     return null;
   }

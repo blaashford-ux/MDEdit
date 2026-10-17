@@ -616,6 +616,7 @@ code.path { background: var(--raised); padding: 1px 6px; border-radius: 6px; }
 .share-chapter-list input { margin: 0; flex: none; }
 .share-chapter-list span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .share-add input { margin-top: 0; }
+.share-add select { margin-top: 0; flex: none; max-width: 46%; }
 .share-note { margin: 6px 0; font-size: 12px; color: var(--accent); word-break: break-all; }
 .shared-with-me > button { margin-top: 8px; }
 .review-head .review-share { margin-left: auto; margin-right: 6px; padding: 3px 10px; font-size: 12px; background: var(--raised); color: var(--fg); }

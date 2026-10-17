@@ -1,5 +1,14 @@
 # Changelog
 
+### 0.8.0 — 2026-10-17
+**New**
+- **Collaboration: editable links.** In the Share dialog each new link is now either a **Reviewer** (comments and suggestions only, as before) or a **Collaborator (can edit)**. A collaborator opens the invitation the same way, but gets a copy of the manuscript they can change: all of it, or only the chapters you ticked. Their edits and yours are merged each time either of you syncs: a chapter only one of you changed is simply taken, edits to different paragraphs of one chapter are combined, chapters one of you adds or deletes carry over, and where you both changed the same lines both versions are kept in the text between `<<<<<<<` and `>>>>>>>` lines, with a notice, so nothing is lost. A collaborator can leave notes too, but can't share the project on or see other people's links. Removing a collaborator first takes their last changes, then closes their copy.
+- The Share dialog shows **can edit** beside collaborators, and the invitation message you copy says they're being asked to work on the manuscript.
+
+**Notes**
+- Saves reach the other author within seconds; otherwise the exchange runs every minute while the project is open. Changes pass from one collaborator to another through the owner's copy, so the owner's MDEdit needs to be open and online for that.
+- The order of chapters is not merged: each author keeps their own.
+
 ### 0.7.5 — 2026-10-16
 **New**
 - **Share only some chapters.** The Share dialog now has a scrolling list of the manuscript's chapters with a tick box for each (**All** / **None** above it). A reviewer's link gives them only the ticked chapters: they get their own copy of the manuscript containing just those chapters, which stays up to date as you edit, and their notes come back as usual. Your ticks are remembered for that manuscript, so sending several links doesn't mean re-ticking the same boxes; a chapter added later starts unticked. Ticking every chapter shares the whole manuscript, as before. Removing a reviewer also closes their copy.

@@ -14,7 +14,8 @@ import { DRIVE_REVIEWS_NAME, type DriveApi, type DriveFile } from '../sync/drive
 import { mergeReviewFiles, newReviewFile, parseReviewFile, serializeReviewFile, type ReviewFile } from './comments';
 import { buildInviteLink } from './link';
 import { splitChapters } from '../chapters';
-import { buildPackage, chapterKeys, parsePackage, readMarker, selectChapters, writeMarker, writePackage, type ChapterSelection } from './package';
+import { exchangeCollab } from './collab';
+import { buildPackage, chapterKeys, parsePackage, readCollabBase, readMarker, writeCollabBase, writeMarker, writePackage, type ChapterSelection } from './package';
 
 export interface ReviewerRecord {
   id: string;
@@ -22,6 +23,11 @@ export interface ReviewerRecord {
   commentsId: string;
   createdAt: string;
   link: string;
+  /**
+   * 'edit' for a collaborator: they work on the text itself, in a copy of the manuscript (all chapters or the ticked ones) that is
+   * merged with the owner's each time either syncs. Absent for a reviewer, who can only read and leave notes.
+   */
+  role?: 'edit';
   /**
    * Set when this reviewer was given only some chapters: the keys of those chapters, and their own package file in Drive
    * (everyone else shares the project's package). Absent means the whole manuscript.
@@ -57,6 +63,8 @@ interface ShareState {
   projects: Record<string, ShareRecord>;
   /** The chapters last ticked in the share dialog, per manuscript (`project/path`), so the next invitation starts from them. */
   selections?: Record<string, string[]>;
+  /** Per collaborator (`project/reviewerId`): the text both sides last agreed on, by file path. Only this device needs it. */
+  bases?: Record<string, Record<string, string>>;
 }
 
 /** The part of a project's share record that every device of the owner needs to know. */
@@ -146,7 +154,7 @@ export class ReviewShare {
     this.loaded = true;
     try {
       const raw = JSON.parse(await this.o.fs.readText(this.o.stateFile)) as Partial<ShareState>;
-      if (raw.version === 1 && raw.projects) this.state = { version: 1, folderId: raw.folderId ?? null, projects: raw.projects, selections: raw.selections ?? {} };
+      if (raw.version === 1 && raw.projects) this.state = { version: 1, folderId: raw.folderId ?? null, projects: raw.projects, selections: raw.selections ?? {}, bases: raw.bases ?? {} };
     } catch {
       /* first run */
     }
@@ -292,9 +300,9 @@ export class ReviewShare {
    * re-uses the same package, so it has to be given again: without it the reviewer's picker offers only their comments file
    * and the project can't be opened. Harmless when the access is already there.
    */
-  private async ensurePackageShared(project: string, packageId: string, force = false): Promise<void> {
+  private async ensurePackageShared(project: string, packageId: string, force = false, role: 'reader' | 'writer' = 'reader'): Promise<void> {
     if (!force && this.packageChecked.has(`${project}:${packageId}`)) return;
-    await this.o.drive().shareByLink(packageId, 'reader');
+    await this.o.drive().shareByLink(packageId, role);
     this.packageChecked.add(`${project}:${packageId}`);
   }
 
@@ -321,13 +329,13 @@ export class ReviewShare {
   /** Uploads each chapter-limited reviewer's own copy (only the chapters they were given), when it has changed. */
   private async publishSubsets(dir: string, project: string): Promise<void> {
     const rec = this.state.projects[project];
-    if (!rec?.reviewers.some((r) => r.chapters && r.packageId)) return;
+    if (!rec?.reviewers.some((r) => r.chapters && r.packageId && !r.role)) return;
     const manuscript = await this.manuscriptOf(dir, project);
     if (!manuscript) return;
     let changed = false;
     const reviewers: ReviewerRecord[] = [];
     for (const r of rec.reviewers) {
-      if (!r.chapters || !r.packageId) {
+      if (!r.chapters || !r.packageId || r.role) {
         reviewers.push(r);
         continue;
       }
@@ -349,8 +357,11 @@ export class ReviewShare {
    * Adds a reviewer: makes their comments file and returns the link to send them. With `chapters` (fewer than all of them) the
    * reviewer gets a copy of the manuscript holding just those chapters, in a file of their own; the choice is remembered for the
    * manuscript so the next invitation starts from the same ticks.
+   *
+   * With `role: 'edit'` the reviewer is a collaborator: their file is a working copy they can write to (it is always their own,
+   * with all chapters or the ticked ones), and `collaborate` merges it with the owner's text on every sync.
    */
-  async invite(dir: string, project: string, reviewerName: string, chapters?: ChapterSelection | null): Promise<ReviewerRecord> {
+  async invite(dir: string, project: string, reviewerName: string, chapters?: ChapterSelection | null, role?: 'edit'): Promise<ReviewerRecord> {
     await this.load();
     await this.refresh(true);
     const rec = await this.publish(dir, project);
@@ -358,19 +369,24 @@ export class ReviewShare {
     const id = this.newId();
     const name = reviewerName.trim() || 'Reviewer';
     let subset: Pick<ReviewerRecord, 'chapters' | 'chapterLevel' | 'packageId' | 'packageMd5'> = {};
-    if (chapters) {
+    if (chapters || role) {
       const manuscript = await this.manuscriptOf(dir, project);
+      if (!manuscript && role) throw new Error('Choose which file to work on together first: right-click it in the file list and pick “Active Manuscript”.');
       if (manuscript) {
         const pkg0 = await buildPackage(this.o.fs, dir, project, this.now, manuscript);
-        const all = pkg0.files[0] ? chapterKeys(splitChapters(pkg0.files[0].text, chapters.level)).map((c) => c.key) : [];
-        const keys = all.filter((k) => chapters.keys.includes(k));
+        const sel: ChapterSelection = chapters ?? { keys: [], level: 1 };
+        const all = pkg0.files[0] ? chapterKeys(splitChapters(pkg0.files[0].text, sel.level)).map((c) => c.key) : [];
+        const keys = chapters ? all.filter((k) => sel.keys.includes(k)) : all;
         if (keys.length === 0) throw new Error('Tick at least one chapter for this reviewer to see.');
-        this.state.selections = { ...this.state.selections, [`${project}/${manuscript}`]: keys };
-        if (keys.length < all.length) {
-          const pkg = await buildPackage(this.o.fs, dir, project, this.now, manuscript, { keys, level: chapters.level });
-          const file = await this.o.drive().createFile(`${toCompliantName(project)} - ${toCompliantName(name)}.mdedit-review.json`, await this.folder(), JSON.stringify(pkg));
-          await this.o.drive().shareByLink(file.id, 'reader');
-          subset = { chapters: keys, chapterLevel: chapters.level, packageId: file.id, packageMd5: md5Hex(JSON.stringify({ ...pkg, publishedAt: '' })) };
+        if (chapters) this.state.selections = { ...this.state.selections, [`${project}/${manuscript}`]: keys };
+        if (keys.length < all.length || role) {
+          const limited = keys.length < all.length;
+          const pkg = await buildPackage(this.o.fs, dir, project, this.now, manuscript, limited ? { keys, level: sel.level } : undefined);
+          const body = JSON.stringify(role ? { ...pkg, chapterLevel: sel.level } : pkg);
+          const file = await this.o.drive().createFile(`${toCompliantName(project)} - ${toCompliantName(name)}.mdedit-review.json`, await this.folder(), body);
+          await this.o.drive().shareByLink(file.id, role ? 'writer' : 'reader');
+          subset = { ...(limited ? { chapters: keys } : {}), chapterLevel: sel.level, packageId: file.id, packageMd5: md5Hex(JSON.stringify({ ...pkg, publishedAt: '' })) };
+          if (role) this.state.bases = { ...this.state.bases, [`${project}/${id}`]: Object.fromEntries(pkg.files.map((f) => [f.path, f.text])) };
         }
       }
     }
@@ -385,7 +401,8 @@ export class ReviewShare {
       name,
       commentsId: file.id,
       createdAt: this.now().toISOString(),
-      link: buildInviteLink({ packageId: subset.packageId ?? rec.packageId, commentsId: file.id, reviewerId: id, project }),
+      link: buildInviteLink({ packageId: subset.packageId ?? rec.packageId, commentsId: file.id, reviewerId: id, project, ...(role ? { role } : {}) }),
+      ...(role ? { role } : {}),
       ...subset
     };
     this.state.projects[project] = { ...rec, reviewers: [...rec.reviewers, reviewer] };
@@ -401,6 +418,7 @@ export class ReviewShare {
     const rec = this.state.projects[project];
     const who = rec?.reviewers.find((r) => r.id === reviewerId);
     if (!rec || !who) return;
+    await this.collaborate(dir, project).catch(() => undefined);
     await this.pull(dir, project).catch(() => undefined);
     await this.o.drive().unshare(who.commentsId).catch(() => undefined);
     if (who.packageId) await this.o.drive().unshare(who.packageId).catch(() => undefined);
@@ -410,6 +428,7 @@ export class ReviewShare {
       this.packageChecked.delete(`${project}:${rec.packageId}`);
     }
     this.state.projects[project] = { ...rec, reviewers: left, revoked: [...new Set([...(rec.revoked ?? []), reviewerId])] };
+    if (this.state.bases) delete this.state.bases[`${project}/${reviewerId}`];
     await this.save();
     await this.refresh(true);
   }
@@ -423,7 +442,7 @@ export class ReviewShare {
     // An invitation that was sent while the package was private is repaired here, once per session.
     if (rec.reviewers.length > 0) await this.ensurePackageShared(project, rec.packageId).catch((e) => out.errors.push(e instanceof Error ? e.message : String(e)));
     for (const who of rec.reviewers) {
-      if (who.packageId) await this.ensurePackageShared(`${project}/${who.id}`, who.packageId).catch((e) => out.errors.push(e instanceof Error ? e.message : String(e)));
+      if (who.packageId) await this.ensurePackageShared(`${project}/${who.id}`, who.packageId, false, who.role ? 'writer' : 'reader').catch((e) => out.errors.push(e instanceof Error ? e.message : String(e)));
     }
     const reviews = makeReviews(this.o.fs);
     const local = new Map((await reviews.list(dir)).map((r) => [r.id, r.text]));
@@ -444,14 +463,59 @@ export class ReviewShare {
     return out;
   }
 
+  /**
+   * Merges the owner's text with each collaborator's working copy: what only one side changed is taken, what both changed is
+   * merged, and the result goes to the owner's file and to the collaborator's. Because every collaborator is merged in turn,
+   * one collaborator's changes reach the others on the same pass.
+   */
+  async collaborate(dir: string, project: string): Promise<{ changed: boolean; errors: string[] }> {
+    await this.load();
+    const out = { changed: false, errors: [] as string[] };
+    const rec = this.state.projects[project];
+    for (const who of rec?.reviewers ?? []) {
+      if (!who.role || !who.packageId) continue;
+      try {
+        const manuscript = await this.manuscriptOf(dir, project);
+        if (!manuscript) continue;
+        const key = `${project}/${who.id}`;
+        const r = await exchangeCollab({
+          fs: this.o.fs,
+          drive: this.o.drive(),
+          dir,
+          packageId: who.packageId,
+          level: who.chapterLevel ?? 1,
+          scope: who.chapters ? new Set(who.chapters) : null,
+          base: this.state.bases?.[key] ?? null,
+          labels: { local: 'Yours', remote: who.name },
+          now: this.now
+        });
+        if (r.gone) {
+          out.errors.push(`${who.name}: their shared copy is no longer in Drive.`);
+          continue;
+        }
+        if (r.localChanged.length) out.changed = true;
+        if (r.conflicts) out.errors.push(`${who.name}: ${r.conflicts} place${r.conflicts === 1 ? '' : 's'} where you both changed the same lines. Both versions are in the text between <<<<<<< and >>>>>>> lines; keep what you want and delete the rest.`);
+        if (JSON.stringify(this.state.bases?.[key]) !== JSON.stringify(r.base)) {
+          this.state.bases = { ...this.state.bases, [key]: r.base };
+          await this.save();
+        }
+      } catch (e) {
+        out.errors.push(`${who.name}: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+    return out;
+  }
+
   /** A full exchange: new text out, notes in and out. */
   async sync(dir: string, project: string): Promise<{ changed: boolean; errors: string[] }> {
     await this.load();
     await this.refresh();
     if (!this.state.projects[project]?.reviewers.length) return { changed: false, errors: [] };
+    const collab = await this.collaborate(dir, project);
     await this.publish(dir, project);
     await this.publishSubsets(dir, project);
-    return this.pull(dir, project);
+    const notes = await this.pull(dir, project);
+    return { changed: collab.changed || notes.changed, errors: [...collab.errors, ...notes.errors] };
   }
 }
 
@@ -474,6 +538,8 @@ export interface SharedProject {
   dir: string;
   project: string;
   reviewerId: string;
+  /** 'edit' when this person is a collaborator and may change the text. */
+  role?: 'edit';
 }
 
 export type JoinResult = SharedProject;
@@ -482,7 +548,7 @@ export type JoinResult = SharedProject;
 export class ReviewJoin {
   constructor(private readonly o: JoinOptions) {}
 
-  async join(invite: { packageId: string; commentsId: string; reviewerId: string; project: string }, readerName: string): Promise<JoinResult> {
+  async join(invite: { packageId: string; commentsId: string; reviewerId: string; project: string; role?: 'edit' }, readerName: string): Promise<JoinResult> {
     const { fs } = this.o;
     const drive = this.o.drive();
     const pkgFile = await drive.getFile(invite.packageId);
@@ -494,7 +560,8 @@ export class ReviewJoin {
     const dir = await this.folderFor(invite.reviewerId, toCompliantName(pkg.project));
     const previous = (await readMarker(fs, dir))?.files ?? [];
     const files = await writePackage(fs, dir, pkg, previous);
-    await writeMarker(fs, dir, { ...invite, project: pkg.project, packageMd5: pkgFile.md5, files });
+    await writeMarker(fs, dir, { packageId: invite.packageId, commentsId: invite.commentsId, reviewerId: invite.reviewerId, project: pkg.project, packageMd5: pkgFile.md5, files, ...(invite.role ? { role: invite.role } : {}) });
+    if (invite.role) await writeCollabBase(fs, dir, Object.fromEntries(pkg.files.map((f) => [f.path, f.text])));
     const projects = makeProjects(fs);
     if (!(await projects.isProject(dir))) await projects.convertToProject(dir); // so it opens like any project
 
@@ -502,7 +569,7 @@ export class ReviewJoin {
     const named: ReviewFile = { ...remote, reviewer: { id: invite.reviewerId, name: readerName || remote.reviewer.name } };
     await makeReviews(fs).save(dir, invite.reviewerId, serializeReviewFile(named));
     if (named.reviewer.name !== remote.reviewer.name) await drive.updateFile(invite.commentsId, serializeReviewFile(named));
-    return { dir, project: pkg.project, reviewerId: invite.reviewerId };
+    return { dir, project: pkg.project, reviewerId: invite.reviewerId, ...(invite.role ? { role: invite.role } : {}) };
   }
 
   /** The same folder again when this invitation was joined before; otherwise a new, unused name. */
@@ -519,20 +586,20 @@ export class ReviewJoin {
   }
 
   /** Projects shared with this person, as found on disk. */
-  async list(): Promise<{ dir: string; project: string; reviewerId: string }[]> {
+  async list(): Promise<SharedProject[]> {
     const { fs, sharedRoot } = this.o;
     if (!(await fs.stat(sharedRoot))) return [];
-    const out: { dir: string; project: string; reviewerId: string }[] = [];
+    const out: SharedProject[] = [];
     for (const e of (await fs.readdir(sharedRoot)).sort((a, b) => a.name.localeCompare(b.name))) {
       if (!e.isDirectory) continue;
       const m = await readMarker(fs, `${sharedRoot}/${e.name}`);
-      if (m) out.push({ dir: `${sharedRoot}/${e.name}`, project: m.project || e.name, reviewerId: m.reviewerId });
+      if (m) out.push({ dir: `${sharedRoot}/${e.name}`, project: m.project || e.name, reviewerId: m.reviewerId, ...(m.role ? { role: m.role } : {}) });
     }
     return out;
   }
 
   /** Brings the owner's latest text down and exchanges this reviewer's notes. `revoked` when access has been withdrawn. */
-  async sync(dir: string): Promise<{ changed: boolean; revoked: boolean }> {
+  async sync(dir: string): Promise<{ changed: boolean; revoked: boolean; errors?: string[] }> {
     const { fs } = this.o;
     const drive = this.o.drive();
     const m = await readMarker(fs, dir);
@@ -541,8 +608,18 @@ export class ReviewJoin {
     const commentsFile = await drive.getFile(m.commentsId);
     if (!pkgFile || !commentsFile) return { changed: false, revoked: true };
     let changed = false;
+    const errors: string[] = [];
 
-    if (pkgFile.md5 !== m.packageMd5) {
+    if (m.role === 'edit') {
+      // A collaborator's text is merged with the owner's, never replaced by it.
+      const r = await exchangeCollab({ fs, drive, dir, packageId: m.packageId, level: 1, scope: null, base: await readCollabBase(fs, dir), labels: { local: 'Yours', remote: 'Owner' }, now: () => new Date() });
+      if (r.gone) return { changed: false, revoked: true };
+      await writeCollabBase(fs, dir, r.base);
+      const files = Object.keys(r.base);
+      await writeMarker(fs, dir, { ...m, files, packageMd5: (await drive.getFile(m.packageId))?.md5 ?? m.packageMd5 });
+      if (r.localChanged.length) changed = true;
+      if (r.conflicts) errors.push(`${r.conflicts} place${r.conflicts === 1 ? '' : 's'} where you and the owner changed the same lines. Both versions are in the text between <<<<<<< and >>>>>>> lines; keep what you want and delete the rest.`);
+    } else if (pkgFile.md5 !== m.packageMd5) {
       const pkg = parsePackage(await drive.download(m.packageId));
       if (pkg) {
         const files = await writePackage(fs, dir, pkg, m.files);
@@ -561,6 +638,6 @@ export class ReviewJoin {
       changed = true;
     }
     if (text !== remoteText) await drive.updateFile(m.commentsId, text);
-    return { changed, revoked: false };
+    return { changed, revoked: false, ...(errors.length ? { errors } : {}) };
   }
 }
