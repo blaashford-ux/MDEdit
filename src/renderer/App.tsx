@@ -1306,7 +1306,7 @@ export function App() {
           notice={reviewNotice}
           request={noteRequest}
           onShare={caps.review && !sharedHere ? () => setShowShare(true) : undefined}
-          onAi={caps.ai && !sharedHere ? () => setShowAi(true) : undefined}
+          onAi={caps.ai && !isReviewer ? () => setShowAi(true) : undefined}
           onGoTo={goToNote}
           focus={noteFocus}
           inChapter={notesInChapter}

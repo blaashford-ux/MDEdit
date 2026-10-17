@@ -15,6 +15,7 @@ import { mergeReviewFiles, newReviewFile, parseReviewFile, serializeReviewFile, 
 import { buildInviteLink } from './link';
 import { splitChapters } from '../chapters';
 import { exchangeCollab } from './collab';
+import { mergeTeam, parseTeam, serializeWithTeam, sharedAmongEditors, visibleTo } from './team';
 import { buildPackage, chapterKeys, parsePackage, readCollabBase, readMarker, writeCollabBase, writeMarker, writePackage, type ChapterSelection } from './package';
 
 export interface ReviewerRecord {
@@ -446,6 +447,7 @@ export class ReviewShare {
     }
     const reviews = makeReviews(this.o.fs);
     const local = new Map((await reviews.list(dir)).map((r) => [r.id, r.text]));
+    const collaboratorIds = new Set(rec.reviewers.filter((r) => r.role).map((r) => r.id));
     for (const who of rec.reviewers) {
       try {
         const remoteText = await this.o.drive().download(who.commentsId);
@@ -453,9 +455,29 @@ export class ReviewShare {
         const text = serializeReviewFile(merged);
         if (text !== local.get(who.id)) {
           await reviews.save(dir, who.id, text);
+          local.set(who.id, text);
           out.changed = true;
         }
-        if (text !== remoteText) await this.o.drive().updateFile(who.commentsId, text);
+        let upload = text;
+        if (who.role) {
+          // Collaborators also swap the editing group's notes (theirs, the owner's, the AI's) with the owner.
+          const theirs = parseTeam(remoteText).filter((f) => f.reviewer.id !== who.id && sharedAmongEditors(f.reviewer.id, collaboratorIds));
+          for (const f of theirs) {
+            const have = parseReviewFile(local.get(f.reviewer.id) ?? '');
+            const joined = serializeReviewFile(have ? mergeReviewFiles(have, f) : f);
+            if (joined !== local.get(f.reviewer.id)) {
+              await reviews.save(dir, f.reviewer.id, joined);
+              local.set(f.reviewer.id, joined);
+              out.changed = true;
+            }
+          }
+          const mine = [...local].filter(([id]) => id !== who.id && sharedAmongEditors(id, collaboratorIds)).map(([, t]) => parseReviewFile(t)).filter((f): f is ReviewFile => !!f);
+          const manuscript = who.chapters ? await this.manuscriptOf(dir, project) : null;
+          const body = manuscript ? { path: manuscript, text: await this.o.fs.readText(`${dir}/${manuscript}`).catch(() => '') } : null;
+          const team = visibleTo(mergeTeam(theirs, mine), body, who.chapters ? { keys: who.chapters, level: who.chapterLevel ?? 1 } : null);
+          upload = serializeWithTeam(merged, team);
+        }
+        if (upload !== remoteText) await this.o.drive().updateFile(who.commentsId, upload);
       } catch (e) {
         out.errors.push(`${who.name}: ${e instanceof Error ? e.message : String(e)}`);
       }
@@ -629,7 +651,8 @@ export class ReviewJoin {
     }
 
     const reviews = makeReviews(fs);
-    const local = (await reviews.list(dir)).find((r) => r.id === m.reviewerId)?.text ?? '';
+    const files = new Map((await reviews.list(dir)).map((r) => [r.id, r.text]));
+    const local = files.get(m.reviewerId) ?? '';
     const remoteText = await drive.download(m.commentsId);
     const merged = mergeFiles(parseReviewFile(remoteText), parseReviewFile(local), m.project, { id: m.reviewerId, name: '' });
     const text = serializeReviewFile(merged);
@@ -637,7 +660,24 @@ export class ReviewJoin {
       await reviews.save(dir, m.reviewerId, text);
       changed = true;
     }
-    if (text !== remoteText) await drive.updateFile(m.commentsId, text);
+    let upload = text;
+    if (m.role === 'edit') {
+      // The editing group's notes (the owner's, the other collaborators', the AI's) come down, and this person's AI notes and
+      // replies go up, in the same file.
+      const theirs = parseTeam(remoteText).filter((f) => f.reviewer.id !== m.reviewerId);
+      for (const f of theirs) {
+        const have = parseReviewFile(files.get(f.reviewer.id) ?? '');
+        const joined = serializeReviewFile(have ? mergeReviewFiles(have, f) : f);
+        if (joined !== files.get(f.reviewer.id)) {
+          await reviews.save(dir, f.reviewer.id, joined);
+          files.set(f.reviewer.id, joined);
+          changed = true;
+        }
+      }
+      const mine = [...files].filter(([id]) => id !== m.reviewerId).map(([, t]) => parseReviewFile(t)).filter((f): f is ReviewFile => !!f);
+      upload = serializeWithTeam(merged, mergeTeam(theirs, mine));
+    }
+    if (upload !== remoteText) await drive.updateFile(m.commentsId, upload);
     return { changed, revoked: false, ...(errors.length ? { errors } : {}) };
   }
 }

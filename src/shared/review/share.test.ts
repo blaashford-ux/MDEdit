@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { MemoryFs } from '../memoryFs';
 import { FakeDrive } from '../sync/fakeDrive';
 import { makeReviews } from '../backend/reviews';
-import { makeAnchor, parseReviewFile, serializeReviewFile, type ReviewItem } from './comments';
+import { makeAnchor, newReviewFile, parseReviewFile, serializeReviewFile, type ReviewItem } from './comments';
 import { parseInviteLink } from './link';
 import { ReviewJoin, ReviewShare } from './share';
 
@@ -454,4 +454,78 @@ describe('collaboration: editable links', () => {
     expect(await ownerFs.readText(path)).toContain('Beta by Sam');
     expect(drive.links.has(parseInviteLink(inv.link)!.packageId)).toBe(false);
   });
+
+  describe('notes among the editing group', () => {
+    const readNotes = async (fs: MemoryFs, dir: string) => {
+      const m = new Map<string, string[]>();
+      for (const r of await makeReviews(fs).list(dir)) m.set(r.id, (parseReviewFile(r.text)?.items ?? []).map((i) => i.id));
+      return m;
+    };
+    const aiNote = note('ai1', { origin: 'ai', author: 'Claude' });
+
+    it('carries the owner\'s notes and AI notes to the collaborator and theirs back', async () => {
+      const { share, join, ownerFs, readerFs, joined } = await invited();
+      const owner = (id: string, items: ReviewItem[]) => makeReviews(ownerFs).save('/root/Novel', id, serializeReviewFile({ ...newOwnerFile(id), items }));
+      await owner('owner', [note('o1')]);
+      await owner('ai-claude', [aiNote]);
+      // the collaborator has an AI pass of their own and a note on the owner's note
+      await makeReviews(readerFs).save(joined.dir, 'ai-gpt', serializeReviewFile({ ...newOwnerFile('ai-gpt'), items: [note('g1', { origin: 'ai', author: 'GPT' })] }));
+
+      await join.sync(joined.dir);
+      await share.sync('/root/Novel', 'Novel');
+      await join.sync(joined.dir);
+
+      const mine = await readNotes(readerFs, joined.dir);
+      expect(mine.get('owner')).toEqual(['o1']);
+      expect(mine.get('ai-claude')).toEqual(['ai1']);
+      expect((await readNotes(ownerFs, '/root/Novel')).get('ai-gpt')).toEqual(['g1']);
+
+      // a resolution on the owner's note made by the collaborator reaches the owner
+      const o1 = parseReviewFile((await makeReviews(readerFs).list(joined.dir)).find((r) => r.id === 'owner')!.text)!;
+      await makeReviews(readerFs).save(joined.dir, 'owner', serializeReviewFile({ ...o1, items: [{ ...o1.items[0], status: 'resolved', updatedAt: '2026-10-08T10:00:00Z' }] }));
+      await join.sync(joined.dir);
+      await share.sync('/root/Novel', 'Novel');
+      const back = parseReviewFile((await makeReviews(ownerFs).list('/root/Novel')).find((r) => r.id === 'owner')!.text)!;
+      expect(back.items[0].status).toBe('resolved');
+    });
+
+    it('passes one collaborator\'s notes to another but never a reviewer\'s', async () => {
+      const a = await invited();
+      const { share, drive, ownerFs } = a;
+      // a second collaborator and a read-only reviewer
+      const b = await share.invite('/root/Novel', 'Novel', 'Kim', null, 'edit');
+      const r = await share.invite('/root/Novel', 'Novel', 'Rae');
+      const bInvite = parseInviteLink(b.link)!;
+      drive.granted = new Set([bInvite.packageId, bInvite.commentsId]);
+      const bFs = new MemoryFs();
+      const bJoin = new ReviewJoin({ fs: bFs, drive: () => drive, sharedRoot: '/root/Shared With Me' });
+      const bJoined = await bJoin.join(bInvite, 'Kim');
+      drive.granted = null;
+
+      await makeReviews(a.readerFs).save(a.joined.dir, a.inv.id, serializeReviewFile({ ...newOwnerFile(a.inv.id), reviewer: { id: a.inv.id, name: 'Sam' }, items: [note('s1')] }));
+      await makeReviews(ownerFs).save('/root/Novel', r.id, serializeReviewFile({ ...newOwnerFile(r.id), items: [note('r1')] }));
+
+      await a.join.sync(a.joined.dir);
+      await share.sync('/root/Novel', 'Novel');
+      await bJoin.sync(bJoined.dir);
+
+      const kim = await readNotes(bFs, bJoined.dir);
+      expect(kim.get(a.inv.id)).toEqual(['s1']);
+      expect(kim.has(r.id)).toBe(false);
+    });
+
+    it('leaves notes on chapters a collaborator wasn\'t given out of what they receive', async () => {
+      const { share, join, ownerFs, readerFs, joined } = await invited({ keys: ['Two'], level: 1 });
+      await makeReviews(ownerFs).save('/root/Novel', 'owner', serializeReviewFile({
+        ...newOwnerFile('owner'),
+        items: [note('inOne', { anchor: makeAnchor('Alpha', 0, 5) }), note('inTwo', { anchor: makeAnchor('Beta', 0, 4) })]
+      }));
+      await join.sync(joined.dir);
+      await share.sync('/root/Novel', 'Novel');
+      await join.sync(joined.dir);
+      expect((await readNotes(readerFs, joined.dir)).get('owner')).toEqual(['inTwo']);
+    });
+  });
 });
+
+const newOwnerFile = (id: string) => newReviewFile('Novel', { id, name: id === 'owner' ? 'Me' : id });
