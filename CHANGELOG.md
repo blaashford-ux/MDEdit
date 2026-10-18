@@ -1,5 +1,9 @@
 # Changelog
 
+### 0.8.2 — 2026-10-18
+**Fixed**
+- **Help → MDEdit Help (F1) is back.** 0.8.0 and 0.8.1 were built without the Help window added in 0.7.6, so the Help menu showed only About. They now include everything from 0.7.6 as well. The help guide also describes the new Collaborator links.
+
 ### 0.8.1 — 2026-10-18
 **New**
 - **Collaborators get every file in the project.** A collaborator's copy now holds every Markdown file (notes, outlines, other books), not just the active manuscript, and they can create new files, which reach you on the next sync (and your new files reach them). Reviewers are unchanged: they still see only the active manuscript. The chapter ticks in the Share dialog now limit only the active manuscript for a collaborator; every other file is shared whole. A collaborator no longer needs an active manuscript to be set.
@@ -19,6 +23,10 @@
 **Notes**
 - Saves reach the other author within seconds; otherwise the exchange runs every minute while the project is open. Changes pass from one collaborator to another through the owner's copy, so the owner's MDEdit needs to be open and online for that.
 - The order of chapters is not merged: each author keeps their own.
+
+### 0.7.6 — 2026-10-17
+**New**
+- **Help window.** **Help → MDEdit Help** (F1) opens a help guide in its own window, so you can keep it beside the editor. It covers every feature in short topics with examples, links between related topics, a contents list, search, and back/forward navigation.
 
 ### 0.7.5 — 2026-10-16
 **New**

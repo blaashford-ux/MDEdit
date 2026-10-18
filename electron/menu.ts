@@ -1,4 +1,5 @@
 import { app, BrowserWindow, Menu, type MenuItem, type MenuItemConstructorOptions } from 'electron';
+import { openHelp } from './help';
 import type { MenuAction, MenuNode, ThemeSource } from '../src/shared/api';
 
 interface ThemeHooks {
@@ -102,6 +103,8 @@ export function installMenu(theme: ThemeHooks): void {
     {
       label: '&Help',
       submenu: [
+        { label: 'MDEdit Help\tF1', click: () => openHelp() },
+        { type: 'separator' },
         {
           label: 'About MDEdit',
           click: send('about')

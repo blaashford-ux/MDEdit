@@ -16,6 +16,7 @@ import { importDocxFiles } from './importDocx';
 import { sidecarPathFor } from '../src/shared/export/sidecar';
 import { appendFileSync, promises as fsp } from 'node:fs';
 import { installMenu } from './menu';
+import { openHelp } from './help';
 import { chromeOptions, registerWindowChrome, setChromeTheme, shellColor, watchWindow } from './windowChrome';
 import { confirmDelete, confirmMarkEdited, confirmOverwrite, confirmRecover, confirmUnsaved } from './prompts';
 import { scanFolder } from './scan';
@@ -613,6 +614,12 @@ function createWindow(): BrowserWindow {
   });
   guardClose(win);
   watchWindow(win);
+  win.webContents.on('before-input-event', (e, input) => {
+    if (input.type === 'keyDown' && input.key === 'F1' && !input.control && !input.alt && !input.shift) {
+      e.preventDefault();
+      openHelp();
+    }
+  });
   win.on('focus', () => sync?.syncSoon(1000)); // edits made elsewhere (another device) show up when you come back
 
   let timer: NodeJS.Timeout | undefined;
