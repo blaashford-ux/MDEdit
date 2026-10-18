@@ -162,9 +162,10 @@ export function App() {
   const projectPath = s.project?.path ?? null;
   useEffect(() => setOpenedOrder((cur) => withOpened(cur, projectPath)), [projectPath]);
   const sameDir = (a: string, b: string) => a.replace(/\\/g, '/') === b.replace(/\\/g, '/');
-  /** Set when the open project was shared with this person: they can read and annotate it, not edit it. */
+  /** Set when the open project was shared with this person: a reviewer can read and annotate it, a collaborator can edit it too. */
   const sharedHere = projectPath ? shared.find((sp) => sameDir(sp.dir, projectPath)) : undefined;
-  const isReviewer = sharedHere !== undefined;
+  const isCollaborator = sharedHere?.role === 'edit';
+  const isReviewer = sharedHere !== undefined && !isCollaborator;
   const meHere = { id: sharedHere?.reviewerId ?? 'owner', name: me.name };
   const reviewFile = projectPath && activeTab ? activeTab.file.replace(/\\/g, '/').slice(projectPath.replace(/\\/g, '/').replace(/\/+$/, '').length + 1) : null;
   const review = useReview(
@@ -363,9 +364,9 @@ export function App() {
     setReviewNotice(r.revoked ? 'The owner has stopped sharing this project with you. Your notes stay on this device.' : r.errors[0] ?? null);
     if (r.changed) {
       reviewRef.current.reload();
-      if (isReviewer) void ws.refresh(); // the owner's text may have changed too
+      void ws.refresh(); // the other author's text may have changed too
     }
-  }, [caps.review, projectPath, isReviewer, ws]);
+  }, [caps.review, projectPath, ws]);
   useEffect(() => {
     if (!caps.review || !projectPath) return;
     void exchange();
@@ -392,6 +393,15 @@ export function App() {
   }, [s.project?.path, reloadListing]);
 
   const activeDirty = activeTab !== undefined && activeTab.draft !== null;
+  // Collaborators: a save is sent to the other author soon after, not at the next minute tick.
+  const wasDirty = useRef(false);
+  useEffect(() => {
+    const saved = wasDirty.current && !activeDirty;
+    wasDirty.current = activeDirty;
+    if (!saved || !caps.review || !projectPath) return;
+    const t = setTimeout(() => void exchange(), 5000);
+    return () => clearTimeout(t);
+  }, [activeDirty, caps.review, projectPath, exchange]);
   const titleText = activeTab
     ? `${activeChapter ? chapterLabel(activeChapter) + ' — ' : ''}${basename(activeTab.file)}${s.project ? ' · ' + s.project.meta.name : ''}`
     : s.project
@@ -1295,7 +1305,7 @@ export function App() {
           role={isReviewer ? 'reviewer' : 'owner'}
           notice={reviewNotice}
           request={noteRequest}
-          onShare={caps.review && !isReviewer ? () => setShowShare(true) : undefined}
+          onShare={caps.review && !sharedHere ? () => setShowShare(true) : undefined}
           onAi={caps.ai && !isReviewer ? () => setShowAi(true) : undefined}
           onGoTo={goToNote}
           focus={noteFocus}

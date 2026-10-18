@@ -1,5 +1,29 @@
 # Changelog
 
+### 0.8.2 — 2026-10-18
+**Fixed**
+- **Help → MDEdit Help (F1) is back.** 0.8.0 and 0.8.1 were built without the Help window added in 0.7.6, so the Help menu showed only About. They now include everything from 0.7.6 as well. The help guide also describes the new Collaborator links.
+
+### 0.8.1 — 2026-10-18
+**New**
+- **Collaborators get every file in the project.** A collaborator's copy now holds every Markdown file (notes, outlines, other books), not just the active manuscript, and they can create new files, which reach you on the next sync (and your new files reach them). Reviewers are unchanged: they still see only the active manuscript. The chapter ticks in the Share dialog now limit only the active manuscript for a collaborator; every other file is shared whole. A collaborator no longer needs an active manuscript to be set.
+- Only Markdown files travel; images, exports, settings and hidden folders stay where they are, and files arriving from a collaborator's copy are accepted only if they are Markdown outside hidden folders and `Exports/`.
+
+**Notes**
+- Deleting or renaming a file is not passed on: the other author's copy brings the file back (a rename leaves the old file behind).
+- A collaborator invited with 0.8.0 keeps working on the manuscript only; remove them and send a new link to give them the whole project.
+
+### 0.8.0 — 2026-10-17
+**New**
+- **Collaboration: editable links.** In the Share dialog each new link is now either a **Reviewer** (comments and suggestions only, as before) or a **Collaborator (can edit)**. A collaborator opens the invitation the same way, but gets a copy of the manuscript they can change: all of it, or only the chapters you ticked. Their edits and yours are merged each time either of you syncs: a chapter only one of you changed is simply taken, edits to different paragraphs of one chapter are combined, chapters one of you adds or deletes carry over, and where you both changed the same lines both versions are kept in the text between `<<<<<<<` and `>>>>>>>` lines, with a notice, so nothing is lost. A collaborator can leave notes too, but can't share the project on or see other people's links. Removing a collaborator first takes their last changes, then closes their copy.
+- **Collaborators can use the AI tools too.** The Notes panel's **AI…** button is available on a project you were invited to edit. The MCP server lists such projects as `Shared With Me/<name>` (projects shared for review only are still left out), so the same skills (line, copy and developmental edit) work on the collaborator's own copy.
+- **The editing group shares notes.** Everyone invited as a collaborator, and the owner, now see each other's notes, replies and resolutions, including the notes AI reviewers left for each of them, which carry the AI badge as usual. They travel inside each collaborator's comments file, and a collaborator who wasn't given every chapter only receives notes on the chapters they have. People invited only as **reviewers** are unchanged: they see just their own notes, and their notes are never passed to collaborators.
+- The Share dialog shows **can edit** beside collaborators, and the invitation message you copy says they're being asked to work on the manuscript.
+
+**Notes**
+- Saves reach the other author within seconds; otherwise the exchange runs every minute while the project is open. Changes pass from one collaborator to another through the owner's copy, so the owner's MDEdit needs to be open and online for that.
+- The order of chapters is not merged: each author keeps their own.
+
 ### 0.7.6 — 2026-10-17
 **New**
 - **Help window.** **Help → MDEdit Help** (F1) opens a help guide in its own window, so you can keep it beside the editor. It covers every feature in short topics with examples, links between related topics, a contents list, search, and back/forward navigation.

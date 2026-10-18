@@ -44,6 +44,7 @@ export function ShareDialog({ project, projectName, manuscript: given, sync, onC
   const [level, setLevel] = useState(1);
   const [counts, setCounts] = useState<Map<string, { open: number; total: number }>>(new Map());
   const [name, setName] = useState('');
+  const [role, setRole] = useState<'review' | 'edit'>('review');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -116,7 +117,7 @@ export function ShareDialog({ project, projectName, manuscript: given, sync, onC
   return (
     <div className="modal-backdrop" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal share-dialog" role="dialog" aria-modal="true" aria-label="Share for review">
-        <h3>Share “{projectName}” for review</h3>
+        <h3>Share “{projectName}”</h3>
         {!connected ? (
           <>
             <p className="modal-hint">Reviewers get their invitations through Google Drive. Connect Google Drive first.</p>
@@ -135,7 +136,8 @@ export function ShareDialog({ project, projectName, manuscript: given, sync, onC
               ) : (
                 <>Reviewers see only one file, the project’s <strong>active manuscript</strong>. Choose it first: right-click the file → Active Manuscript. </>
               )}
-              Each reviewer gets their own link. They can read the manuscript and leave comments and suggestions; they can’t change your text, and they can’t see each other’s notes.
+              Each person gets their own link. A <strong>reviewer</strong> can read the active manuscript and leave comments and suggestions; they can’t change your text, and they can’t see each other’s notes.
+              A <strong>collaborator</strong> gets every Markdown file in the project, can edit them and create new ones: their changes and yours are merged each time either of you syncs, and anything you both changed is kept side by side for you to settle.
               <strong> Copy link</strong> gives just the link; <strong>Copy invitation</strong> adds a short note with where to download MDEdit.
             </p>
             <ul className="share-list">
@@ -148,13 +150,14 @@ export function ShareDialog({ project, projectName, manuscript: given, sync, onC
                       {r.name}
                       <span className="muted small share-sub">
                         {' '}
+                        {r.role === 'edit' ? 'can edit · ' : ''}
                         {r.chapters ? `${r.chapters.length} chapter${r.chapters.length === 1 ? '' : 's'} · ` : ''}
                         {c ? `${c.open} open of ${c.total} note${c.total === 1 ? '' : 's'}` : 'no notes yet'}
                         {when(r.createdAt) ? ` · invited ${when(r.createdAt)}` : ''}
                       </span>
                     </span>
                     <button type="button" onClick={() => void copyNote(r.link, `Link for ${r.name}`)}>Copy link</button>
-                    <button type="button" onClick={() => void copyNote(inviteMessage(projectName, r.link, r.name), `Invitation for ${r.name}`)}>Copy invitation</button>
+                    <button type="button" onClick={() => void copyNote(inviteMessage(projectName, r.link, r.name, r.role), `Invitation for ${r.name}`)}>Copy invitation</button>
                     <button type="button" disabled={busy} onClick={() => void run(() => api.revokeReviewer(project, r.id))}>Remove</button>
                   </li>
                 );
@@ -163,7 +166,7 @@ export function ShareDialog({ project, projectName, manuscript: given, sync, onC
             {limited && (
               <fieldset className="share-chapters">
                 <legend>
-                  Chapters this reviewer can see <span className="muted small">({ticked.size} of {chapters.length})</span>
+                  {role === 'edit' ? 'Chapters of the active manuscript this collaborator can edit (other files are shared whole)' : 'Chapters this reviewer can see'} <span className="muted small">({ticked.size} of {chapters.length})</span>
                 </legend>
                 <div className="share-chapters-tools small">
                   <button type="button" className="link" onClick={() => setTicked(new Set(chapters.map((c) => c.key)))}>All</button>
@@ -186,14 +189,18 @@ export function ShareDialog({ project, projectName, manuscript: given, sync, onC
                 e.preventDefault();
                 if (!name.trim() || (limited && ticked.size === 0)) return;
                 void run(async () => {
-                  const r = await api.inviteReviewer(project, name.trim(), limited ? { keys: [...ticked], level } : null);
+                  const r = await api.inviteReviewer(project, name.trim(), limited ? { keys: [...ticked], level } : null, role === 'edit' ? 'edit' : undefined);
                   setName('');
-                  setNote((await copy(inviteMessage(projectName, r.link, r.name))) ? `Invitation for ${r.name} copied. Send it to them (use Copy link above for the link alone).` : r.link);
+                  setNote((await copy(inviteMessage(projectName, r.link, r.name, r.role))) ? `Invitation for ${r.name} copied. Send it to them (use Copy link above for the link alone).` : r.link);
                 });
               }}
             >
-              <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Reviewer’s name" aria-label="Reviewer’s name" maxLength={40} />
-              <button type="submit" className="primary" disabled={busy || !name.trim() || (limited && ticked.size === 0)}>{busy ? 'Working…' : 'Create link'}</button>
+              <select value={role} onChange={(e) => setRole(e.target.value === 'edit' ? 'edit' : 'review')} aria-label="What they can do">
+                <option value="review">Reviewer (comments)</option>
+                <option value="edit">Collaborator (can edit)</option>
+              </select>
+              <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" aria-label="Their name" maxLength={40} />
+              <button type="submit" className="primary" disabled={busy || !name.trim() || (limited && ticked.size === 0)}>{busy ? 'Working…' : role === 'edit' ? 'Create editable link' : 'Create link'}</button>
             </form>
             {note && <div className="share-note" role="status">{note}</div>}
             {error && <div className="modal-error" role="alert">{error}</div>}

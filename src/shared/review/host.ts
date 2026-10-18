@@ -38,9 +38,9 @@ export function createReviewHost(o: ReviewHostOptions): ReviewSharingApi {
       await share.revokeAll(norm(project), basename(project));
     },
 
-    async inviteReviewer(project, name, chapters) {
+    async inviteReviewer(project, name, chapters, role) {
       need();
-      return share.invite(norm(project), basename(project), name, chapters);
+      return share.invite(norm(project), basename(project), name, chapters, role);
     },
 
     getShareChapters: (project, level) => share.chapters(norm(project), basename(project), level),
@@ -56,8 +56,8 @@ export function createReviewHost(o: ReviewHostOptions): ReviewSharingApi {
       const dir = norm(project);
       try {
         if (await readMarker(o.fs, dir)) {
-          const r = await join.sync(dir);
-          return { ...idle, ...r };
+          const { errors, ...r } = await join.sync(dir);
+          return { ...idle, ...r, errors: errors ?? [] };
         }
         const status = await share.status(basename(dir));
         if (!status.reviewers.length) return idle;

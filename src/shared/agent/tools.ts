@@ -19,7 +19,7 @@ import {
   type ReviewFile,
   type ReviewItem,
 } from '../review/comments';
-import { classify } from '../sync/rules';
+import { classify, SHARED_WITH_ME } from '../sync/rules';
 import { countWords } from '../words';
 import { flattenMarkdown } from './flatten';
 
@@ -81,8 +81,31 @@ async function child(fs: FsPort, dir: string, name: string): Promise<FsEntry | u
 
 const badName = (s: string) => !s || s === '.' || s === '..' || s.startsWith('.') || /[\\/:]/.test(s);
 
-/** The project folder, which must be a real folder directly inside the Root. */
+/** Prefix of the names under which projects shared with this person for editing are listed. */
+const SHARED_PREFIX = `${SHARED_WITH_ME}/`;
+
+/** True when `dir` is a project this person was invited to edit (not just to review), by its marker file. */
+async function isCollaboration(ctx: AgentContext, dir: string): Promise<boolean> {
+  try {
+    return (JSON.parse(await ctx.fs.readText(`${dir}/.mdedit/shared.json`)) as { role?: unknown }).role === 'edit';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The project folder: a real folder directly inside the Root, or a project shared with this person for editing, which is named
+ * "Shared With Me/<folder>". Projects shared for review only are never offered, since the author owns the notes on those.
+ */
 async function projectDir(ctx: AgentContext, project: string): Promise<string> {
+  if (typeof project === 'string' && project.startsWith(SHARED_PREFIX)) {
+    const name = project.slice(SHARED_PREFIX.length);
+    const holder = await child(ctx.fs, ctx.root, SHARED_WITH_ME);
+    const e = !badName(name) && holder?.isDirectory ? await child(ctx.fs, join(ctx.root, SHARED_WITH_ME), name) : undefined;
+    const dir = join(join(ctx.root, SHARED_WITH_ME), name);
+    if (e?.isDirectory && (await isCollaboration(ctx, dir))) return dir;
+    throw new AgentError(`There is no project called "${project}". Use list_projects to see the names.`);
+  }
   if (typeof project !== 'string' || badName(project)) throw new AgentError(`"${project}" is not a project name. Use a name from list_projects.`);
   const e = await child(ctx.fs, ctx.root, project);
   if (!e?.isDirectory) throw new AgentError(`There is no project called "${project}". Use list_projects to see the names.`);
@@ -143,6 +166,11 @@ export async function listProjects(ctx: AgentContext): Promise<{ project: string
     }
     out.push({ project: e.name, status });
   }
+  // Projects other authors invited this person to work on.
+  const holder = join(ctx.root, SHARED_WITH_ME);
+  for (const e of (await ctx.fs.readdir(holder).catch(() => [])).sort((a, b) => a.name.localeCompare(b.name))) {
+    if (e.isDirectory && !e.isSymbolicLink && !badName(e.name) && (await isCollaboration(ctx, join(holder, e.name)))) out.push({ project: `${SHARED_PREFIX}${e.name}`, status: null });
+  }
   return out;
 }
 
@@ -156,7 +184,7 @@ export async function listFiles(ctx: AgentContext, project: string): Promise<{ f
       if (e.isSymbolicLink || e.name.startsWith('.')) continue;
       const r = rel ? `${rel}/${e.name}` : e.name;
       if (e.isDirectory) await walk(r);
-      else if (e.isFile && out.length < LIMITS.files && classify(`${project}/${r}`) === 'prose') {
+      else if (e.isFile && out.length < LIMITS.files && classify(`p/${r}`) === 'prose') {
         const text = await ctx.fs.readText(`${dir}/${r}`);
         out.push({ file: r, words: countWords(text), chapters: splitChapters(text, level).chapters.length });
       }

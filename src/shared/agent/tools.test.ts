@@ -209,3 +209,25 @@ describe('sharing a file with the app', () => {
     await expect(replyToNote(ctx, 'Novel', 'line', 'nope', 'x')).rejects.toThrow(/no note/);
   });
 });
+
+describe('projects shared for editing', () => {
+  beforeEach(() => {
+    fs.seed('/books/Shared With Me/Edit Book/.mdedit/shared.json', '{"packageId":"p1","commentsId":"c1","reviewerId":"rev1abc","project":"Edit Book","role":"edit"}');
+    fs.seed('/books/Shared With Me/Edit Book/Manuscript/Book.md', BOOK);
+    fs.seed('/books/Shared With Me/Review Book/.mdedit/shared.json', '{"packageId":"p2","commentsId":"c2","reviewerId":"rev2abc","project":"Review Book"}');
+    fs.seed('/books/Shared With Me/Review Book/Manuscript/Book.md', BOOK);
+  });
+
+  it('are listed and readable, and review-only ones are not', async () => {
+    expect((await listProjects(ctx)).map((p) => p.project)).toEqual(['Novel', 'Shared With Me/Edit Book']);
+    expect((await listFiles(ctx, 'Shared With Me/Edit Book')).map((f) => f.file)).toEqual(['Manuscript/Book.md']);
+    await expect(listFiles(ctx, 'Shared With Me/Review Book')).rejects.toThrow(AgentError);
+    await expect(listFiles(ctx, 'Shared With Me/../Novel')).rejects.toThrow(AgentError);
+  });
+
+  it('take AI notes into the shared project\'s own review folder', async () => {
+    await addNotes(ctx, 'Shared With Me/Edit Book', undefined, [note()]);
+    const files = await makeReviews(fs).list('/books/Shared With Me/Edit Book');
+    expect(files.map((f) => f.id)).toEqual(['ai-claude']);
+  });
+});

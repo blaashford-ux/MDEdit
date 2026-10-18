@@ -401,8 +401,9 @@ export interface ReviewSharingApi {
   /**
    * Makes a private comments file for a new reviewer and returns their invitation link (also publishes the text).
    * With `chapters`, the reviewer is given only those chapters of the manuscript.
+   * With `role: 'edit'` the person is a collaborator: they get an editable copy of those chapters, merged with the owner's text on every sync.
    */
-  inviteReviewer(project: string, name: string, chapters?: ChapterSelection | null): Promise<ReviewerRecord>;
+  inviteReviewer(project: string, name: string, chapters?: ChapterSelection | null, role?: 'edit'): Promise<ReviewerRecord>;
   /** The share manuscript's chapters (split at heading `level`) and which ones were ticked last time. */
   getShareChapters(project: string, level: number): Promise<ShareChapters>;
   /** Closes a reviewer's file; their notes stay in the project. */
