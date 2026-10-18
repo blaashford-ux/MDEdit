@@ -455,6 +455,59 @@ describe('collaboration: editable links', () => {
     expect(drive.links.has(parseInviteLink(inv.link)!.packageId)).toBe(false);
   });
 
+  describe('every file of the project', () => {
+    it('gives a collaborator all the Markdown files, but a reviewer only the active manuscript', async () => {
+      const { share, join, ownerFs, readerFs, drive, joined, copy } = await invited();
+      ownerFs.seed('/root/Novel/Notes/World.md', '# World\n\nMap notes\n');
+      ownerFs.seed('/root/Novel/Exports/Draft.md', '# Exported\n');
+      ownerFs.seed('/root/Novel/.mdedit/project.json', '{"activeManuscript":"Manuscript/Book.md"}');
+      await share.sync('/root/Novel', 'Novel');
+      await join.sync(joined.dir);
+      expect(await readerFs.readText(`${joined.dir}/Notes/World.md`)).toContain('Map notes');
+      expect(await readerFs.readText(copy)).toBe(book);
+      expect(await readerFs.stat(`${joined.dir}/Exports/Draft.md`)).toBeNull();
+
+      const rev = await share.invite('/root/Novel', 'Novel', 'Rae');
+      const pkg = JSON.parse(await drive.download(parseInviteLink(rev.link)!.packageId));
+      expect(pkg.files.map((f: { path: string }) => f.path)).toEqual(['Manuscript/Book.md']);
+    });
+
+    it('carries a file the collaborator creates to the owner, and the owner\'s new file to them', async () => {
+      const { share, join, ownerFs, readerFs, joined } = await invited();
+      await readerFs.mkdir(`${joined.dir}/Characters`, { recursive: true });
+      await readerFs.writeText(`${joined.dir}/Characters/Sam.md`, '# Sam\n\nBrave\n');
+      ownerFs.seed('/root/Novel/Outline.md', '# Outline\n\nAct one\n');
+      await join.sync(joined.dir);
+      await share.sync('/root/Novel', 'Novel');
+      await join.sync(joined.dir);
+      expect(await ownerFs.readText('/root/Novel/Characters/Sam.md')).toBe('# Sam\n\nBrave\n');
+      expect(await readerFs.readText(`${joined.dir}/Outline.md`)).toBe('# Outline\n\nAct one\n');
+      // and both then edit the same file without trouble
+      await readerFs.writeText(`${joined.dir}/Outline.md`, '# Outline\n\nAct one, revised\n');
+      await join.sync(joined.dir);
+      await share.sync('/root/Novel', 'Novel');
+      expect(await ownerFs.readText('/root/Novel/Outline.md')).toContain('revised');
+    });
+
+    it('does not take files from hidden folders or non-Markdown paths from the shared copy', async () => {
+      const { share, drive, ownerFs, invite } = await invited();
+      const pkg = JSON.parse(await drive.download(invite.packageId));
+      pkg.files.push({ path: '.mdedit/project.json', text: '{"evil":1}' }, { path: 'Exports/x.md', text: 'no' }, { path: 'run.sh', text: 'no' });
+      await drive.updateFile(invite.packageId, JSON.stringify(pkg));
+      await share.sync('/root/Novel', 'Novel');
+      expect(await ownerFs.readText('/root/Novel/.mdedit/project.json')).not.toContain('evil');
+      expect(await ownerFs.stat('/root/Novel/Exports/x.md')).toBeNull();
+      expect(await ownerFs.stat('/root/Novel/run.sh')).toBeNull();
+    });
+
+    it('invites a collaborator even when several files exist and none is the active manuscript', async () => {
+      const s = setup();
+      s.ownerFs.seed('/root/Novel/Other.md', '# Other\n');
+      const r = await s.share.invite('/root/Novel', 'Novel', 'Sam', null, 'edit');
+      expect(r.role).toBe('edit');
+    });
+  });
+
   describe('notes among the editing group', () => {
     const readNotes = async (fs: MemoryFs, dir: string) => {
       const m = new Map<string, string[]>();

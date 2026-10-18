@@ -16,7 +16,7 @@ import { buildInviteLink } from './link';
 import { splitChapters } from '../chapters';
 import { exchangeCollab } from './collab';
 import { mergeTeam, parseTeam, serializeWithTeam, sharedAmongEditors, visibleTo } from './team';
-import { buildPackage, chapterKeys, parsePackage, readCollabBase, readMarker, writeCollabBase, writeMarker, writePackage, type ChapterSelection } from './package';
+import { buildPackage, chapterKeys, parsePackage, readCollabBase, readMarker, readProseFiles, selectChapters, writeCollabBase, writeMarker, writePackage, type ChapterSelection } from './package';
 
 export interface ReviewerRecord {
   id: string;
@@ -34,6 +34,8 @@ export interface ReviewerRecord {
    * (everyone else shares the project's package). Absent means the whole manuscript.
    */
   chapters?: string[];
+  /** Collaborators only: the manuscript `chapters` are chapters of (every other Markdown file is shared whole). */
+  chapterFile?: string;
   chapterLevel?: number;
   packageId?: string;
   packageMd5?: string | null;
@@ -276,7 +278,7 @@ export class ReviewShare {
     const body = JSON.stringify({ ...pkg, publishedAt: '' });
     const md5 = md5Hex(body);
     let rec = this.state.projects[project];
-    const stillThere = rec ? await this.o.drive().getFile(rec.packageId) : null;
+    const stillThere = rec?.packageId ? await this.o.drive().getFile(rec.packageId) : null;
     if (rec && stillThere && rec.packageMd5 === md5) return rec;
 
     const text = JSON.stringify(pkg);
@@ -359,35 +361,57 @@ export class ReviewShare {
    * reviewer gets a copy of the manuscript holding just those chapters, in a file of their own; the choice is remembered for the
    * manuscript so the next invitation starts from the same ticks.
    *
-   * With `role: 'edit'` the reviewer is a collaborator: their file is a working copy they can write to (it is always their own,
-   * with all chapters or the ticked ones), and `collaborate` merges it with the owner's text on every sync.
+   * With `role: 'edit'` the person is a collaborator: they get every Markdown file of the project (not just the active
+   * manuscript) in a working copy they can write to, and `collaborate` merges it with the owner's files on every sync. `chapters`
+   * then limits only the active manuscript; the other files are shared whole.
    */
   async invite(dir: string, project: string, reviewerName: string, chapters?: ChapterSelection | null, role?: 'edit'): Promise<ReviewerRecord> {
     await this.load();
     await this.refresh(true);
-    const rec = await this.publish(dir, project);
-    await this.ensurePackageShared(project, rec.packageId, true);
+    // Collaborators don't use the read-only snapshot, so it is only published (and opened by link) for reviewers.
+    const rec = role
+      ? (this.state.projects[project] ?? { packageId: '', packageMd5: null, publishedAt: null, reviewers: [] })
+      : await this.publish(dir, project);
+    if (!role) await this.ensurePackageShared(project, rec.packageId, true);
     const id = this.newId();
     const name = reviewerName.trim() || 'Reviewer';
-    let subset: Pick<ReviewerRecord, 'chapters' | 'chapterLevel' | 'packageId' | 'packageMd5'> = {};
-    if (chapters || role) {
+    let subset: Pick<ReviewerRecord, 'chapters' | 'chapterFile' | 'chapterLevel' | 'packageId' | 'packageMd5'> = {};
+    if (role) {
+      const files = await readProseFiles(this.o.fs, dir);
+      if (files.length === 0) throw new Error('There are no Markdown files in this project to share yet.');
+      const manuscript = chapters ? await this.manuscriptOf(dir, project) : null;
+      const level = chapters?.level ?? 1;
+      let keys: string[] | null = null;
+      const text = manuscript ? files.find((f) => f.path === manuscript)?.text : undefined;
+      if (chapters && manuscript && text !== undefined) {
+        const all = chapterKeys(splitChapters(text, level)).map((c) => c.key);
+        const ticked = all.filter((k) => chapters.keys.includes(k));
+        if (ticked.length === 0) throw new Error('Tick at least one chapter for this collaborator to edit.');
+        this.state.selections = { ...this.state.selections, [`${project}/${manuscript}`]: ticked };
+        if (ticked.length < all.length) keys = ticked;
+      }
+      const shown = files.map((f) => (keys && f.path === manuscript ? { path: f.path, text: selectChapters(f.text, { keys, level }) } : f));
+      const file = await this.o.drive().createFile(
+        `${toCompliantName(project)} - ${toCompliantName(name)}.mdedit-review.json`,
+        await this.folder(),
+        JSON.stringify({ version: 1, project, publishedAt: this.now().toISOString(), files: shown, chapterLevel: level })
+      );
+      await this.o.drive().shareByLink(file.id, 'writer');
+      subset = { ...(keys && manuscript ? { chapters: keys, chapterFile: manuscript } : {}), chapterLevel: level, packageId: file.id, packageMd5: null };
+      this.state.bases = { ...this.state.bases, [`${project}/${id}`]: Object.fromEntries(shown.map((f) => [f.path, f.text])) };
+    } else if (chapters) {
       const manuscript = await this.manuscriptOf(dir, project);
-      if (!manuscript && role) throw new Error('Choose which file to work on together first: right-click it in the file list and pick “Active Manuscript”.');
       if (manuscript) {
         const pkg0 = await buildPackage(this.o.fs, dir, project, this.now, manuscript);
-        const sel: ChapterSelection = chapters ?? { keys: [], level: 1 };
-        const all = pkg0.files[0] ? chapterKeys(splitChapters(pkg0.files[0].text, sel.level)).map((c) => c.key) : [];
-        const keys = chapters ? all.filter((k) => sel.keys.includes(k)) : all;
+        const all = pkg0.files[0] ? chapterKeys(splitChapters(pkg0.files[0].text, chapters.level)).map((c) => c.key) : [];
+        const keys = all.filter((k) => chapters.keys.includes(k));
         if (keys.length === 0) throw new Error('Tick at least one chapter for this reviewer to see.');
-        if (chapters) this.state.selections = { ...this.state.selections, [`${project}/${manuscript}`]: keys };
-        if (keys.length < all.length || role) {
-          const limited = keys.length < all.length;
-          const pkg = await buildPackage(this.o.fs, dir, project, this.now, manuscript, limited ? { keys, level: sel.level } : undefined);
-          const body = JSON.stringify(role ? { ...pkg, chapterLevel: sel.level } : pkg);
-          const file = await this.o.drive().createFile(`${toCompliantName(project)} - ${toCompliantName(name)}.mdedit-review.json`, await this.folder(), body);
-          await this.o.drive().shareByLink(file.id, role ? 'writer' : 'reader');
-          subset = { ...(limited ? { chapters: keys } : {}), chapterLevel: sel.level, packageId: file.id, packageMd5: md5Hex(JSON.stringify({ ...pkg, publishedAt: '' })) };
-          if (role) this.state.bases = { ...this.state.bases, [`${project}/${id}`]: Object.fromEntries(pkg.files.map((f) => [f.path, f.text])) };
+        this.state.selections = { ...this.state.selections, [`${project}/${manuscript}`]: keys };
+        if (keys.length < all.length) {
+          const pkg = await buildPackage(this.o.fs, dir, project, this.now, manuscript, { keys, level: chapters.level });
+          const file = await this.o.drive().createFile(`${toCompliantName(project)} - ${toCompliantName(name)}.mdedit-review.json`, await this.folder(), JSON.stringify(pkg));
+          await this.o.drive().shareByLink(file.id, 'reader');
+          subset = { chapters: keys, chapterLevel: chapters.level, packageId: file.id, packageMd5: md5Hex(JSON.stringify({ ...pkg, publishedAt: '' })) };
         }
       }
     }
@@ -424,7 +448,7 @@ export class ReviewShare {
     await this.o.drive().unshare(who.commentsId).catch(() => undefined);
     if (who.packageId) await this.o.drive().unshare(who.packageId).catch(() => undefined);
     const left = rec.reviewers.filter((r) => r.id !== reviewerId);
-    if (left.length === 0) {
+    if (!left.some((r) => !r.role) && rec.packageId) {
       await this.o.drive().unshare(rec.packageId).catch(() => undefined);
       this.packageChecked.delete(`${project}:${rec.packageId}`);
     }
@@ -441,7 +465,7 @@ export class ReviewShare {
     const out = { changed: false, errors: [] as string[] };
     if (!rec) return out;
     // An invitation that was sent while the package was private is repaired here, once per session.
-    if (rec.reviewers.length > 0) await this.ensurePackageShared(project, rec.packageId).catch((e) => out.errors.push(e instanceof Error ? e.message : String(e)));
+    if (rec.reviewers.some((r) => !r.role) && rec.packageId) await this.ensurePackageShared(project, rec.packageId).catch((e) => out.errors.push(e instanceof Error ? e.message : String(e)));
     for (const who of rec.reviewers) {
       if (who.packageId) await this.ensurePackageShared(`${project}/${who.id}`, who.packageId, false, who.role ? 'writer' : 'reader').catch((e) => out.errors.push(e instanceof Error ? e.message : String(e)));
     }
@@ -472,7 +496,7 @@ export class ReviewShare {
             }
           }
           const mine = [...local].filter(([id]) => id !== who.id && sharedAmongEditors(id, collaboratorIds)).map(([, t]) => parseReviewFile(t)).filter((f): f is ReviewFile => !!f);
-          const manuscript = who.chapters ? await this.manuscriptOf(dir, project) : null;
+          const manuscript = who.chapters ? (who.chapterFile ?? (await this.manuscriptOf(dir, project))) : null;
           const body = manuscript ? { path: manuscript, text: await this.o.fs.readText(`${dir}/${manuscript}`).catch(() => '') } : null;
           const team = visibleTo(mergeTeam(theirs, mine), body, who.chapters ? { keys: who.chapters, level: who.chapterLevel ?? 1 } : null);
           upload = serializeWithTeam(merged, team);
@@ -497,8 +521,6 @@ export class ReviewShare {
     for (const who of rec?.reviewers ?? []) {
       if (!who.role || !who.packageId) continue;
       try {
-        const manuscript = await this.manuscriptOf(dir, project);
-        if (!manuscript) continue;
         const key = `${project}/${who.id}`;
         const r = await exchangeCollab({
           fs: this.o.fs,
@@ -507,6 +529,7 @@ export class ReviewShare {
           packageId: who.packageId,
           level: who.chapterLevel ?? 1,
           scope: who.chapters ? new Set(who.chapters) : null,
+          scopeFile: who.chapterFile ?? null,
           base: this.state.bases?.[key] ?? null,
           labels: { local: 'Yours', remote: who.name },
           now: this.now
@@ -534,7 +557,7 @@ export class ReviewShare {
     await this.refresh();
     if (!this.state.projects[project]?.reviewers.length) return { changed: false, errors: [] };
     const collab = await this.collaborate(dir, project);
-    await this.publish(dir, project);
+    if (this.state.projects[project].reviewers.some((r) => !r.role)) await this.publish(dir, project);
     await this.publishSubsets(dir, project);
     const notes = await this.pull(dir, project);
     return { changed: collab.changed || notes.changed, errors: [...collab.errors, ...notes.errors] };
@@ -634,7 +657,7 @@ export class ReviewJoin {
 
     if (m.role === 'edit') {
       // A collaborator's text is merged with the owner's, never replaced by it.
-      const r = await exchangeCollab({ fs, drive, dir, packageId: m.packageId, level: 1, scope: null, base: await readCollabBase(fs, dir), labels: { local: 'Yours', remote: 'Owner' }, now: () => new Date() });
+      const r = await exchangeCollab({ fs, drive, dir, packageId: m.packageId, level: 1, scope: null, scopeFile: null, base: await readCollabBase(fs, dir), labels: { local: 'Yours', remote: 'Owner' }, now: () => new Date() });
       if (r.gone) return { changed: false, revoked: true };
       await writeCollabBase(fs, dir, r.base);
       const files = Object.keys(r.base);

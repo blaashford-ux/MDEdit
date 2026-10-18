@@ -136,8 +136,8 @@ export function ShareDialog({ project, projectName, manuscript: given, sync, onC
               ) : (
                 <>Reviewers see only one file, the project’s <strong>active manuscript</strong>. Choose it first: right-click the file → Active Manuscript. </>
               )}
-              Each person gets their own link. A <strong>reviewer</strong> can read the manuscript and leave comments and suggestions; they can’t change your text, and they can’t see each other’s notes.
-              A <strong>collaborator</strong> can also edit the text: their changes and yours are merged each time either of you syncs, and anything you both changed is kept side by side for you to settle.
+              Each person gets their own link. A <strong>reviewer</strong> can read the active manuscript and leave comments and suggestions; they can’t change your text, and they can’t see each other’s notes.
+              A <strong>collaborator</strong> gets every Markdown file in the project, can edit them and create new ones: their changes and yours are merged each time either of you syncs, and anything you both changed is kept side by side for you to settle.
               <strong> Copy link</strong> gives just the link; <strong>Copy invitation</strong> adds a short note with where to download MDEdit.
             </p>
             <ul className="share-list">
@@ -166,7 +166,7 @@ export function ShareDialog({ project, projectName, manuscript: given, sync, onC
             {limited && (
               <fieldset className="share-chapters">
                 <legend>
-                  {role === 'edit' ? 'Chapters this collaborator can edit' : 'Chapters this reviewer can see'} <span className="muted small">({ticked.size} of {chapters.length})</span>
+                  {role === 'edit' ? 'Chapters of the active manuscript this collaborator can edit (other files are shared whole)' : 'Chapters this reviewer can see'} <span className="muted small">({ticked.size} of {chapters.length})</span>
                 </legend>
                 <div className="share-chapters-tools small">
                   <button type="button" className="link" onClick={() => setTicked(new Set(chapters.map((c) => c.key)))}>All</button>

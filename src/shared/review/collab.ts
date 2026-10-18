@@ -8,7 +8,7 @@
 import type { FsPort } from '../fsPort';
 import type { DriveApi } from '../sync/drive';
 import { mergeManuscript, sameChapters } from './merge';
-import { parsePackage, type ReviewPackage } from './package';
+import { isSharedProse, parsePackage, readProseFiles, type ReviewPackage } from './package';
 
 export interface CollabInput {
   fs: FsPort;
@@ -21,6 +21,8 @@ export interface CollabInput {
   level: number;
   /** Chapters this collaborator was given (keys); null when it is the whole manuscript. */
   scope: Set<string> | null;
+  /** The file `scope` applies to (the other files are always shared whole). */
+  scopeFile: string | null;
   /** The text both sides last agreed on, by file path. */
   base: Record<string, string> | null;
   /** Names for the two sides in conflict markers. */
@@ -29,17 +31,21 @@ export interface CollabInput {
 }
 
 export interface CollabResult {
-  /** Local files that were rewritten. */
+  /** Local files that were written (changed or new). */
   localChanged: string[];
   /** Whether the shared file was updated. */
   remoteChanged: boolean;
   conflicts: number;
-  /** The agreed text after this exchange. */
+  /** The agreed text after this exchange, by file path. */
   base: Record<string, string>;
   /** The shared file is gone or can't be read. */
   gone: boolean;
 }
 
+/**
+ * Brings this side's Markdown files and the shared file into step. A file only one side has is copied to the other (that is how
+ * new files travel); a file both have is merged. Deleting a file is not passed on: the other side's copy brings it back.
+ */
 export async function exchangeCollab(o: CollabInput): Promise<CollabResult> {
   for (let attempt = 0; ; attempt++) {
     const file = await o.drive.getFile(o.packageId);
@@ -47,26 +53,35 @@ export async function exchangeCollab(o: CollabInput): Promise<CollabResult> {
     const remote = parsePackage(await o.drive.download(o.packageId));
     if (!remote) throw new Error('The shared copy of the manuscript can’t be read.');
     const level = remote.chapterLevel ?? o.level;
+    // Only Markdown manuscripts outside hidden folders are accepted from the shared file, whatever it says.
+    const theirs = new Map(remote.files.filter((f) => isSharedProse(f.path)).map((f) => [f.path, f.text]));
+    const mine = new Map((await readProseFiles(o.fs, o.dir)).map((f) => [f.path, f.text]));
 
     const files: ReviewPackage['files'] = [];
     const writes: { path: string; text: string }[] = [];
     const base: Record<string, string> = {};
     let conflicts = 0;
-    let remoteDiffers = false;
-    for (const f of remote.files) {
-      const local = await o.fs.readText(`${o.dir}/${f.path}`).catch(() => null);
-      if (local === null) {
-        files.push(f);
-        writes.push(f);
-        base[f.path] = f.text;
-        continue;
+    let remoteDiffers = remote.files.length !== theirs.size;
+    for (const path of [...new Set([...theirs.keys(), ...mine.keys()])].sort()) {
+      const l = mine.get(path);
+      const r = theirs.get(path);
+      if (r === undefined) {
+        files.push({ path, text: l! });
+        base[path] = l!;
+        remoteDiffers = true;
+      } else if (l === undefined) {
+        files.push({ path, text: r });
+        writes.push({ path, text: r });
+        base[path] = r;
+      } else {
+        const m = mergeManuscript({ base: o.base?.[path] ?? null, local: l, remote: r, level, scope: path === o.scopeFile ? o.scope : null, labels: o.labels });
+        conflicts += m.conflicts;
+        if (m.local !== l) writes.push({ path, text: m.local });
+        const same = sameChapters(m.shared, r, level);
+        if (!same) remoteDiffers = true;
+        files.push({ path, text: same ? r : m.shared });
+        base[path] = same ? r : m.shared;
       }
-      const m = mergeManuscript({ base: o.base?.[f.path] ?? null, local, remote: f.text, level, scope: o.scope, labels: o.labels });
-      conflicts += m.conflicts;
-      if (m.local !== local) writes.push({ path: f.path, text: m.local });
-      if (!sameChapters(m.shared, f.text, level)) remoteDiffers = true;
-      files.push({ path: f.path, text: sameChapters(m.shared, f.text, level) ? f.text : m.shared });
-      base[f.path] = sameChapters(m.shared, f.text, level) ? f.text : m.shared;
     }
 
     if (remoteDiffers) {

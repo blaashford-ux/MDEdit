@@ -45,8 +45,7 @@ export function selectChapters(text: string, sel: ChapterSelection): string {
   return joinChapters({ ...doc, chapters: doc.chapters.filter((_, i) => want.has(keys[i].key)) });
 }
 
-/** Every prose file in the project folder (Markdown only; settings, exports and hidden folders are left out), or just `only`. */
-export async function buildPackage(fs: FsPort, dir: string, project: string, now: () => Date = () => new Date(), only?: string, chapters?: ChapterSelection): Promise<ReviewPackage> {
+async function walkProse(fs: FsPort, dir: string, keep: (rel: string) => boolean, read: (rel: string, text: string) => string = (_r, t) => t): Promise<{ path: string; text: string }[]> {
   const files: { path: string; text: string }[] = [];
   const walk = async (rel: string): Promise<void> => {
     const entries = (await fs.readdir(rel ? `${dir}/${rel}` : dir)).sort((a, b) => a.name.localeCompare(b.name));
@@ -55,14 +54,27 @@ export async function buildPackage(fs: FsPort, dir: string, project: string, now
       const r = rel ? `${rel}/${e.name}` : e.name;
       if (e.isDirectory) {
         if (!e.name.startsWith('.')) await walk(r);
-      } else if (e.isFile && classify(r) === 'prose' && files.length < MAX_FILES && (only === undefined || r === only)) {
-        const text = await fs.readText(`${dir}/${r}`);
-        files.push({ path: r, text: chapters && only !== undefined ? selectChapters(text, chapters) : text });
+      } else if (e.isFile && files.length < MAX_FILES && keep(r)) {
+        files.push({ path: r, text: read(r, await fs.readText(`${dir}/${r}`)) });
       }
     }
   };
   await walk('');
+  return files;
+}
+
+/** Every prose file in the project folder (Markdown only; settings, exports and hidden folders are left out), or just `only`. */
+export async function buildPackage(fs: FsPort, dir: string, project: string, now: () => Date = () => new Date(), only?: string, chapters?: ChapterSelection): Promise<ReviewPackage> {
+  const files = await walkProse(fs, dir, (r) => classify(r) === 'prose' && (only === undefined || r === only), (_r, t) => (chapters && only !== undefined ? selectChapters(t, chapters) : t));
   return { version: 1, project, publishedAt: now().toISOString(), files };
+}
+
+/** Whether a path inside a project is a manuscript file that collaborators may share (Markdown outside hidden folders and Exports). */
+export const isSharedProse = (rel: string): boolean => !rel.split('/').some((s) => s.startsWith('.')) && classify(`p/${rel}`) === 'prose';
+
+/** Every Markdown file of the project (the notes, outlines and other books too), which is what collaborators work on together. */
+export function readProseFiles(fs: FsPort, dir: string): Promise<{ path: string; text: string }[]> {
+  return walkProse(fs, dir, isSharedProse);
 }
 
 export function parsePackage(raw: string): ReviewPackage | null {
