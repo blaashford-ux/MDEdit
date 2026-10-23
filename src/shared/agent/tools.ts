@@ -28,7 +28,8 @@ const KNOWN_SKILLS: Record<string, string> = { developmental: 'Developmental edi
 
 export const LIMITS = {
   notesPerCall: 50,
-  notesPerFile: 500,
+  /** Open notes one reviewer may have in a project; resolved, accepted, rejected and deleted notes don't count. */
+  openNotesPerFile: 1000,
   commentQuote: 600,
   suggestionQuote: 300,
   body: 4000,
@@ -457,7 +458,7 @@ export function addNotes(ctx: AgentContext, project: string, skill: string | und
     const created: ReviewItem[] = [];
     for (const input of notes) {
       try {
-        if (file.items.filter((i) => i.status !== 'deleted').length + created.length >= LIMITS.notesPerFile) throw new AgentError(`This reviewer already has ${LIMITS.notesPerFile} notes in the project. Ask the author to clear some first.`);
+        if (file.items.filter((i) => i.status === 'open').length + created.length >= LIMITS.openNotesPerFile) throw new AgentError(`This reviewer already has ${LIMITS.openNotesPerFile} open notes in the project. Ask the author to resolve or clear some first.`);
         const { rel } = await manuscriptPath(ctx, project, input.file);
         let l = loaded.get(rel);
         if (!l) loaded.set(rel, (l = await load(ctx, project, rel)));

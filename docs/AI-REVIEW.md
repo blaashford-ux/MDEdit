@@ -39,7 +39,7 @@ Use the full path to `mdedit-mcp.js` below.
 The ChatGPT app and claude.ai on the web can only reach servers on the internet, not a program on your PC; for those see **Online apps** below.
 
 ## Tools
-`list_projects`, `list_files`, `list_chapters`, `read_chapter`, `search_text` (find a name, term or spelling across the book), `get_notes`, `add_notes` (up to 50 at a time), `reply_to_note`, `withdraw_note`.
+`list_projects`, `list_files`, `list_chapters`, `read_chapter`, `search_text` (find a name, term or spelling across the book), `get_notes`, `add_notes` (up to 50 at a time, and up to 1000 open notes per reviewer; resolved, accepted, rejected and deleted notes don't count), `reply_to_note`, `withdraw_note`.
 
 Quotes in `add_notes` are matched against the plain text `read_chapter` returns (Markdown marks removed, one paragraph per line), which is the same text MDEdit anchors notes to. A quote that is missing, or that matches more than one place, is rejected with the reason so the model can fix it. Suggestions must stay inside one paragraph.
 

@@ -136,6 +136,23 @@ describe('adding notes', () => {
     expect((again as { error: string }).error).toMatch(/already left/);
   });
 
+  it('caps a reviewer at 1000 open notes; closed and deleted notes do not count', async () => {
+    await addNotes(ctx, 'Novel', 'line', [note()]);
+    const dir = '/books/Novel';
+    const [entry] = await makeReviews(fs).list(dir);
+    const file = JSON.parse(entry.text);
+    const seed = (status: 'open' | 'resolved' | 'deleted', count: number) =>
+      Array.from({ length: count }, (_, i) => ({ ...file.items[0], id: `${status}${i}`, status }));
+    const save = (items: unknown[]) => makeReviews(fs).save(dir, entry.id, JSON.stringify({ ...file, items }));
+    // save() merges with the one open note already on disk, so 998 more make 999
+    await save([...seed('resolved', 600), ...seed('deleted', 600), ...seed('open', 998)]);
+    const [last] = await addNotes(ctx, 'Novel', 'line', [note({ quote: 'apples' })]);
+    expect(last.ok).toBe(true);
+    const [over] = await addNotes(ctx, 'Novel', 'line', [note({ quote: 'pears' })]);
+    expect(over.ok).toBe(false);
+    expect((over as { error: string }).error).toMatch(/1000 open notes/);
+  });
+
   it('signs with just the AI’s name when no skill is used, and adds the skill’s tag when one is', async () => {
     await addNotes(ctx, 'Novel', undefined, [note({ quote: 'river' })]);
     await addNotes(ctx, 'Novel', 'Dialogue Voice', [note({ quote: 'apples' })]);
