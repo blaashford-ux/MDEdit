@@ -10,7 +10,8 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { nodeFs } from '../electron/nodeFs';
 import { startHttp } from './http';
 import { createServer } from './server';
-import { resolveRoot } from './root';
+import { listProjects } from '../src/shared/agent/tools';
+import { chooseRoot, rootCandidates } from './root';
 
 function flag(name: string): string | undefined {
   const args = process.argv.slice(2);
@@ -27,16 +28,18 @@ async function main(): Promise<void> {
     );
     return;
   }
-  const { root, source } = await resolveRoot({ flag: flag('root'), fs: nodeFs });
+  const candidates = await rootCandidates({ flag: flag('root'), fs: nodeFs });
+  const { root, source, tried } = await chooseRoot(candidates, async (r) => (await listProjects({ fs: nodeFs, root: r, agent: 'ai', agentName: 'AI' })).length > 0);
+  if (source !== candidates[0].source) process.stderr.write(`No projects in the projects folder from ${candidates[0].source} (${candidates[0].root}); using ${root} (${source}) instead.\n`);
   const st = await nodeFs.stat(root);
   if (!st?.isDirectory) throw new Error(`The projects folder "${root}" (from ${source}) does not exist. Pass --root <folder>.`);
   if (process.argv.includes('--http')) {
     const token = flag('token') ?? process.env.MDEDIT_TOKEN ?? randomBytes(24).toString('base64url');
-    const http = await startHttp({ fs: nodeFs, root, agent: flag('agent'), version: process.env.MDEDIT_VERSION, token, port: Number(flag('port') ?? 47831) });
+    const http = await startHttp({ fs: nodeFs, root, tried, agent: flag('agent'), version: process.env.MDEDIT_VERSION, token, port: Number(flag('port') ?? 47831) });
     process.stderr.write(`MDEdit AI access ready on http://${http.host}:${http.port}  (MCP: /mcp, REST: /api, description: /openapi.json)\nProjects folder: ${root} (${source})\nAccess token: ${token}\n`);
     return;
   }
-  const server = createServer({ fs: nodeFs, root, agent: flag('agent'), version: process.env.MDEDIT_VERSION });
+  const server = createServer({ fs: nodeFs, root, tried, agent: flag('agent'), version: process.env.MDEDIT_VERSION });
   await server.connect(new StdioServerTransport());
   process.stderr.write(`MDEdit MCP server ready. Projects folder: ${root} (${source})\n`);
 }

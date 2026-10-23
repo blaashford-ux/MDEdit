@@ -7,7 +7,7 @@ In MDEdit open a project and choose **Notes → AI… → Save files to Download
 
 | File | For |
 |---|---|
-| `mdedit.mcpb` | Claude Desktop: double-click, or drag into Settings → Extensions. Claude Desktop runs it with its own Node, so nothing else is installed. It asks for your projects folder (pre-filled). |
+| `mdedit.mcpb` | Claude Desktop: double-click, or drag into Settings → Extensions. Claude Desktop runs it with its own Node, so nothing else is installed. Its "Projects folder" setting can stay empty: it then follows the Root Folder set in MDEdit. |
 | `skills/*.zip` | Claude Desktop and claude.ai: upload each under Settings → Capabilities → Skills. |
 | `skills/folders/` | Claude Code: copy into `~/.claude/skills`. |
 | `mdedit-mcp.js`, `connect-settings.txt` | Claude Code, Codex (GPT) and other MCP apps: ready-made settings pointing at the saved server (needs Node.js 20+). |
