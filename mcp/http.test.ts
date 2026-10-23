@@ -107,7 +107,7 @@ describe('the API description', () => {
     expect(doc.servers).toEqual([{ url: 'https://abc.example.com' }]);
     expect(doc.openapi).toBe('3.1.0');
     const ids = Object.values(doc.paths as Record<string, Record<string, { operationId: string; description: string }>>).flatMap((p) => Object.values(p));
-    expect(ids.map((o) => o.operationId).sort()).toEqual(['addNotes', 'getNotes', 'listChapters', 'listFiles', 'listProjects', 'readChapter', 'replyToNote', 'searchText', 'withdrawNote']);
+    expect(ids.map((o) => o.operationId).sort()).toEqual(['addNotes', 'getNotes', 'listChapters', 'listFiles', 'listProjects', 'readChapter', 'replyToNote', 'searchText', 'setChaptersEdited', 'withdrawNote']);
     for (const o of ids) expect(o.description.length, o.operationId).toBeLessThanOrEqual(300); // Custom GPT Actions limit
     expect(doc.security).toEqual([{ bearer: [] }]);
   });

@@ -599,6 +599,16 @@ export class Workspace {
     return this.patchEdited((edited) => ids.reduce((acc, id) => withChapterEdited(acc, rel, id, true), edited));
   }
 
+  /** Unmarks every chapter of the file from the first up to and including `chapter` (the complement of `markEditedThrough`). */
+  async unmarkEditedThrough(file: string, chapter: number): Promise<boolean> {
+    const project = this.state.project;
+    const doc = this.state.docs.get(file);
+    if (!project || !doc || !doc.chapters[chapter]) return false;
+    const rel = relativeTo(project.path, file);
+    const ids = chapterIds(doc.chapters).slice(0, chapter + 1);
+    return this.patchEdited((edited) => ids.reduce((acc, id) => withChapterEdited(acc, rel, id, false), edited));
+  }
+
   /** Changes the edited marks, starting from what is stored now (a sync may have brought marks from another device). */
   private async patchEdited(change: (current: Record<string, string[]>) => Record<string, string[]>): Promise<boolean> {
     const project = this.state.project;
@@ -864,6 +874,7 @@ export class Workspace {
 
   async checkAllOpenFiles(): Promise<void> {
     await Promise.all(this.state.tabs.map((t) => this.checkFile(t.file)));
+    await this.reloadProjectState(); // edited marks an AI (or another device) changed show up without a manual refresh
   }
 
   resolveConflict(id: string, choice: 'reload' | 'keep' | 'dismiss'): void {

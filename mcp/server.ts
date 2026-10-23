@@ -15,6 +15,7 @@ import {
   readChapter,
   replyToNote,
   searchText,
+  setChaptersEdited,
   withdrawNote,
   type AgentContext,
 } from '../src/shared/agent/tools';
@@ -95,7 +96,7 @@ export function createServer(o: ServerOptions): McpServer {
 
   server.registerTool(
     'list_chapters',
-    { description: 'List the chapters of a file (split at its top-level headings). Chapters are numbered from 0.', inputSchema: { project, file }, annotations: readOnly },
+    { description: 'List the chapters of a file (split at its top-level headings), with their word counts and whether the author has marked each as edited. Chapters are numbered from 0.', inputSchema: { project, file }, annotations: readOnly },
     (a) => run((c) => listChapters(c, a.project, a.file))()
   );
 
@@ -183,6 +184,25 @@ export function createServer(o: ServerOptions): McpServer {
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
     },
     (a) => run((c) => withdrawNote(c, a.project, a.note_id))()
+  );
+
+  server.registerTool(
+    'set_chapters_edited',
+    {
+      description:
+        'Mark chapters as edited, or unmark them: the same marks as Mark Edited and Unmark Edited in MDEdit\'s chapter menu, shown as the dot beside each chapter. ' +
+        'Name the chapters, or give "through" to cover every chapter from the first up to and including that one (Mark Edited to Here / Unmark Edited to Here). ' +
+        'Only do this when the author asks, or when they have told you to mark chapters as you finish them. It never changes the manuscript or your notes.',
+      inputSchema: {
+        project,
+        file,
+        edited: z.boolean().describe('true marks the chapters as edited; false unmarks them.'),
+        chapters: z.array(z.union([z.number().int().min(0), z.string()])).optional().describe('Chapter numbers from list_chapters (from 0), or exact headings.'),
+        through: z.union([z.number().int().min(0), z.string()]).optional().describe('One chapter number or heading: covers that chapter and every one before it in the file. Use instead of chapters.'),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    },
+    (a) => run((c) => setChaptersEdited(c, a.project, a.file, { chapters: a.chapters, through: a.through }, a.edited))()
   );
 
   // The same instructions the skills carry, for clients that have prompts but not skills (GPT-based ones among them).

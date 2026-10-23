@@ -30,9 +30,10 @@ describe('the MDEdit MCP server', () => {
   it('offers the tools, with read-only ones marked', async () => {
     const { client } = await connect('claude-ai');
     const tools = (await client.listTools()).tools;
-    expect(tools.map((t) => t.name).sort()).toEqual(['add_notes', 'get_notes', 'list_chapters', 'list_files', 'list_projects', 'read_chapter', 'reply_to_note', 'search_text', 'withdraw_note']);
+    expect(tools.map((t) => t.name).sort()).toEqual(['add_notes', 'get_notes', 'list_chapters', 'list_files', 'list_projects', 'read_chapter', 'reply_to_note', 'search_text', 'set_chapters_edited', 'withdraw_note']);
     expect(tools.find((t) => t.name === 'read_chapter')?.annotations?.readOnlyHint).toBe(true);
     expect(tools.find((t) => t.name === 'add_notes')?.annotations?.readOnlyHint).toBe(false);
+    expect(tools.find((t) => t.name === 'set_chapters_edited')?.annotations?.readOnlyHint).toBe(false);
   });
 
   it('reads a chapter and adds a note, signed with the connecting AI’s name', async () => {
@@ -43,6 +44,19 @@ describe('the MDEdit MCP server', () => {
     expect(added.json()[0]).toMatchObject({ ok: true, chapter: 1 });
     const notes = (await call('get_notes', { project: 'Novel' })).json();
     expect(notes).toMatchObject([{ kind: 'suggestion', reviewer: 'Claude · Line edit', replacement: 'river ran icy' }]);
+    expect(await fs.readText('/books/Novel/Book.md')).toBe(BOOK);
+  });
+
+  it('marks chapters edited and unmarks them, and says what to fix when the request is wrong', async () => {
+    const { call } = await connect('claude-ai');
+    const set = await call('set_chapters_edited', { project: 'Novel', file: 'Book.md', edited: true, through: 0 });
+    expect(set.json()).toMatchObject({ edited: true, changed: [{ index: 0, title: 'One' }] });
+    expect((await call('list_chapters', { project: 'Novel', file: 'Book.md' })).json().chapters.map((c: { edited: boolean }) => c.edited)).toEqual([true, false]);
+    await call('set_chapters_edited', { project: 'Novel', file: 'Book.md', edited: false, chapters: ['One'] });
+    expect((await call('list_chapters', { project: 'Novel', file: 'Book.md' })).json().chapters.map((c: { edited: boolean }) => c.edited)).toEqual([false, false]);
+    const bad = await call('set_chapters_edited', { project: 'Novel', file: 'Book.md', edited: true });
+    expect(bad.isError).toBe(true);
+    expect(bad.text).toMatch(/either chapters/);
     expect(await fs.readText('/books/Novel/Book.md')).toBe(BOOK);
   });
 

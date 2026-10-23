@@ -1193,6 +1193,16 @@ describe('edited chapters (Editing stage)', () => {
     expect(ws.isChapterEdited(A, 2)).toBe(false);
   });
 
+  it('Unmark Edited to Here removes the marks up to and including the chapter, and keeps later ones', async () => {
+    await openEditing();
+    await ws.openChapter(A, 0);
+    await ws.markEditedThrough(A, 2);
+    await ws.unmarkEditedThrough(A, 1);
+    expect(ws.isChapterEdited(A, 0)).toBe(false);
+    expect(ws.isChapterEdited(A, 1)).toBe(false);
+    expect(ws.isChapterEdited(A, 2)).toBe(true);
+  });
+
   it('Unmark Edited removes the mark', async () => {
     await openEditing();
     await ws.setChapterEdited(A, 2, true);
