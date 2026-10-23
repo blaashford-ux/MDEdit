@@ -1,6 +1,6 @@
 # Changelog
 
-### Unreleased
+### 0.8.4 — 2026-10-23
 **New**
 - **Unmark Edited to Here** on a chapter's right-click menu unmarks that chapter and every chapter before it in the file, the opposite of **Mark Edited to Here**.
 - **AI can mark chapters edited.** The AI tools have a new `set_chapters_edited` that marks or unmarks chapters (by number or heading, or everything up to a chapter), and `list_chapters` now shows which chapters are marked. Marks an AI changes appear in the tree within a few seconds. Save the AI Kit again (Notes → AI…) to get the new tool.
