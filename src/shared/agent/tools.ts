@@ -3,7 +3,8 @@
  * (no MCP, no Electron), so they are tested directly and any transport (MCP now, REST later) can wrap them.
  *
  * The one rule that matters: nothing here ever writes a manuscript file. The only files written are review files under
- * `<project>/.mdedit/review/`, one per agent and editing pass, which MDEdit shows beside everyone else's notes.
+ * `<project>/.mdedit/review/`, one per agent and editing pass, which MDEdit shows beside everyone else's notes, and the
+ * project's edited-chapter marks (`<project>/.mdedit/edited.json`), which `set_chapters_edited` can change.
  */
 import { splitChapters } from '../chapters';
 import type { FsEntry, FsPort } from '../fsPort';
@@ -19,6 +20,8 @@ import {
   type ReviewFile,
   type ReviewItem,
 } from '../review/comments';
+import { applyMap, EDITED_FILE, emptyMarks, marksToMap, sanitizeMarks, type EditedMarks } from '../editedMarks';
+import { chapterIds, withChapterEdited } from '../projects';
 import { classify, SHARED_WITH_ME } from '../sync/rules';
 import { countWords } from '../words';
 import { flattenMarkdown } from './flatten';
@@ -35,6 +38,7 @@ export const LIMITS = {
   body: 4000,
   replacement: 2000,
   files: 600,
+  chaptersPerCall: 500,
   /** Words above which `read_chapter` warns that the chapter is long. */
   longChapter: 15000,
 } as const;
@@ -197,7 +201,62 @@ export async function listFiles(ctx: AgentContext, project: string): Promise<{ f
 
 export async function listChapters(ctx: AgentContext, project: string, file: string) {
   const { rel, chapters } = await load(ctx, project, file);
-  return { file: rel, chapters: chapters.map((c) => ({ index: c.index, title: c.title || '(before the first heading)', words: countWords(c.raw) })) };
+  const ids = chapterIds(chapters);
+  const edited = new Set(marksToMap(await readMarks(ctx, await projectDir(ctx, project)))[rel] ?? []);
+  return { file: rel, chapters: chapters.map((c, i) => ({ index: c.index, title: c.title || '(before the first heading)', words: countWords(c.raw), edited: edited.has(ids[i]) })) };
+}
+
+// ---- edited marks ----------------------------------------------------------------------------
+
+const marksFile = (dir: string) => `${dir}/.mdedit/${EDITED_FILE}`;
+
+/** The project's edited-chapter marks (a damaged or missing file reads as no marks). */
+async function readMarks(ctx: AgentContext, dir: string): Promise<EditedMarks> {
+  try {
+    return sanitizeMarks(JSON.parse(await ctx.fs.readText(marksFile(dir))));
+  } catch {
+    return emptyMarks();
+  }
+}
+
+/**
+ * Marks chapters of a file as edited, or unmarks them: the same marks as "Mark Edited" and "Unmark Edited" in the tree's
+ * right-click menu. Name the chapters, or give `through` for every chapter from the first up to and including that one
+ * ("Mark Edited to Here"). Marking a chapter that is already marked changes nothing.
+ */
+export function setChaptersEdited(ctx: AgentContext, project: string, file: string, sel: { chapters?: (number | string)[]; through?: number | string }, edited: boolean) {
+  const hasList = Array.isArray(sel.chapters) && sel.chapters.length > 0;
+  if (hasList === (sel.through !== undefined)) throw new AgentError('Give either chapters (a list of chapter numbers or headings) or through (one chapter number or heading), not both and not neither.');
+  if (hasList && sel.chapters!.length > LIMITS.chaptersPerCall) throw new AgentError(`At most ${LIMITS.chaptersPerCall} chapters per call; use through to cover a run from the start.`);
+  return serial(`${ctx.root}/${project}`, async () => {
+    const l = await load(ctx, project, file);
+    const dir = await projectDir(ctx, project);
+    const ids = chapterIds(l.chapters);
+    const targets = hasList ? sel.chapters!.map((c) => pickChapter(l, c).index) : Array.from({ length: pickChapter(l, sel.through!).index + 1 }, (_, i) => i);
+    const before = await readMarks(ctx, dir);
+    const was = new Set(marksToMap(before)[l.rel] ?? []);
+    let map = marksToMap(before);
+    const changed: number[] = [];
+    for (const i of new Set(targets)) {
+      if (was.has(ids[i]) === edited) continue;
+      map = withChapterEdited(map, l.rel, ids[i], edited);
+      changed.push(i);
+    }
+    if (changed.length) {
+      const after = applyMap(before, map, (ctx.now?.() ?? new Date()).getTime());
+      await ctx.fs.mkdir(`${dir}/.mdedit`, { recursive: true });
+      const target = marksFile(dir);
+      const tmp = `${target}.${Math.floor(Math.random() * 1e9)}.tmp`;
+      try {
+        await ctx.fs.writeText(tmp, JSON.stringify(after, null, 2) + '\n');
+        await ctx.fs.rename(tmp, target);
+      } catch (e) {
+        await ctx.fs.rm(tmp, { force: true }).catch(() => undefined);
+        throw e;
+      }
+    }
+    return { file: l.rel, edited, changed: changed.map((i) => ({ index: i, title: l.chapters[i].title || '(before the first heading)' })), unchanged: new Set(targets).size - changed.length };
+  });
 }
 
 function pickChapter(l: Loaded, chapter: number | string) {

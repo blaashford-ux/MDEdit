@@ -3,7 +3,7 @@ import { MemoryFs } from '../memoryFs';
 import { makeReviews } from '../backend/reviews';
 import { applySuggestion, locateAnchor, newReviewFile, parseReviewFile, serializeReviewFile, type ReviewItem } from '../review/comments';
 import { flattenMarkdown } from './flatten';
-import { addNotes, AgentError, getNotes, listChapters, listFiles, listProjects, readChapter, replyToNote, reviewerFor, searchText, withdrawNote, type AgentContext } from './tools';
+import { addNotes, AgentError, getNotes, listChapters, listFiles, listProjects, readChapter, replyToNote, reviewerFor, searchText, setChaptersEdited, withdrawNote, type AgentContext } from './tools';
 
 const CH1 = '# One\n\nShe walked *slowly* to the door. She walked to the door again.\n\n"Don\'t," he said.\n';
 const CH2 = '# Two\n\nThe **river** ran cold.\n\n- apples\n- pears\n';
@@ -184,6 +184,43 @@ describe('adding notes', () => {
   it('does not lose notes when calls overlap', async () => {
     await Promise.all(['river', 'apples', 'pears', 'cold'].map((q) => addNotes(ctx, 'Novel', 'line', [note({ quote: q })])));
     expect((await getNotes(ctx, 'Novel')).length).toBe(4);
+  });
+});
+
+describe('edited marks', () => {
+  const marks = async () => JSON.parse(await fs.readText('/books/Novel/.mdedit/edited.json')).files['Manuscript/Book.md'] as Record<string, { edited: boolean }>;
+  const flags = async () => (await listChapters(ctx, 'Novel', 'Manuscript/Book.md')).chapters.map((c) => c.edited);
+
+  it('marks chapters by number or heading and shows them in list_chapters', async () => {
+    expect(await flags()).toEqual([false, false]);
+    const r = await setChaptersEdited(ctx, 'Novel', 'Manuscript/Book.md', { chapters: [1] }, true);
+    expect(r).toMatchObject({ edited: true, changed: [{ index: 1, title: 'Two' }], unchanged: 0 });
+    expect(await flags()).toEqual([false, true]);
+    expect((await marks()).Two.edited).toBe(true);
+    const again = await setChaptersEdited(ctx, 'Novel', 'Manuscript/Book.md', { chapters: ['two', 0] }, true);
+    expect(again).toMatchObject({ changed: [{ index: 0, title: 'One' }], unchanged: 1 });
+    expect(await flags()).toEqual([true, true]);
+  });
+
+  it('through covers the first chapter up to and including the one named, both ways', async () => {
+    await setChaptersEdited(ctx, 'Novel', 'Manuscript/Book.md', { through: 1 }, true);
+    expect(await flags()).toEqual([true, true]);
+    await setChaptersEdited(ctx, 'Novel', 'Manuscript/Book.md', { through: 'One' }, false);
+    expect(await flags()).toEqual([false, true]);
+  });
+
+  it('keeps the unmark as a note so a sync does not bring the mark back, and leaves the manuscript alone', async () => {
+    await setChaptersEdited(ctx, 'Novel', 'Manuscript/Book.md', { chapters: [0] }, true);
+    await setChaptersEdited(ctx, 'Novel', 'Manuscript/Book.md', { chapters: [0] }, false);
+    expect((await marks()).One.edited).toBe(false);
+    expect(await fs.readText('/books/Novel/Manuscript/Book.md')).toBe(BOOK);
+  });
+
+  it('asks for exactly one of chapters and through, and rejects chapters that are not there', async () => {
+    expect(() => setChaptersEdited(ctx, 'Novel', 'Manuscript/Book.md', {}, true)).toThrow(/either chapters/);
+    expect(() => setChaptersEdited(ctx, 'Novel', 'Manuscript/Book.md', { chapters: [0], through: 1 }, true)).toThrow(/either chapters/);
+    await expect(setChaptersEdited(ctx, 'Novel', 'Manuscript/Book.md', { chapters: [9] }, true)).rejects.toBeInstanceOf(AgentError);
+    await expect(setChaptersEdited(ctx, 'Novel', 'Manuscript/Book.md', { through: 'Nope' }, true)).rejects.toBeInstanceOf(AgentError);
   });
 });
 

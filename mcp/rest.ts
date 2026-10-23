@@ -13,6 +13,7 @@ import {
   readChapter,
   replyToNote,
   searchText,
+  setChaptersEdited,
   withdrawNote,
   type AgentContext,
   type NoteFilter,
@@ -28,6 +29,8 @@ const bad = (status: number, error: string): RestResult => ({ status, json: { er
 
 const flag = (v: string | null): boolean | undefined => (v === null ? undefined : v === 'true' || v === '1');
 const opt = (v: string | null): string | undefined => (v === null || v === '' ? undefined : v);
+/** A chapter given as a number or a heading; digits sent as text (as an OpenAPI string field carries them) mean the number. */
+const chap = (v: unknown): number | string | undefined => (typeof v === 'number' || (typeof v === 'string' && v !== '') ? (typeof v === 'string' && /^\d+$/.test(v) ? Number(v) : v) : undefined);
 const object = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
 
 /** Routes `/api/...`. Mistakes the caller can fix come back as 400 with a message; unknown routes as 404. */
@@ -67,6 +70,10 @@ export async function handleRest(ctx: AgentContext, method: string, url: URL, bo
     if (method === 'POST' && rest === 'notes') {
       const b = object(body);
       return ok(await addNotes(ctx, project, typeof b.skill === 'string' ? b.skill : undefined, b.notes as never));
+    }
+    if (method === 'POST' && rest === 'edited') {
+      const b = object(body);
+      return ok(await setChaptersEdited(ctx, project, String(b.file ?? ''), { chapters: Array.isArray(b.chapters) ? b.chapters.map(chap).filter((c): c is number | string => c !== undefined) : undefined, through: chap(b.through) }, b.edited !== false));
     }
     const note = /^notes\/([^/]+)(\/replies)?$/.exec(rest);
     if (note && method === 'POST' && note[2]) {
@@ -163,6 +170,29 @@ export function openApiDocument(baseUrl: string): unknown {
         post: op('replyToNote', 'Reply to a note', 'Add a reply in an existing note\'s thread.', [projectParam, { name: 'noteId', in: 'path', required: true, description: 'Note id from getNotes.', schema: { type: 'string' } }], {
           requestBody: { required: true, content: json({ type: 'object', required: ['body'], properties: { skill: skillProp, body: str('The reply.') } }) },
         }),
+      },
+      '/api/projects/{project}/edited': {
+        post: op(
+          'setChaptersEdited',
+          'Mark chapters edited',
+          'Mark chapters as edited or unmark them, like the chapter menu in MDEdit. Give chapters, or through for every chapter up to and including that one. Only when the author asks.',
+          [projectParam],
+          {
+            requestBody: {
+              required: true,
+              content: json({
+                type: 'object',
+                required: ['file'],
+                properties: {
+                  file: str('Manuscript file path from listFiles.'),
+                  edited: { type: 'boolean', description: 'true (default) marks the chapters as edited; false unmarks them.' },
+                  chapters: { type: 'array', items: { type: 'string' }, description: 'Chapter numbers from listChapters (from 0) or exact headings.' },
+                  through: str('One chapter number or heading: covers it and every chapter before it. Use instead of chapters.'),
+                },
+              }),
+            },
+          }
+        ),
       },
       '/api/projects/{project}/notes/{noteId}': {
         delete: op('withdrawNote', 'Withdraw a note', 'Remove one of your own notes. Cannot remove anyone else\'s.', [projectParam, { name: 'noteId', in: 'path', required: true, description: 'Note id from getNotes.', schema: { type: 'string' } }]),
