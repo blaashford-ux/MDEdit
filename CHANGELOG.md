@@ -1,5 +1,9 @@
 # Changelog
 
+### 0.8.3 — 2026-10-23
+**Changed**
+- **AI reviewers can leave up to 1000 open notes per project, up from 500, and only open notes count.** Resolved, accepted, rejected and deleted notes no longer use up the allowance, so a long project with several editing passes no longer blocks Claude from adding new notes.
+
 ### 0.8.2 — 2026-10-18
 **Fixed**
 - **Help → MDEdit Help (F1) is back.** 0.8.0 and 0.8.1 were built without the Help window added in 0.7.6, so the Help menu showed only About. They now include everything from 0.7.6 as well. The help guide also describes the new Collaborator links.
