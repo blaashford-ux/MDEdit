@@ -35,7 +35,7 @@ describe('the AI Kit', () => {
     const m = JSON.parse(strFromU8(files['manifest.json']));
     expect(m).toMatchObject({ manifest_version: '0.2', name: 'mdedit', version: '0.6.0', server: { type: 'node', entry_point: 'server/index.js' } });
     expect(m.server.mcp_config.args).toEqual(['${__dirname}/server/index.js', '--root', '${user_config.root_folder}']);
-    expect(m.user_config.root_folder).toMatchObject({ type: 'directory', required: true, default: 'C:\\Users\\me\\MDEdit' });
+    expect(m.user_config.root_folder).toMatchObject({ type: 'directory', required: false });
   });
 
   it('zips each skill with its folder at the top, ready to upload', () => {

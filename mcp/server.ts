@@ -27,6 +27,8 @@ export interface ServerOptions {
   /** Overrides the AI's name; otherwise it is taken from the connecting client ("Claude", "GPT") or is just "AI". */
   agent?: string;
   version?: string;
+  /** The folders that were looked at to find the projects, first choice first; named in the reply when there are none. */
+  tried?: { root: string; source: string }[];
 }
 
 /** Which AI is connected, from the client's own name, so notes say who wrote them. */
@@ -65,6 +67,16 @@ const note = z.object({
 const reply = (value: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(value, null, 2) }] });
 const failure = (message: string) => ({ isError: true, content: [{ type: 'text' as const, text: message }] });
 
+/** Why there is nothing to list, and what to check: shown to the AI (and so the author) instead of a bare empty list. */
+export function noProjects(o: Pick<ServerOptions, 'root' | 'tried'>): string {
+  const looked = (o.tried?.length ? o.tried : [{ root: o.root, source: 'the server settings' }]).map((t) => `${t.root} (${t.source})`).join('; ');
+  return (
+    `No MDEdit projects were found. Looked in: ${looked}. A project is a folder directly inside the projects folder that contains .mdedit/project.json. ` +
+    'Check that the projects folder is the Root Folder from MDEdit (File → Settings → Projects), not a single book\'s folder, and that the book was created in or moved into it. ' +
+    'A folder opened with Open Folder from somewhere else is not found here.'
+  );
+}
+
 export function createServer(o: ServerOptions): McpServer {
   const server = new McpServer(
     { name: 'mdedit', version: o.version ?? '0.0.0' },
@@ -86,7 +98,10 @@ export function createServer(o: ServerOptions): McpServer {
   };
   const readOnly = { readOnlyHint: true, openWorldHint: false } as const;
 
-  server.registerTool('list_projects', { description: 'List the book projects (with their status) that you can read and review.', inputSchema: {}, annotations: readOnly }, run((c) => listProjects(c)));
+  server.registerTool('list_projects', { description: 'List the book projects (with their status) that you can read and review.', inputSchema: {}, annotations: readOnly }, run(async (c) => {
+      const projects = await listProjects(c);
+      return projects.length ? projects : { projects, message: noProjects(o) };
+    }));
 
   server.registerTool(
     'list_files',

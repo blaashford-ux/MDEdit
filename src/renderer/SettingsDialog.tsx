@@ -83,6 +83,8 @@ export function SettingsDialog({ onSave, beforeMove, onClose }: Props) {
   const projectsDirty = pdraft !== null && JSON.stringify(pdraft) !== pInitial;
   const projectErrors = pdraft ? pdraft.templates.flatMap((t) => templateErrors(t).map((e) => `${t.name || '(unnamed)'}: ${e}`)) : [];
   const dirty = (defaults !== null && JSON.stringify(defaults) !== initial) || projectsDirty || themeDirty;
+  // First time through: the default Root Folder was never saved (and may not exist yet), so Save must work without a change.
+  const needsSetup = config !== null && (!config.setupDone || !config.rootExists);
   const requestClose = () => (dirty ? setConfirmDiscard(true) : onClose());
   useEscape(() => (confirmDiscard ? setConfirmDiscard(false) : requestClose()));
 
@@ -96,7 +98,7 @@ export function SettingsDialog({ onSave, beforeMove, onClose }: Props) {
       setSaving(false);
       return;
     }
-    if (projectsDirty && pdraft && config) {
+    if ((projectsDirty || needsSetup) && pdraft && config) {
       const newRoot = pdraft.rootFolder ?? config.defaultRoot;
       try {
         if (pdraft.moveProjects && newRoot !== config.root) {
@@ -105,7 +107,13 @@ export function SettingsDialog({ onSave, beforeMove, onClose }: Props) {
           const r = await window.mdedit.moveProjects(newRoot);
           if (r.failed.length) setError(`Some projects couldn’t be moved: ${r.failed.map((f) => `${f.name} (${f.error})`).join('; ')}`);
         }
-        await window.mdedit.setProjectsConfig({ rootFolder: pdraft.rootFolder, templates: pdraft.templates, defaultTemplateId: pdraft.defaultTemplateId, reopenLast: pdraft.reopenLast });
+        await window.mdedit.setProjectsConfig({
+          rootFolder: needsSetup ? newRoot : pdraft.rootFolder, // saves the default too, and creates the folder
+          templates: pdraft.templates,
+          defaultTemplateId: pdraft.defaultTemplateId,
+          reopenLast: pdraft.reopenLast,
+          ...(needsSetup ? { setupDone: true } : {}),
+        });
       } catch (e) {
         setError(`Could not save the project settings: ${e instanceof Error ? e.message : e}`);
         setSaving(false);
@@ -261,7 +269,7 @@ export function SettingsDialog({ onSave, beforeMove, onClose }: Props) {
               <button type="button" onClick={requestClose}>
                 Cancel
               </button>
-              <button type="submit" className="primary" disabled={saving || !dirty}>
+              <button type="submit" className="primary" disabled={saving || !(dirty || needsSetup)}>
                 Save
               </button>
             </div>

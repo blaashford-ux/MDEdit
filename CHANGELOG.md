@@ -1,5 +1,10 @@
 # Changelog
 
+### 0.8.5 — 2026-10-24
+**Fixed**
+- **Settings → Save works the first time you open it.** On a fresh install the Save button stayed greyed out until you changed something, so you had to pick the Root Folder by hand even to keep the default. Save is now available until the first setup is done, and it saves the default Root Folder and creates it.
+- **The AI could report "no projects" when its Projects folder was wrong.** The Claude Desktop extension's "Projects folder" is now optional and, when empty, follows the Root Folder set in MDEdit instead of a path frozen when the kit was saved. If the folder it was given has no projects but MDEdit's own Root Folder (or the default) does, the server uses that. When there are still none, `list_projects` names the folders it looked in and what to check. Save the AI Kit again to get the new extension.
+
 ### 0.8.4 — 2026-10-23
 **New**
 - **Unmark Edited to Here** on a chapter's right-click menu unmarks that chapter and every chapter before it in the file, the opposite of **Mark Edited to Here**.

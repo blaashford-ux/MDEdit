@@ -3,7 +3,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { MemoryFs } from '../src/shared/memoryFs';
 import { agentFromClient, createServer } from './server';
-import { resolveRoot, settingsCandidates } from './root';
+import { chooseRoot, resolveRoot, rootCandidates, settingsCandidates } from './root';
 
 const BOOK = '# One\n\nShe walked slowly to the door.\n\n# Two\n\nThe river ran cold.\n';
 let fs: MemoryFs;
@@ -100,5 +100,45 @@ describe('finding the projects folder', () => {
     expect(await resolveRoot({ env: {}, platform: 'linux', home, fs: f })).toMatchObject({ root: '/data/books' });
     expect((await resolveRoot({ env: {}, platform: 'linux', home, fs: new MemoryFs() })).source).toBe('default');
     expect(settingsCandidates({ APPDATA: 'C:\\U\\AppData\\Roaming' }, 'win32', 'C:\\U')[0]).toMatch(/MDEdit[\\/]settings\.json$/);
+  });
+});
+
+describe('when the projects folder is wrong', () => {
+  const home = '/home/me';
+  const seeded = () => {
+    const f = new MemoryFs();
+    f.seed(settingsCandidates({}, 'linux', home)[0], JSON.stringify({ projects: { rootFolder: '/data/books' } }));
+    return f;
+  };
+
+  it('treats a blank or unfilled --root as not set', async () => {
+    const f = seeded();
+    for (const flag of ['', '  ', '${user_config.root_folder}']) {
+      expect(await resolveRoot({ flag, env: {}, platform: 'linux', home, fs: f })).toMatchObject({ root: '/data/books' });
+    }
+  });
+
+  it('lists each place once, in order', async () => {
+    const c = await rootCandidates({ flag: '/data/books', env: { MDEDIT_ROOT: '/y' }, platform: 'linux', home, fs: seeded() });
+    expect(c.map((x) => x.root)).toEqual(['/data/books', '/y', '/home/me/MDEdit']);
+  });
+
+  it('falls back to a later folder that has projects, and keeps the first when none do', async () => {
+    const c = await rootCandidates({ flag: '/stale', env: {}, platform: 'linux', home, fs: seeded() });
+    expect((await chooseRoot(c, async (r) => r === '/data/books')).root).toBe('/data/books');
+    expect((await chooseRoot(c, async () => false)).root).toBe('/stale');
+  });
+
+  it('says where it looked when there are no projects', async () => {
+    const f = new MemoryFs();
+    const server = createServer({ fs: f, root: '/empty', tried: [{ root: '/empty', source: '--root' }, { root: '/home/me/MDEdit', source: 'default' }] });
+    const [a, b] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: 'claude-ai', version: '1' });
+    await Promise.all([server.connect(a), client.connect(b)]);
+    const r = (await client.callTool({ name: 'list_projects', arguments: {} })) as { content: { text: string }[] };
+    const out = JSON.parse(r.content[0].text) as { projects: unknown[]; message: string };
+    expect(out.projects).toEqual([]);
+    expect(out.message).toMatch(/\/empty \(--root\); \/home\/me\/MDEdit \(default\)/);
+    expect(out.message).toMatch(/Open Folder/);
   });
 });
