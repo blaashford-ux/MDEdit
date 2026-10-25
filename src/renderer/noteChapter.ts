@@ -9,20 +9,27 @@ function contextScore(text: string, a: Anchor, at: number): number {
 }
 
 /**
- * Which chapter of a file a note is in: the chapter whose text still holds the note's quote, the one whose surroundings
+ * Which chapter of a file each note is in: the chapter whose text still holds the note's quote, the one whose surroundings
  * match best if several do, and the open chapter on a tie. Chapters are given as Markdown (use the unsaved draft for the
- * open one), and are flattened to the plain text notes are anchored to. Null when no chapter has the quote any more.
+ * open one), and are flattened to the plain text notes are anchored to. Null for a note no chapter has the quote of any more.
  */
-export function chapterForNote(chapters: string[], anchor: Anchor, preferred: number): number | null {
-  let best: { index: number; score: number; dist: number } | null = null;
-  chapters.forEach((raw, index) => {
-    const flat = flattenMarkdown(raw);
-    const at = locateAnchor(flat, anchor);
-    if (!at) return;
-    const score = contextScore(flat, anchor, at.start);
-    const dist = Math.abs(at.start - anchor.start);
-    const better = !best || score > best.score || (score === best.score && (index === preferred ? best.index !== preferred : best.index !== preferred && dist < best.dist));
-    if (better) best = { index, score, dist };
+export function chaptersForNotes(chapters: string[], anchors: Anchor[], preferred: number): (number | null)[] {
+  const flats = chapters.map((raw) => flattenMarkdown(raw));
+  return anchors.map((anchor) => {
+    let best: { index: number; score: number; dist: number } | null = null;
+    flats.forEach((flat, index) => {
+      const at = locateAnchor(flat, anchor);
+      if (!at) return;
+      // Still sitting exactly where it was written is evidence too, when the text around it has been edited since.
+      const score = contextScore(flat, anchor, at.start) * 2 + (at.start === anchor.start ? 1 : 0);
+      const dist = Math.abs(at.start - anchor.start);
+      const better = !best || score > best.score || (score === best.score && (index === preferred ? best.index !== preferred : best.index !== preferred && dist < best.dist));
+      if (better) best = { index, score, dist };
+    });
+    return best ? (best as { index: number }).index : null;
   });
-  return best ? (best as { index: number }).index : null;
+}
+
+export function chapterForNote(chapters: string[], anchor: Anchor, preferred: number): number | null {
+  return chaptersForNotes(chapters, [anchor], preferred)[0];
 }

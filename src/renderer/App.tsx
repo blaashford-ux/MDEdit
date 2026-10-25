@@ -37,7 +37,7 @@ import { MobileBar } from './MobileBar';
 import { AboutDialog } from './AboutDialog';
 import { SyncDialog } from './SyncDialog';
 import { AiDialog } from './AiDialog';
-import { chapterForNote } from './noteChapter';
+import { chapterForNote, chaptersForNotes } from './noteChapter';
 import { ReviewPanel } from './ReviewPanel';
 import { ShareDialog } from './ShareDialog';
 import { JoinDialog } from './JoinDialog';
@@ -174,7 +174,16 @@ export function App() {
     reviewFile,
     s.activeId ? navs.current.get(s.activeId)?.review : undefined,
     meHere,
-    activeTab ? `${activeTab.id}@${activeTab.chapter}@${activeTab.reloadKey}@${navVersion}` : ''
+    activeTab ? `${activeTab.id}@${activeTab.chapter}@${activeTab.reloadKey}@${navVersion}` : '',
+    // The same sentence quoted in two chapters is two notes: each is drawn (and followed through edits) only in its own chapter.
+    (items) => {
+      const tab = activeTab;
+      const doc = tab && s.docs.get(tab.file);
+      if (!tab || !doc || doc.chapters.length < 2) return null;
+      const texts = doc.chapters.map((c, i) => (i === tab.chapter && tab.draft !== null ? tab.draft : c.raw));
+      const where = chaptersForNotes(texts, items.map((i) => i.anchor), tab.chapter);
+      return new Set(items.filter((_, n) => where[n] === tab.chapter || where[n] === null).map((i) => i.id));
+    }
   );
   const reviewRef = useRef(review);
   reviewRef.current = review;

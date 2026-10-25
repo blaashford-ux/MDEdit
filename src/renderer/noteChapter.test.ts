@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { makeAnchor } from '../shared/review/comments';
 import { flattenMarkdown } from '../shared/agent/flatten';
-import { chapterForNote } from './noteChapter';
+import { chapterForNote, chaptersForNotes } from './noteChapter';
 
 const chapters = [
   '# One\n\nShe walked *slowly* to the door.\n\nThe river ran cold.\n',
@@ -44,5 +44,44 @@ describe('which chapter a note is in', () => {
     moved[2] = '# Three\n\nShe walked *slowly* to the door.\n'; // ... and pasted into chapter 3, unsaved
     expect(chapterForNote(moved, anchor, 2)).toBe(2);
     expect(chapterForNote(chapters, anchor, 2)).toBe(0); // before the edit it was in chapter 1
+  });
+});
+
+describe('the same sentence in two chapters', () => {
+  const s = 'Juna nodded thoughtfully.';
+  const book = [
+    '# A\n\nHello there.\n\nThe tea cooled.\n\n' + s + '\n\nMore.\n',
+    '# B\n\nHello there.\n\nThe tea cooled.\n\n' + s + '\n\nMore.\n',
+  ];
+  const noteIn = (i: number) => {
+    const flat = flattenMarkdown(book[i]);
+    const at = flat.indexOf(s);
+    return makeAnchor(flat, at, at + s.length);
+  };
+
+  it('shows the note in the chapter that is open, whichever one it is', () => {
+    expect(chapterForNote(book, noteIn(0), 0)).toBe(0);
+    expect(chapterForNote(book, noteIn(1), 1)).toBe(1);
+  });
+
+  it('keeps each note in its own chapter when the open chapter was edited around it', () => {
+    const edited = [...book];
+    edited[0] = book[0].replace('More.', 'Much more happened afterwards.'); // chapter 1's surroundings changed since the note
+    expect(chapterForNote(edited, noteIn(0), 0)).toBe(0);
+    expect(chapterForNote(edited, noteIn(1), 0)).toBe(1); // a note made in chapter 2 is not chapter 1's
+  });
+});
+
+describe('several notes at once', () => {
+  it('gives each note its own chapter', () => {
+    const s = 'Juna nodded thoughtfully.';
+    const book = ['# A\n\nOne.\n\n' + s + '\n\nEnd of A.\n', '# B\n\nTwo.\n\n' + s + '\n\nEnd of B.\n'];
+    const at = (i: number) => {
+      const f = flattenMarkdown(book[i]);
+      const n = f.indexOf(s);
+      return makeAnchor(f, n, n + s.length);
+    };
+    expect(chaptersForNotes(book, [at(0), at(1)], 0)).toEqual([0, 1]);
+    expect(chaptersForNotes(book, [at(0), at(1)], 1)).toEqual([0, 1]);
   });
 });

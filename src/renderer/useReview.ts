@@ -78,7 +78,9 @@ export function useReview(
   file: string | null,
   review: ReviewApi | undefined,
   me: Identity,
-  chapterKey: string
+  chapterKey: string,
+  /** Which of these notes belong in the open chapter, when the same text is quoted in several; null means all of them. */
+  ownedHere?: (items: ReviewItem[]) => Set<string> | null
 ): ReviewState {
   const [files, setFiles] = useState<Map<string, ReviewFile>>(new Map());
   const [detached, setDetached] = useState<Set<string>>(new Set());
@@ -142,7 +144,9 @@ export function useReview(
   // Draw the open notes in the editor (resolved and rejected ones fade out of the text).
   useEffect(() => {
     if (!review) return;
-    const marks: NoteMark[] = items.filter((i) => i.status === 'open').map((i) => ({ id: i.id, anchor: pending.current.get(i.id)?.anchor ?? i.anchor, kind: i.kind }));
+    const open = items.filter((i) => i.status === 'open');
+    const own = ownedHere?.(open) ?? null;
+    const marks: NoteMark[] = open.filter((i) => !own || own.has(i.id)).map((i) => ({ id: i.id, anchor: pending.current.get(i.id)?.anchor ?? i.anchor, kind: i.kind }));
     const { detached: lost } = review.setNotes(marks);
     setDetached(new Set(lost));
   }, [review, items, chapterKey]);
