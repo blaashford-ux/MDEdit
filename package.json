@@ -1,6 +1,6 @@
 {
   "name": "mdedit",
-  "version": "0.8.5",
+  "version": "0.8.6",
   "description": "Folder-based Markdown editor that splits files into chapters by Heading 1",
   "main": "dist-electron/electron/main.js",
   "scripts": {
