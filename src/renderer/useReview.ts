@@ -7,7 +7,8 @@ import {
   parseReviewFile,
   serializeReviewFile,
   type ReviewFile,
-  type ReviewItem
+  type ReviewItem,
+  type ChapterHint
 } from '../shared/review/comments';
 import type { NoteChange, NoteMark, ReviewApi } from './reviewPlugin';
 
@@ -80,7 +81,9 @@ export function useReview(
   me: Identity,
   chapterKey: string,
   /** Which of these notes belong in the open chapter, when the same text is quoted in several; null means all of them. */
-  ownedHere?: (items: ReviewItem[]) => Set<string> | null
+  ownedHere?: (items: ReviewItem[]) => Set<string> | null,
+  /** The chapter that is open, recorded on each new note. */
+  currentChapter?: () => ChapterHint | undefined
 ): ReviewState {
   const [files, setFiles] = useState<Map<string, ReviewFile>>(new Map());
   const [detached, setDetached] = useState<Set<string>>(new Set());
@@ -215,6 +218,7 @@ export function useReview(
         kind,
         file,
         anchor: sel.anchor,
+        ...(currentChapter?.() ? { chapter: currentChapter() } : {}),
         body,
         ...(kind === 'suggestion' ? { replacement: replacement ?? '' } : {}),
         status: 'open',

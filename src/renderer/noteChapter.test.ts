@@ -85,3 +85,27 @@ describe('several notes at once', () => {
     expect(chaptersForNotes(book, [at(0), at(1)], 1)).toEqual([0, 1]);
   });
 });
+
+describe('the chapter a note was written in', () => {
+  const s = 'Juna nodded thoughtfully.';
+  const same = ['# A\n\nShe sat.\n\n' + s + '\n\nEnd.\n', '# B\n\nShe sat.\n\n' + s + '\n\nEnd.\n'];
+  const titles = ['A', 'B'];
+  const f = flattenMarkdown(same[0]);
+  const anchor = makeAnchor(f, f.indexOf(s), f.indexOf(s) + s.length);
+  const bare = { ...anchor, prefix: '', suffix: '' }; // nothing in the text tells the chapters apart
+
+  it('settles notes the text cannot', () => {
+    expect(chapterForNote(same, bare, 0, { index: 1, title: 'B' }, titles)).toBe(1);
+    expect(chapterForNote(same, bare, 1, { index: 0, title: 'A' }, titles)).toBe(0);
+  });
+
+  it('follows the chapter by name when chapters were inserted before it', () => {
+    const grown = ['# New\n\nx\n', ...same];
+    expect(chapterForNote(grown, bare, 0, { index: 1, title: 'B' }, ['New', 'A', 'B'])).toBe(2);
+  });
+
+  it('ignores the hint when the text is no longer in that chapter', () => {
+    const moved = [same[0], '# B\n\nNothing.\n'];
+    expect(chapterForNote(moved, bare, 1, { index: 1, title: 'B' }, titles)).toBe(0);
+  });
+});

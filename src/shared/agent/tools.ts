@@ -477,6 +477,7 @@ function build(ctx: AgentContext, l: Loaded, input: NoteInput, reviewer: { id: s
     kind,
     file: l.rel,
     anchor: makeAnchor(chapter.flat, start, start + quote.length),
+    chapter: { index: chapter.index, title: chapter.title },
     body,
     ...(replacement !== undefined ? { replacement } : {}),
     status: 'open',

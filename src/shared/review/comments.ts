@@ -15,6 +15,12 @@ export interface Anchor {
   gone?: boolean
 }
 
+/** Which chapter of the file a note was written in: a hint (chapters can be moved or renamed), but it tells apart notes on repeated text. */
+export interface ChapterHint {
+  index: number
+  title: string
+}
+
 export interface Reply {
   id: string
   author: string
@@ -31,6 +37,8 @@ export interface ReviewItem {
   /** Project-relative path of the file the note is on. */
   file: string
   anchor: Anchor
+  /** Where the note was written. Absent on notes made before this was recorded. */
+  chapter?: ChapterHint
   body: string
   /** Suggestions only: the text that should replace the quote. */
   replacement?: string

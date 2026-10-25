@@ -181,8 +181,13 @@ export function App() {
       const doc = tab && s.docs.get(tab.file);
       if (!tab || !doc || doc.chapters.length < 2) return null;
       const texts = doc.chapters.map((c, i) => (i === tab.chapter && tab.draft !== null ? tab.draft : c.raw));
-      const where = chaptersForNotes(texts, items.map((i) => i.anchor), tab.chapter);
+      const where = chaptersForNotes(texts, items.map((i) => i.anchor), tab.chapter, items.map((i) => i.chapter), doc.chapters.map((c) => c.title));
       return new Set(items.filter((_, n) => where[n] === tab.chapter || where[n] === null).map((i) => i.id));
+    },
+    () => {
+      const doc = activeTab && s.docs.get(activeTab.file);
+      const c = doc?.chapters[activeTab!.chapter];
+      return c ? { index: activeTab!.chapter, title: c.title } : undefined;
     }
   );
   const reviewRef = useRef(review);
@@ -221,7 +226,7 @@ export function App() {
     const item = review.items.find((i) => i.id === id);
     if (!tab || !doc || !item) return null;
     const texts = doc.chapters.map((c, i) => (i === tab.chapter && tab.draft !== null ? tab.draft : c.raw));
-    const target = chapterForNote(texts, item.anchor, tab.chapter);
+    const target = chapterForNote(texts, item.anchor, tab.chapter, item.chapter, doc.chapters.map((c) => c.title));
     if (target === null) return 'That text is no longer in the file, so there is nothing to show.';
     if (target === tab.chapter) {
       pendingNote.current = null;
