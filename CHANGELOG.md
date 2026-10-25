@@ -1,5 +1,10 @@
 # Changelog
 
+### 0.8.6 — 2026-10-25
+**Fixed**
+- **Notes on the same sentence in different chapters are now separate.** If one sentence (say "Juna nodded thoughtfully.") was quoted in several chapters, every chapter treated all of those notes as its own: they were highlighted in each chapter, edits could rewrite the wrong note, and clicking a note in the Notes panel could take you to a later chapter. Each note now belongs to one chapter, and is only drawn and followed through edits there.
+- New notes (including ones left by an AI reviewer) remember the chapter they were written in, and use it to find their place if the text around them has changed or chapters have been added before them. Notes made before this keep working as before, matched by their surrounding text.
+
 ### 0.8.5 — 2026-10-24
 **Fixed**
 - **Settings → Save works the first time you open it.** On a fresh install the Save button stayed greyed out until you changed something, so you had to pick the Root Folder by hand even to keep the default. Save is now available until the first setup is done, and it saves the default Root Folder and creates it.
