@@ -1,4 +1,5 @@
-import { app, BrowserWindow, dialog, Menu, type MenuItem, type MenuItemConstructorOptions } from 'electron';
+import { app, BrowserWindow, Menu, type MenuItem, type MenuItemConstructorOptions } from 'electron';
+import { openHelp } from './help';
 import type { MenuAction, MenuNode, ThemeSource } from '../src/shared/api';
 
 interface ThemeHooks {
@@ -40,6 +41,7 @@ export function installMenu(theme: ThemeHooks): void {
         { label: 'Project Settings…', click: send('project-settings') },
         { label: 'Project Progress…', click: send('project-progress') },
         { label: 'Export…\tCtrl+E', click: send('export') },
+        { label: 'Google Drive Sync…', click: send('sync') },
         { label: 'Settings…\tCtrl+,', click: send('settings') },
         { type: 'separator' },
         { label: 'Save\tCtrl+S', click: send('save') },
@@ -64,7 +66,8 @@ export function installMenu(theme: ThemeHooks): void {
         { label: 'Find…\tCtrl+F', click: send('find') },
         { label: 'Find Next\tF3', click: send('find-next') },
         { label: 'Find Previous\tShift+F3', click: send('find-prev') },
-        { label: 'Replace…\tCtrl+H', click: send('replace') }
+        { label: 'Replace…\tCtrl+H', click: send('replace') },
+        { label: 'Go to Line…\tCtrl+G', click: send('go-to-line') }
       ]
     },
     {
@@ -92,6 +95,7 @@ export function installMenu(theme: ThemeHooks): void {
         { role: 'zoomOut' },
         { role: 'resetZoom' },
         { type: 'separator' },
+        { label: 'Zone Mode\tF8', click: send('zone-mode') },
         { role: 'togglefullscreen' },
         ...(app.isPackaged ? [] : ([{ type: 'separator' }, { role: 'toggleDevTools' }] as MenuItemConstructorOptions[]))
       ]
@@ -99,26 +103,11 @@ export function installMenu(theme: ThemeHooks): void {
     {
       label: '&Help',
       submenu: [
+        { label: 'MDEdit Help\tF1', click: () => openHelp() },
+        { type: 'separator' },
         {
           label: 'About MDEdit',
-          click: () => {
-            const opts = {
-              type: 'info' as const,
-              title: 'About MDEdit',
-              message: `MDEdit ${app.getVersion()}`,
-              detail: [
-                'A folder-based Markdown editor with KDP export.',
-                '',
-                `Electron ${process.versions.electron} · Chromium ${process.versions.chrome} · Node ${process.versions.node}`,
-                '',
-                'Bundled fonts: EB Garamond, Crimson Pro, Libre Baskerville (SIL Open Font License 1.1).',
-                'Print layout: Paged.js (MIT).'
-              ].join('\n'),
-              buttons: ['OK']
-            };
-            const win = BrowserWindow.getFocusedWindow();
-            void (win ? dialog.showMessageBox(win, opts) : dialog.showMessageBox(opts));
-          }
+          click: send('about')
         }
       ]
     }

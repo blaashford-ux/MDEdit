@@ -58,9 +58,17 @@ jobs:
     uses: ./.github/workflows/build.yml
     secrets: inherit
 
+  android:
+    name: Build the Android app
+    needs: verify
+    permissions:
+      contents: write # android.yml can publish a pre-release when run by hand; a release only needs to read
+    uses: ./.github/workflows/android.yml
+    secrets: inherit
+
   publish:
     name: Publish the release
-    needs: [verify, build]
+    needs: [verify, build, android]
     runs-on: ubuntu-latest
     permissions:
       contents: write # create the release and upload the installer
@@ -69,12 +77,22 @@ jobs:
         with:
           name: MDEdit-windows-installer
           path: artifacts
+      - uses: actions/download-artifact@v4
+        with:
+          name: MDEdit-android-apk
+          path: artifacts
+      - name: Name the APK after the version
+        shell: bash
+        env:
+          VERSION: ${{ needs.verify.outputs.version }}
+        run: mv artifacts/MDEdit-android.apk "artifacts/MDEdit-${VERSION}.apk"
       - name: Checksums and release notes
         shell: bash
         run: |
           cd artifacts
-          sha256sum *.exe > SHA256SUMS.txt
+          sha256sum *.exe *.apk > SHA256SUMS.txt
           installer="$(ls *.exe | head -n1)"
+          apk="$(ls *.apk | head -n1)"
           cat > ../notes.md <<NOTES
           ## Install (Windows 10 / 11)
 
@@ -84,6 +102,11 @@ jobs:
           3. Choose an install folder (no administrator rights needed) and finish the wizard.
 
           Your settings and recovery drafts live in \`%APPDATA%\\MDEdit\` and are kept if you uninstall.
+
+          ## Install on Android
+
+          1. Download **${apk}** below on your phone and open it. Allow installing from your browser or file manager when asked.
+          2. Open MDEdit and use the cloud button to connect Google Drive, so your projects follow you between devices.
 
           **Verify the download (optional):** in PowerShell, \`Get-FileHash .\\${installer} -Algorithm SHA256\` should match \`SHA256SUMS.txt\`:
 
@@ -113,9 +136,9 @@ jobs:
           if [ "$PRERELEASE" = "true" ]; then flags+=(--prerelease); fi
           if gh release view "$TAG" --repo "$REPO" > /dev/null 2>&1; then
             echo "Release $TAG already exists: replacing its files."
-            gh release upload "$TAG" artifacts/*.exe artifacts/SHA256SUMS.txt --clobber --repo "$REPO"
+            gh release upload "$TAG" artifacts/*.exe artifacts/*.apk artifacts/SHA256SUMS.txt --clobber --repo "$REPO"
           else
-            gh release create "$TAG" artifacts/*.exe artifacts/SHA256SUMS.txt \
+            gh release create "$TAG" artifacts/*.exe artifacts/*.apk artifacts/SHA256SUMS.txt \
               --repo "$REPO" --target "$SHA" --title "MDEdit ${TAG#v}" \
               --notes-file notes.md --generate-notes "${flags[@]}"
           fi
