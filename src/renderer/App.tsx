@@ -377,6 +377,8 @@ export function App() {
     onOpen: (p: string) => void openProject(p),
     onNew: () => setShowNewProject(true),
     onOpenFolder: () => void ws.openFolder(),
+    onImport: () => void projectCall(() => window.mdedit.importProject()),
+    onExport: (p: ProjectSummary) => void projectCall(() => window.mdedit.exportProject(p.path)),
     onChangeRoot: () => void changeRoot(),
     onRetry: () => void reloadListing(),
     onConvert: (p: string) => void projectCall(() => window.mdedit.convertFolder(p)),

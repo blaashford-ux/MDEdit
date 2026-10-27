@@ -21,6 +21,8 @@ import { listInstalledFonts } from './fonts';
 import { sanitizeAppDefaults, type AppDefaults } from '../src/shared/appDefaults';
 import { defaultRootFolder, effectiveDefaults, sanitizeProjectsSettings, type ProjectsConfig } from '../src/shared/projects';
 import * as projects from './projects';
+import { exportProject, importProject } from './projectPack';
+import { packFileName } from '../src/shared/projectPack';
 import { existingFolder, SettingsStore, type WindowState } from './settings';
 
 const settings = new SettingsStore(path.join(app.getPath('userData'), 'settings.json'));
@@ -240,6 +242,25 @@ function registerIpc(): void {
   });
   ipcMain.handle('projects:duplicate', (_e, p: string, name: string) => projects.duplicateProject(projectPath(p), String(name)));
   ipcMain.handle('projects:delete', (_e, p: string) => projects.deleteProject(projectPath(p), (x) => shell.trashItem(x)));
+  ipcMain.handle('projects:export', async (e, p: string) => {
+    const dir = projectPath(p);
+    const meta = await projects.readMeta(dir);
+    if (!meta) throw new Error('That folder is not a project.');
+    const win = winOf(e);
+    const opts = { title: 'Export project', defaultPath: path.join(app.getPath('documents'), packFileName(meta.name)), filters: [{ name: 'MDEdit project pack', extensions: ['zip'] }] };
+    const res = win ? await dialog.showSaveDialog(win, opts) : await dialog.showSaveDialog(opts);
+    if (res.canceled || !res.filePath) return null;
+    await exportProject(dir, res.filePath, app.getVersion());
+    shell.showItemInFolder(res.filePath);
+    return res.filePath;
+  });
+  ipcMain.handle('projects:import', async (e) => {
+    const win = winOf(e);
+    const opts = { title: 'Import project', properties: ['openFile' as const], filters: [{ name: 'MDEdit project pack', extensions: ['zip'] }] };
+    const res = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
+    if (res.canceled || res.filePaths.length === 0) return null;
+    return importProject(res.filePaths[0], projectsRoot());
+  });
   ipcMain.handle('projects:convert', (_e, p: string) => projects.convertToProject(projectPath(p)));
   ipcMain.handle('projects:addMissing', (_e, p: string, templateId: string) => {
     const t = settings.projects().templates.find((x) => x.id === templateId);

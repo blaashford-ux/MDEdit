@@ -11,6 +11,8 @@ interface Props {
   onNew(): void;
   onChangeRoot(): void;
   onOpenFolder(): void;
+  onImport(): void;
+  onExport(p: ProjectSummary): void;
   onRetry(): void;
   onConvert(path: string): void;
   onRename(p: ProjectSummary): void;
@@ -62,6 +64,7 @@ export function ProjectsHome(p: Props) {
     { label: 'Duplicate…', onClick: () => p.onDuplicate(x) },
     ...STATUSES.filter((s) => s !== x.meta.status).map((s) => ({ label: `Mark as ${STATUS_LABELS[s]}`, onClick: () => p.onStatus(x, s) })),
     { label: x.meta.archived ? 'Unarchive' : 'Archive', onClick: () => p.onArchive(x, !x.meta.archived) },
+    { label: 'Export project…', onClick: () => p.onExport(x) },
     { label: 'Show in File Explorer', onClick: () => p.onReveal(x.path) },
     { label: 'Delete…', danger: true, onClick: () => p.onDelete(x) }
   ];
@@ -92,6 +95,9 @@ export function ProjectsHome(p: Props) {
           <div className="home-head-actions">
             <button type="button" onClick={p.onOpenFolder} title="Open any folder of Markdown files, even outside the Root Folder (Ctrl+O)">
               Open Folder…
+            </button>
+            <button type="button" onClick={p.onImport} title="Create a project from an exported project pack (.zip)">
+              Import Project…
             </button>
             <button type="button" className="primary big" onClick={p.onNew}>
               <Icon name="plus" /> New Project

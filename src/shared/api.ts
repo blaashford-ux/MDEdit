@@ -217,6 +217,10 @@ export interface MdeditApi {
   duplicateProject(path: string, name: string): Promise<{ path: string; meta: ProjectMeta }>;
   /** Moves a project to the Recycle Bin. */
   deleteProject(path: string): Promise<void>;
+  /** Asks where to save, then writes the project as a zipped pack. Returns the file, or null if cancelled. */
+  exportProject(path: string): Promise<string | null>;
+  /** Asks for a pack and unpacks it as a new project in the Root Folder. Returns null if cancelled. */
+  importProject(): Promise<{ path: string; meta: ProjectMeta } | null>;
   /** Marks an ordinary folder in the Root as a project. */
   convertFolder(path: string): Promise<ProjectMeta>;
   /** Adds template folders / starter files the project is missing; returns what was added. */

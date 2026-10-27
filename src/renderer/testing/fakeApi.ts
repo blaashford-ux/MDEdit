@@ -147,6 +147,8 @@ export class FakeApi implements MdeditApi {
   renameProject = async (p: string, name: string) => `${dirname(p)}/${name}`;
   duplicateProject = async (p: string, name: string) => ({ path: `${dirname(p)}/${name}`, meta: this.addProject(`${dirname(p)}/${name}`) });
   deleteProject = async () => undefined;
+  exportProject = async (_p: string): Promise<string | null> => '/exports/pack.zip';
+  importProject = async (): Promise<{ path: string; meta: ProjectMeta } | null> => null;
   convertFolder = async (p: string) => this.addProject(p);
   addMissingTemplateParts = async () => [] as string[];
   moveProjects = async () => ({ moved: [] as string[], failed: [] as { name: string; error: string }[] });
