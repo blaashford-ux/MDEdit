@@ -118,6 +118,10 @@ automatically. See [docs/RELEASING.md](docs/RELEASING.md).
 
 ## Changelog
 
+### 0.4.0
+**New**
+- **Export Project / Import Project** on the Projects home: export a project (card menu → *Export project…*) as a zipped pack, and import a pack (*Import Project…*) as a new project in the Root Folder. Packs carry the whole project folder plus a manifest, so another MDEdit can import them and Cadrel can read them into its Studio. Writing history isn't included. See [docs/project-pack-format.md](docs/project-pack-format.md).
+
 ### 0.3.0
 **New**
 - **Projects**: a project is a folder (with subfolders) marked by a small hidden `.mdedit` folder. MDEdit works out of a **Root Folder** (default `%USERPROFILE%\MDEdit`; chosen on first run, changeable in Settings, with an offer to move your projects). A welcome screen sets this up the first time, and offers the folder you last used as a project.
