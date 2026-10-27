@@ -664,6 +664,8 @@ export function App() {
     onSharing: caps.review ? () => setShowSharingHome(true) : undefined,
     onNew: () => setShowNewProject(true),
     onOpenFolder: caps.folderPicker ? () => void ws.openFolder() : undefined,
+    onImport: caps.folderPicker ? () => void projectCall(() => window.mdedit.importProject()) : undefined,
+    onExport: caps.folderPicker ? (p: ProjectSummary) => void projectCall(() => window.mdedit.exportProject(p.path)) : undefined,
     onChangeRoot: caps.folderPicker ? () => void changeRoot() : undefined,
     onRetry: () => void reloadListing(),
     onConvert: (p: string) => void projectCall(() => window.mdedit.convertFolder(p)),

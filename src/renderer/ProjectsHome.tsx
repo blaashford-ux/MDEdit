@@ -13,6 +13,9 @@ interface Props {
   onNew(): void;
   onChangeRoot?(): void;
   onOpenFolder?(): void;
+  /** Desktop only (needs file dialogs). */
+  onImport?(): void;
+  onExport?(p: ProjectSummary): void;
   onRetry(): void;
   onConvert(path: string): void;
   onRename(p: ProjectSummary): void;
@@ -71,6 +74,7 @@ export function ProjectsHome(p: Props) {
     { label: 'Duplicate…', onClick: () => p.onDuplicate(x) },
     ...STATUSES.filter((s) => s !== x.meta.status).map((s) => ({ label: `Mark as ${STATUS_LABELS[s]}`, onClick: () => p.onStatus(x, s) })),
     { label: x.meta.archived ? 'Unarchive' : 'Archive', onClick: () => p.onArchive(x, !x.meta.archived) },
+    ...(p.onExport ? [{ label: 'Export project…', onClick: () => p.onExport!(x) }] : []),
     ...(p.onReveal ? [{ label: 'Show in File Explorer', onClick: () => p.onReveal!(x.path) }] : []),
     { label: 'Delete…', danger: true, onClick: () => p.onDelete(x) }
   ];
@@ -104,6 +108,11 @@ export function ProjectsHome(p: Props) {
             {p.onOpenFolder && (
               <button type="button" onClick={p.onOpenFolder} title="Open any folder of Markdown files, even outside the Root Folder (Ctrl+O)">
                 Open Folder…
+              </button>
+            )}
+            {p.onImport && (
+              <button type="button" onClick={p.onImport} title="Create a project from an exported project pack (.zip)">
+                Import Project…
               </button>
             )}
             {p.onSharing && (

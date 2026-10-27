@@ -1048,7 +1048,7 @@ describe('projects in the workspace', () => {
 describe('a core-only API (the phone)', () => {
   /** FakeApi with every desktop-only method removed, as the Android app provides it. */
   const phoneApi = (fake: FakeApi): WorkspaceApi => {
-    const desktopOnly = new Set(['setDirtyFiles', 'takeLaunchFiles', 'pickFolder', 'reveal', 'setMarked', 'relinkSidecar']);
+    const desktopOnly = new Set(['setDirtyFiles', 'takeLaunchFiles', 'pickFolder', 'reveal', 'exportProject', 'importProject', 'setMarked', 'relinkSidecar']);
     return new Proxy(fake, { get: (target, prop, recv) => (desktopOnly.has(String(prop)) ? undefined : Reflect.get(target, prop, recv)) }) as unknown as WorkspaceApi;
   };
 

@@ -1,5 +1,9 @@
 # Changelog
 
+### 0.9.0 — 2026-10-27
+**New**
+- **Export Project / Import Project** on the Projects home (desktop). Export a project from its card menu (*Export project…*) as a zipped pack, and import a pack with *Import Project…* as a new project in the Root Folder. A pack holds the whole project folder plus a manifest, so another MDEdit can import it and Cadrel can read it into its Studio; writing history isn't included. A name already in use gets a number added, and a project id already in use is renewed. See `docs/project-pack-format.md`.
+
 ### 0.8.6 — 2026-10-25
 **Fixed**
 - **Notes on the same sentence in different chapters are now separate.** If one sentence (say "Juna nodded thoughtfully.") was quoted in several chapters, every chapter treated all of those notes as its own: they were highlighted in each chapter, edits could rewrite the wrong note, and clicking a note in the Notes panel could take you to a later chapter. Each note now belongs to one chapter, and is only drawn and followed through edits there.

@@ -295,6 +295,10 @@ export interface DesktopApi {
   pickFolder(): Promise<string | null>;
   /** Shows the item in File Explorer. */
   reveal(path: string): void;
+  /** Asks where to save, then writes the project as a zipped pack. Returns the file, or null if cancelled. */
+  exportProject(path: string): Promise<string | null>;
+  /** Asks for a pack and unpacks it as a new project in the Root Folder. Returns null if cancelled. */
+  importProject(): Promise<{ path: string; meta: ProjectMeta } | null>;
   /**
    * Asks for one or more Word (.docx) files and writes each into `dir` as a Markdown file of the same name
    * (headings, bold / italic and so on kept). Null when the picker is cancelled.
